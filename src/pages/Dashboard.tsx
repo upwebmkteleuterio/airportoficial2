@@ -164,10 +164,6 @@ export function Dashboard() {
         courses
     } = useCourses();
 
-    const courseIds = filters.classCourseFilter ? courses.filter(
-        course => course.nome_curso.toLowerCase().includes(filters.classCourseFilter!.toLowerCase())
-    ).map(course => course.id) : undefined;
-
     const {
         classes,
         total,
@@ -182,7 +178,7 @@ export function Dashboard() {
         page: currentPage,
         pageSize: itemsPerPage,
         search: filters.classSearchTerm,
-        courseIds
+        courseSearch: filters.classCourseFilter ?? ''
     });
 
     const [editingClassId, setEditingClassId] = useState<string | null>(null);
@@ -857,6 +853,7 @@ export function Dashboard() {
                             value={filters.classSearchTerm}
                             onChange={e => setFilter("classSearchTerm", e.target.value)}
                             placeholder="Buscar por ID, Curso ou Instrutor..."
+                            aria-label="Buscar turmas por ID, curso ou instrutor"
                             className="w-full pl-9 pr-4 py-2 bg-white dark:bg-slate-900 rounded-lg border border-gray-300 dark:border-slate-700 text-gray-900 dark:text-white font-sans text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 shadow-sm" />
                     </div>
                     <div

@@ -40,6 +40,7 @@ import {
   MoreVertical,
   Edit2,
   ClipboardList,
+  Search,
 } from 'lucide-react';
 import { useClassDetails } from '../hooks/useClasses';
 import { useUsers } from '../hooks/useUsers';
@@ -128,6 +129,10 @@ function ClassDetails() {
   const { selectedClassId, setRoute, setSelectedClassId, userLogged } = useUIStore();
   const isInstructor = userLogged?.role === 'INSTRUTOR';
   const { createLog } = useAudit();
+  const [studentPage, setStudentPage] = useState(1);
+  const [studentPageSize] = useState(10);
+  const [studentSearch, setStudentSearch] = useState('');
+  const [sortOrder, setSortOrder] = useState('az');
 
   const {
     classData,
@@ -136,12 +141,21 @@ function ClassDetails() {
     isLoadingDiario,
     isLoadingInstructors,
     matriculas,
+    matriculasTotal,
+    allMatriculas,
+    isLoadingAllMatriculas,
+    matriculatedAlunoIds,
     diario,
     createMatricula,
     updateMatricula,
     deleteMatricula,
     saveDiarioPresenca,
-  } = useClassDetails(selectedClassId);
+  } = useClassDetails(selectedClassId, {
+    page: studentPage,
+    pageSize: studentPageSize,
+    sortOrder,
+    search: studentSearch,
+  });
 
   const { courses } = useCourses();
   const { users } = useUsers();
@@ -157,7 +171,15 @@ function ClassDetails() {
 
   // Selected tab state
   const [activeTab, setActiveTab] = useState<'students' | 'frequency' | 'visit' | 'ged' | 'grades'>('students');
-  const [sortOrder, setSortOrder] = useState('az'); // az, za, newest, oldest
+
+  useEffect(() => {
+    setStudentPage(1);
+  }, [studentSearch, sortOrder, selectedClassId]);
+
+  useEffect(() => {
+    const lastPage = Math.max(1, Math.ceil(matriculasTotal / studentPageSize));
+    if (studentPage > lastPage) setStudentPage(lastPage);
+  }, [matriculasTotal, studentPage, studentPageSize]);
 
   // Selected student for documents drawer (Tela Documentos do Aluno - Airport)
   const [selectedStudentForDocs, setSelectedStudentForDocs] = useState<any | null>(null);
@@ -337,8 +359,8 @@ function ClassDetails() {
       { num: '07', name: 'Sofia Ribeiro', cpf: '357.951-2', status: 'REGULAR' },
     ];
 
-    const visitStudents = matriculas.length > 0 
-      ? matriculas.slice(0, 7).map((m, idx) => {
+    const visitStudents = allMatriculas.length > 0
+      ? allMatriculas.slice(0, 7).map((m, idx) => {
           const student = users.find((u) => u.id === m.aluno_id);
           const codeAnac = m.anac_codigo || student?.cpf?.substring(0, 7) || '123.456-7';
           const isPending = m.percentual_presenca < 75 || idx === 2;
@@ -351,7 +373,7 @@ function ClassDetails() {
         })
       : defaultList;
 
-    const totalAlunos = matriculas.length > 0 ? matriculas.length : 30;
+    const totalAlunos = allMatriculas.length > 0 ? allMatriculas.length : 30;
     const excessStudentsCount = totalAlunos > 7 ? totalAlunos - 7 : 23;
 
     // Draw student rows
@@ -423,9 +445,8 @@ function ClassDetails() {
 
   // Alunos candidates for adding
   const availableStudents = useMemo(() => {
-    const matriculadosIds = matriculas.map((m) => m.aluno_id);
-    return users.filter((u) => u.role === 'ALUNO' && !matriculadosIds.includes(u.id));
-  }, [users, matriculas]);
+    return users.filter((u) => u.role === 'ALUNO' && !matriculatedAlunoIds.includes(u.id));
+  }, [users, matriculatedAlunoIds]);
 
   // Dates list for frequency table based on start and end dates
   const classDates = useMemo(() => {
@@ -479,7 +500,7 @@ function ClassDetails() {
     if (!classData) return;
     const escapeCsv = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
     const headers = ['Turma', 'Matricula', 'Aluno', 'RE', 'Data', 'Período', 'Presente', 'Percentual de presença'];
-    const rows = matriculas.flatMap((matricula) => classSessions.map(({ dateStr, period }) => {
+    const rows = allMatriculas.flatMap((matricula) => classSessions.map(({ dateStr, period }) => {
       const attendance = diario.find((record) =>
         record.matricula_id === matricula.id && record.data_aula === dateStr && record.horario_periodo === period
       );
@@ -585,7 +606,7 @@ function ClassDetails() {
     }
 
     // Calcular resultado final se tiver notas
-    const m = matriculas.find((mat) => mat.id === matriculaId);
+    const m = allMatriculas.find((mat) => mat.id === matriculaId);
     if (m) {
       const nota1 = type === '1ª CH' ? (val === '' ? undefined : numVal) : m.nota_1_chamada;
       const nota2 = type === '2ª CH' ? (val === '' ? undefined : numVal) : m.nota_2_chamada;
@@ -606,9 +627,9 @@ function ClassDetails() {
 
   // Filter documents that belong to students in this class
   const classDocuments = useMemo(() => {
-    const studentIds = matriculas.map((m) => m.aluno_id);
+    const studentIds = allMatriculas.map((m) => m.aluno_id);
     return documents.filter((doc) => studentIds.includes(doc.usuario_id));
-  }, [documents, matriculas]);
+  }, [documents, allMatriculas]);
 
 
 
@@ -750,15 +771,27 @@ function ClassDetails() {
                     }
                   }}
                 />)}
+                <label className="relative">
+                  <span className="sr-only">Buscar alunos matriculados</span>
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    type="search"
+                    value={studentSearch}
+                    onChange={(event) => setStudentSearch(event.target.value)}
+                    placeholder="Buscar aluno, CPF, RE ou ANAC..."
+                    className="w-56 pl-8 pr-3 py-2 border border-gray-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-850 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  />
+                </label>
               </div>
 
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-2 bg-white dark:bg-slate-850 border border-gray-200 dark:border-slate-700 rounded-lg px-2 py-1">
                   <span className="text-xs font-semibold text-gray-500 dark:text-slate-400 pl-1">Ordenar:</span>
                   <select
+                    aria-label="Ordenar alunos matriculados"
                     value={sortOrder}
                     onChange={(e) => setSortOrder(e.target.value)}
-                    className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-200 outline-none cursor-pointer"
+                    className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-200 outline-none cursor-pointer focus:ring-2 focus:ring-teal-500"
                   >
                     <option value="az">Ordem Alfabética (A-Z)</option>
                     <option value="za">Ordem Alfabética (Z-A)</option>
@@ -768,7 +801,7 @@ function ClassDetails() {
                 </div>
                 <div className="text-xs text-slate-950 dark:text-slate-100 font-bold bg-slate-50 dark:bg-slate-850 px-3 py-2 rounded-lg border border-gray-200 dark:border-slate-800 flex items-center gap-2 shadow-xs">
                   <Users className="w-4 h-4 text-teal-600 dark:text-teal-400" />
-                  Contagem: {matriculas.length} Alunos
+                  Contagem: {matriculasTotal} Alunos
                 </div>
               </div>
             </div>
@@ -817,19 +850,10 @@ function ClassDetails() {
                           </div>
                         </td>
                       </tr>
-                    ) : [...matriculas].sort((a, b) => {
-                      const studentA = users.find((u) => u.id === a.aluno_id);
-                      const studentB = users.find((u) => u.id === b.aluno_id);
-                      const nameA = studentA?.nome_completo || '';
-                      const nameB = studentB?.nome_completo || '';
-                      
-                      if (sortOrder === 'az') return nameA.localeCompare(nameB);
-                      if (sortOrder === 'za') return nameB.localeCompare(nameA);
-                      if (sortOrder === 'newest') return (b.data_matricula || '').localeCompare(a.data_matricula || '');
-                      if (sortOrder === 'oldest') return (a.data_matricula || '').localeCompare(b.data_matricula || '');
-                      return 0;
-                    }).map((m) => {
+                    ) : matriculas.map((m) => {
                       const student = users.find((u) => u.id === m.aluno_id);
+                      const studentName = m.aluno_nome || student?.nome_completo || 'Aluno Desconhecido';
+                      const studentCpf = m.aluno_cpf || student?.cpf || '---.---.---.--';
                       const b2b = companies.find((c) => c.id === m.empresa_b2b_id);
 
                       return (
@@ -900,10 +924,10 @@ function ClassDetails() {
                             {m.anac_codigo || '123456'}
                           </td>
                           <td className="px-4 py-2 text-gray-500 dark:text-slate-400">
-                            {student?.cpf || '---.---.---.--'}
+                            {studentCpf}
                           </td>
                           <td className="px-4 py-2 font-sans font-bold text-slate-900 dark:text-white">
-                            {student?.nome_completo || 'Aluno Desconhecido'}
+                            {studentName}
                           </td>
                           <td className="px-4 py-2 text-center font-bold">
                             <span className={m.percentual_presenca < 75 ? 'text-red-500' : 'text-slate-900 dark:text-slate-200'}>
@@ -941,6 +965,24 @@ function ClassDetails() {
                     })}
                   </tbody>
                 </table>
+              </div>
+              <div className="px-4 py-3 border-t border-gray-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs font-sans">
+                <span className="text-gray-500 dark:text-slate-400">
+                  {matriculasTotal === 0 ? 'Exibindo 0 de 0 alunos' : `Exibindo ${(studentPage - 1) * studentPageSize + 1}-${Math.min(studentPage * studentPageSize, matriculasTotal)} de ${matriculasTotal} alunos`}
+                </span>
+                <div className="flex items-center border border-gray-300 dark:border-slate-700 rounded-lg overflow-hidden bg-white dark:bg-slate-900">
+                  <button type="button" onClick={() => setStudentPage((page) => Math.max(1, page - 1))} disabled={studentPage === 1} aria-label="Página anterior de alunos" className="p-2 border-r border-gray-300 dark:border-slate-700 disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-teal-500">
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  {Array.from({ length: Math.max(1, Math.ceil(matriculasTotal / studentPageSize)) }).map((_, index) => (
+                    <button key={index + 1} type="button" onClick={() => setStudentPage(index + 1)} aria-label={`Página ${index + 1} de alunos`} className={`px-3 py-2 border-r border-gray-300 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500 ${studentPage === index + 1 ? 'bg-teal-500/10 text-teal-700 dark:text-teal-400 font-bold' : 'text-gray-600 dark:text-slate-300'}`}>
+                      {index + 1}
+                    </button>
+                  ))}
+                  <button type="button" onClick={() => setStudentPage((page) => Math.min(Math.max(1, Math.ceil(matriculasTotal / studentPageSize)), page + 1))} disabled={studentPage >= Math.max(1, Math.ceil(matriculasTotal / studentPageSize))} aria-label="Próxima página de alunos" className="p-2 disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-teal-500">
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -1038,7 +1080,7 @@ function ClassDetails() {
                           Período inválido: verifique as datas de início e término da turma.
                         </td>
                       </tr>
-                    ) : isLoadingMatriculas ? (
+                    ) : isLoadingAllMatriculas ? (
                       <tr>
                         <td colSpan={Math.max(2, 2 + classSessions.length)} className="px-4 py-8">
                           <div className="flex flex-col items-center justify-center gap-2">
@@ -1047,13 +1089,13 @@ function ClassDetails() {
                           </div>
                         </td>
                       </tr>
-                    ) : matriculas.length === 0 ? (
+                    ) : allMatriculas.length === 0 ? (
                       <tr>
                         <td colSpan={Math.max(2, 2 + classSessions.length)} className="px-4 py-12 text-center text-gray-500 font-sans">
                           Nenhum aluno matriculado para registro de frequência.
                         </td>
                       </tr>
-                    ) : matriculas.map((m) => {
+                    ) : allMatriculas.map((m) => {
                       const student = users.find((u) => u.id === m.aluno_id);
                       if (!student) return null;
 
@@ -1171,13 +1213,17 @@ function ClassDetails() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-150 dark:divide-slate-800 font-sans text-slate-700 dark:text-slate-200">
-                    {matriculas.length === 0 ? (
+                    {isLoadingAllMatriculas ? (
+                      <tr>
+                        <td colSpan={4} className="px-4 py-8 text-center text-gray-500 font-sans">Carregando alunos para registro de notas...</td>
+                      </tr>
+                    ) : allMatriculas.length === 0 ? (
                       <tr>
                         <td colSpan={4} className="px-4 py-12 text-center text-gray-500 font-sans">
                           Nenhum aluno matriculado para registro de notas.
                         </td>
                       </tr>
-                    ) : matriculas.map((m) => {
+                    ) : allMatriculas.map((m) => {
                       const student = users.find((u) => u.id === m.aluno_id);
                       if (!student) return null;
 
@@ -1242,7 +1288,7 @@ function ClassDetails() {
             { num: '07', name: 'Sofia Ribeiro', cpf: '357.951-2', status: 'REGULAR' },
           ];
 
-          const visitStudents = matriculas.map((m, idx) => {
+          const visitStudents = allMatriculas.map((m, idx) => {
                 const student = users.find((u) => u.id === m.aluno_id);
                 const codeAnac = m.anac_codigo || student?.cpf?.substring(0, 7) || '---';
                 const isPending = m.percentual_presenca < 75;
@@ -1254,7 +1300,7 @@ function ClassDetails() {
                 };
               });
 
-          const totalAlunos = matriculas.length > 0 ? matriculas.length : 30;
+          const totalAlunos = allMatriculas.length > 0 ? allMatriculas.length : 30;
           const excessStudentsCount = totalAlunos > 7 ? totalAlunos - 7 : 23;
 
           const emailBody = `Assunto: Solicitação de Visita Técnica - Turma ${classData.id_anac}
@@ -1325,7 +1371,7 @@ Equipe Airport`;
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-150 text-slate-700">
-                      {isLoadingMatriculas ? (
+                      {isLoadingAllMatriculas ? (
                         <tr>
                           <td colSpan={4} className="px-3 py-6 text-center text-gray-500 text-sm">
                             <div className="flex flex-col items-center justify-center gap-2">
@@ -1525,7 +1571,7 @@ Equipe Airport`;
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-150 dark:divide-slate-800 text-gray-700 dark:text-slate-200">
-                    {(isLoadingMatriculas || isLoadingDocuments) ? (
+                    {(isLoadingAllMatriculas || isLoadingDocuments) ? (
                       <tr>
                         <td colSpan={6} className="px-4 py-8 text-center text-gray-500 font-sans">
                           <div className="flex flex-col items-center justify-center gap-2">

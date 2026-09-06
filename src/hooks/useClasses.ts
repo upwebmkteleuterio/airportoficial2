@@ -11,7 +11,7 @@ interface ClassesOptions {
   page?: number;
   pageSize?: number;
   search?: string;
-  courseIds?: string[];
+  courseSearch?: string;
 }
 
 interface ClassesQueryData {
@@ -25,19 +25,19 @@ export function useClasses(options: ClassesOptions = {}) {
   const page = options.page ?? 1;
   const pageSize = options.pageSize ?? 6;
   const search = options.search ?? '';
-  const courseIds = options.courseIds;
+  const courseSearch = options.courseSearch ?? '';
 
   // Queries
   const classesQuery = useQuery<ClassesQueryData>({
     queryKey: isPaginated
-      ? ['classes', 'page', page, pageSize, { search, courseIds: courseIds ?? [] }]
+      ? ['classes', 'page', page, pageSize, { search, courseSearch }]
       : ['classes', 'all'],
     queryFn: async () => {
       if (!isPaginated) {
         const data = await classService.getAll();
         return { data, total: data.length };
       }
-      return classService.getPage({ page, pageSize, search, courseIds });
+      return classService.getPage({ page, pageSize, search, courseSearch });
     },
   });
 
@@ -90,7 +90,14 @@ export function useClasses(options: ClassesOptions = {}) {
   };
 }
 
-export function useClassDetails(classId: string | null) {
+export interface ClassDetailsOptions {
+  page: number;
+  pageSize: number;
+  sortOrder: string;
+  search: string;
+}
+
+export function useClassDetails(classId: string | null, options: ClassDetailsOptions) {
   const queryClient = useQueryClient();
 
   // Queries
@@ -100,9 +107,21 @@ export function useClassDetails(classId: string | null) {
     enabled: !!classId,
   });
 
-  const matriculasQuery = useQuery({
-    queryKey: ['matriculas', classId],
-    queryFn: () => classId ? classService.getMatriculasByTurma(classId) : Promise.resolve([]),
+  const matriculasPageQuery = useQuery({
+    queryKey: ['matriculas', classId, 'page', options.page, options.pageSize, options.sortOrder, options.search],
+    queryFn: () => classId ? classService.getMatriculasPage({ turmaId: classId, ...options }) : Promise.resolve({ data: [], total: 0 }),
+    enabled: !!classId && !!classQuery.data,
+  });
+
+  const allMatriculasQuery = useQuery({
+    queryKey: ['matriculas-complete', classId],
+    queryFn: () => classId ? classService.getAllMatriculasByTurma(classId) : Promise.resolve([]),
+    enabled: !!classId && !!classQuery.data,
+  });
+
+  const matriculatedAlunoIdsQuery = useQuery({
+    queryKey: ['matriculated-aluno-ids', classId],
+    queryFn: () => classId ? classService.getMatriculatedAlunoIds(classId) : Promise.resolve([]),
     enabled: !!classId && !!classQuery.data,
   });
 
@@ -123,6 +142,8 @@ export function useClassDetails(classId: string | null) {
     mutationFn: (newMat: Omit<Matricula, 'id' | 'codigo_re' | 'percentual_presenca'>) => classService.createMatricula(newMat),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['matriculas', classId] });
+      queryClient.invalidateQueries({ queryKey: ['matriculas-complete', classId] });
+      queryClient.invalidateQueries({ queryKey: ['matriculated-aluno-ids', classId] });
       queryClient.invalidateQueries({ queryKey: ['classes'] });
       queryClient.invalidateQueries({ queryKey: ['class', classId] });
     }
@@ -132,6 +153,8 @@ export function useClassDetails(classId: string | null) {
     mutationFn: ({ id, updates }: { id: string; updates: Partial<Matricula> }) => classService.updateMatricula(id, updates),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['matriculas', classId] });
+      queryClient.invalidateQueries({ queryKey: ['matriculas-complete', classId] });
+      queryClient.invalidateQueries({ queryKey: ['matriculated-aluno-ids', classId] });
     }
   });
 
@@ -139,6 +162,8 @@ export function useClassDetails(classId: string | null) {
     mutationFn: (id: string) => classService.deleteMatricula(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['matriculas', classId] });
+      queryClient.invalidateQueries({ queryKey: ['matriculas-complete', classId] });
+      queryClient.invalidateQueries({ queryKey: ['matriculated-aluno-ids', classId] });
       queryClient.invalidateQueries({ queryKey: ['classes'] });
       queryClient.invalidateQueries({ queryKey: ['class', classId] });
     }
@@ -150,6 +175,7 @@ export function useClassDetails(classId: string | null) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['diario', classId] });
       queryClient.invalidateQueries({ queryKey: ['matriculas', classId] });
+      queryClient.invalidateQueries({ queryKey: ['matriculas-complete', classId] });
     }
   });
 
@@ -164,8 +190,14 @@ export function useClassDetails(classId: string | null) {
   return {
     classData: classQuery.data,
     isLoadingClass: classQuery.isLoading,
-    matriculas: matriculasQuery.data || [],
-    isLoadingMatriculas: matriculasQuery.isLoading,
+    matriculas: matriculasPageQuery.data?.data || [],
+    matriculasTotal: matriculasPageQuery.data?.total || 0,
+    matriculasPage: options.page,
+    matriculasPageSize: options.pageSize,
+    isLoadingMatriculas: matriculasPageQuery.isLoading,
+    allMatriculas: allMatriculasQuery.data || [],
+    isLoadingAllMatriculas: allMatriculasQuery.isLoading,
+    matriculatedAlunoIds: matriculatedAlunoIdsQuery.data || [],
     diario: diarioQuery.data || [],
     isLoadingDiario: diarioQuery.isLoading,
     instructors: instructorsQuery.data || [],

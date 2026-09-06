@@ -14,11 +14,30 @@ export interface ClassPageOptions {
   page: number;
   pageSize: number;
   search?: string;
-  courseIds?: string[];
+  courseSearch?: string;
 }
 
 export interface ClassPage {
   data: Turma[];
+  total: number;
+}
+
+export interface MatriculaPageOptions {
+  turmaId: string;
+  page: number;
+  pageSize: number;
+  sortOrder: string;
+  search?: string;
+}
+
+export type MatriculaPageRow = Matricula & {
+  aluno_nome: string;
+  aluno_cpf: string;
+  total_count?: number;
+};
+
+export interface MatriculaPage {
+  data: MatriculaPageRow[];
   total: number;
 }
 
@@ -144,7 +163,7 @@ export const classService = {
     return (data ?? []) as Turma[];
   },
 
-  getPage: async ({ page, pageSize, search, courseIds }: ClassPageOptions): Promise<ClassPage> => {
+  getPage: async ({ page, pageSize, search, courseSearch }: ClassPageOptions): Promise<ClassPage> => {
     const context = await getAuthContext();
     if (!context) throw new Error('Sessão não autenticada.');
     const from = Math.max(0, page - 1) * pageSize;
@@ -155,21 +174,57 @@ export const classService = {
       .order('id_interno_escola', { ascending: true })
       .range(from, to);
 
-    if (context?.role === UserRole.INSTRUTOR) {
+    if (context.role === UserRole.INSTRUTOR) {
       const classIds = await getInstructorClassIds(context);
       if (classIds.length === 0) return { data: [], total: 0 };
       query = query.in('id', classIds);
     }
-    if (courseIds) {
+
+    const escapeFilterTerm = (value: string) => value.replace(/[^0-9A-Za-zÀ-ÿ_ -]/g, ' ').slice(0, 100);
+    const findCourseIds = async (value: string): Promise<string[]> => {
+      const { data, error } = await supabase
+        .from('cursos')
+        .select('id')
+        .ilike('nome_curso', `%${escapeFilterTerm(value)}%`);
+      if (error) throw serviceError('Não foi possível pesquisar os cursos', error);
+      return ((data ?? []) as Array<{ id: string }>).map((course) => course.id);
+    };
+    const findInstructorClassIds = async (value: string): Promise<string[]> => {
+      const { data: instructors, error: instructorsError } = await supabase
+        .from('profiles')
+        .select('legacy_id')
+        .ilike('nome_completo', `%${escapeFilterTerm(value)}%`)
+        .eq('role', UserRole.INSTRUTOR);
+      if (instructorsError) throw serviceError('Não foi possível pesquisar os instrutores', instructorsError);
+      const instructorIds = ((instructors ?? []) as Array<{ legacy_id: string }>).map((instructor) => instructor.legacy_id);
+      if (instructorIds.length === 0) return [];
+      const { data: relations, error: relationsError } = await supabase
+        .from('turma_instrutores')
+        .select('turma_id')
+        .in('instrutor_id', instructorIds);
+      if (relationsError) throw serviceError('Não foi possível pesquisar as turmas dos instrutores', relationsError);
+      return ((relations ?? []) as Array<{ turma_id: string }>).map((relation) => relation.turma_id);
+    };
+
+    const courseTerm = courseSearch?.trim();
+    if (courseTerm) {
+      const courseIds = await findCourseIds(courseTerm);
       if (courseIds.length === 0) return { data: [], total: 0 };
       query = query.in('curso_id', courseIds);
     }
+
     const term = search?.trim();
     if (term) {
-      const escapedTerm = term.replace(/[%,()]/g, ' ');
-      const searchFilters = [`id_anac.ilike.%${escapedTerm}%`];
-      const internalTerm = term.toLowerCase().startsWith('t-op-') ? term.slice(5) : term;
+      const safeTerm = escapeFilterTerm(term);
+      const [courseIds, instructorClassIds] = await Promise.all([
+        findCourseIds(term),
+        findInstructorClassIds(term),
+      ]);
+      const searchFilters = [`id_anac.ilike.%${safeTerm}%`];
+      const internalTerm = term.toLowerCase().startsWith('t-op-') ? term.slice(5).trim() : term;
       if (/^\d+$/.test(internalTerm)) searchFilters.push(`id_interno_escola.eq.${internalTerm}`);
+      if (courseIds.length > 0) searchFilters.push(`curso_id.in.(${courseIds.join(',')})`);
+      if (instructorClassIds.length > 0) searchFilters.push(`id.in.(${instructorClassIds.join(',')})`);
       query = query.or(searchFilters.join(','));
     }
 
@@ -280,7 +335,7 @@ export const classService = {
   },
 
   // --- Matrículas (Alunos na Turma) CRUD ---
-  getMatriculasByTurma: async (turmaId: string): Promise<Matricula[]> => {
+  getAllMatriculasByTurma: async (turmaId: string): Promise<Matricula[]> => {
     await assertCanAccessTurma(turmaId);
     const { data, error } = await supabase
       .from('matriculas')
@@ -288,6 +343,33 @@ export const classService = {
       .eq('turma_id', turmaId);
     if (error) throw serviceError(`Não foi possível carregar as matrículas da turma ${turmaId}`, error);
     return (data ?? []) as Matricula[];
+  },
+
+  getMatriculatedAlunoIds: async (turmaId: string): Promise<string[]> => {
+    await assertCanAccessTurma(turmaId);
+    const { data, error } = await supabase
+      .from('matriculas')
+      .select('aluno_id')
+      .eq('turma_id', turmaId);
+    if (error) throw serviceError(`Não foi possível consultar os alunos da turma ${turmaId}`, error);
+    return ((data ?? []) as Array<{ aluno_id: string }>).map((matricula) => matricula.aluno_id);
+  },
+
+  getMatriculasPage: async ({ turmaId, page, pageSize, sortOrder, search }: MatriculaPageOptions): Promise<MatriculaPage> => {
+    await assertCanAccessTurma(turmaId);
+    const { data, error } = await supabase.rpc('get_matriculas_page', {
+      p_turma_id: turmaId,
+      p_page: page,
+      p_page_size: pageSize,
+      p_sort_order: sortOrder,
+      p_search: search?.trim() || null,
+    });
+    if (error) throw serviceError(`Não foi possível carregar a página de matrículas da turma ${turmaId}`, error);
+    const rows = (data ?? []) as MatriculaPageRow[];
+    return {
+      data: rows,
+      total: Number(rows[0]?.total_count ?? 0),
+    };
   },
 
   getMatriculasByAluno: async (alunoId: string): Promise<Matricula[]> => {
