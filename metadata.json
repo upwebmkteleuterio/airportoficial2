@@ -1,0 +1,8 @@
+{
+  "name": "Remix: Remix: Aero GED",
+  "description": "Sistema completo de Gestão de Turmas, Documentos e Auditoria para Aviação Aero GED",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
