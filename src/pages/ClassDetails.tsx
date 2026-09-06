@@ -4,7 +4,7 @@ import { getAttendancePeriodsForShift } from '../utils/attendanceRules';
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { jsPDF } from 'jspdf';
 import {
   ArrowLeft,
@@ -133,6 +133,56 @@ function ClassDetails() {
   const [studentPageSize] = useState(10);
   const [studentSearch, setStudentSearch] = useState('');
   const [sortOrder, setSortOrder] = useState('az');
+  const attendanceHoldTimerRef = useRef<number | null>(null);
+  const attendanceHoldAnimationRef = useRef<number | null>(null);
+  const attendanceHoldKeyRef = useRef<string | null>(null);
+  const attendanceHoldCompletedRef = useRef(false);
+  const [attendanceHold, setAttendanceHold] = useState<{ key: string; progress: number } | null>(null);
+
+  const cancelAttendanceHold = () => {
+    if (attendanceHoldTimerRef.current !== null) {
+      window.clearTimeout(attendanceHoldTimerRef.current);
+      attendanceHoldTimerRef.current = null;
+    }
+    if (attendanceHoldAnimationRef.current !== null) {
+      window.cancelAnimationFrame(attendanceHoldAnimationRef.current);
+      attendanceHoldAnimationRef.current = null;
+    }
+    attendanceHoldKeyRef.current = null;
+    attendanceHoldCompletedRef.current = false;
+    setAttendanceHold(null);
+  };
+
+  const startAttendanceHold = (key: string, action: () => void) => {
+    cancelAttendanceHold();
+    const startedAt = performance.now();
+    attendanceHoldKeyRef.current = key;
+    attendanceHoldCompletedRef.current = false;
+
+    const updateProgress = (now: number) => {
+      if (attendanceHoldKeyRef.current !== key || attendanceHoldCompletedRef.current) return;
+      const progress = Math.min((now - startedAt) / 1000, 1);
+      setAttendanceHold({ key, progress });
+      if (progress < 1) {
+        attendanceHoldAnimationRef.current = window.requestAnimationFrame(updateProgress);
+      }
+    };
+
+    attendanceHoldTimerRef.current = window.setTimeout(() => {
+      if (attendanceHoldKeyRef.current !== key) return;
+      attendanceHoldCompletedRef.current = true;
+      if (attendanceHoldAnimationRef.current !== null) {
+        window.cancelAnimationFrame(attendanceHoldAnimationRef.current);
+        attendanceHoldAnimationRef.current = null;
+      }
+      setAttendanceHold(null);
+      attendanceHoldKeyRef.current = null;
+      action();
+    }, 1000);
+    attendanceHoldAnimationRef.current = window.requestAnimationFrame(updateProgress);
+  };
+
+  useEffect(() => () => cancelAttendanceHold(), []);
 
   const {
     classData,
@@ -150,6 +200,7 @@ function ClassDetails() {
     updateMatricula,
     deleteMatricula,
     saveDiarioPresenca,
+    isSavingDiario,
   } = useClassDetails(selectedClassId, {
     page: studentPage,
     pageSize: studentPageSize,
@@ -1147,34 +1198,62 @@ function ClassDetails() {
                                 key={dateStr + period + idx}
                                 className="px-3 py-2 border-r border-gray-100 dark:border-slate-800/50 text-center"
                               >
-                                {isInstructor ? (
-                                  <div
-                                    className={`w-5 h-5 rounded-sm mx-auto ${
-                                      isPresent
-                                        ? 'bg-[#005f5f] dark:bg-teal-600 border border-[#005f5f] dark:border-teal-600 shadow-sm'
-                                        : 'bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-700'
-                                    }`}
-                                    aria-label={`Presença de ${student.nome_completo} em ${dateStr} período ${period}`}
-                                  />
-                                ) : (
-                                  <button
-                                    id={`freq-toggle-${m.id}-${dateStr}-${period.replace(/\//g, '')}`}
-                                    onClick={() =>
-                                      saveDiarioPresenca({
-                                        matriculaId: m.id,
-                                        dataAula: dateStr,
-                                        horarioPeriodo: period,
-                                        presente: !isPresent,
-                                      })
-                                    }
-                                    className={`w-5 h-5 rounded-sm transition-all cursor-pointer mx-auto ${
-                                      isPresent
-                                        ? 'bg-[#005f5f] dark:bg-teal-600 border border-[#005f5f] dark:border-teal-600 shadow-sm'
-                                        : 'bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-700 hover:border-teal-500/50'
-                                    }`}
-                                    aria-label={`Presença de ${student.nome_completo} em ${dateStr} período ${period}`}
-                                  />
-                                )}
+                                {(() => {
+                                  const holdKey = `${m.id}-${dateStr}-${period}`;
+                                  const holdProgress = attendanceHold?.key === holdKey ? attendanceHold.progress : 0;
+                                  const holdAction = () => {
+                                    void saveDiarioPresenca({
+                                      matriculaId: m.id,
+                                      dataAula: dateStr,
+                                      horarioPeriodo: period,
+                                      presente: !isPresent,
+                                    });
+                                  };
+
+                                  return (
+                                    <button
+                                      type="button"
+                                      id={`freq-toggle-${m.id}-${dateStr}-${period.replace(/\//g, '')}`}
+                                      disabled={isSavingDiario}
+                                      onPointerDown={() => startAttendanceHold(holdKey, holdAction)}
+                                      onPointerUp={cancelAttendanceHold}
+                                      onPointerLeave={cancelAttendanceHold}
+                                      onPointerCancel={cancelAttendanceHold}
+                                      onKeyDown={(event) => {
+                                        if ((event.key === 'Enter' || event.key === ' ') && !event.repeat) {
+                                          event.preventDefault();
+                                          startAttendanceHold(holdKey, holdAction);
+                                        }
+                                      }}
+                                      onKeyUp={(event) => {
+                                        if (event.key === 'Enter' || event.key === ' ') {
+                                          event.preventDefault();
+                                          cancelAttendanceHold();
+                                        }
+                                      }}
+                                      onBlur={cancelAttendanceHold}
+                                      className="relative w-7 h-7 rounded-sm transition-all cursor-pointer mx-auto disabled:cursor-wait disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                                      aria-label={`${isPresent ? 'Remover presença' : 'Marcar presença'} de ${student.nome_completo} em ${dateStr}, período ${period}. Pressione e segure por um segundo.`}
+                                    >
+                                      {holdProgress > 0 && (
+                                        <span
+                                          className="absolute -inset-1 rounded-full"
+                                          style={{ background: `conic-gradient(#14b8a6 ${holdProgress * 360}deg, transparent 0)` }}
+                                          aria-hidden="true"
+                                        >
+                                          <span className="absolute inset-[2px] rounded-full bg-white dark:bg-slate-900" />
+                                        </span>
+                                      )}
+                                      <span
+                                        className={`relative block w-5 h-5 rounded-sm mx-auto ${
+                                          isPresent
+                                            ? 'bg-[#005f5f] dark:bg-teal-600 border border-[#005f5f] dark:border-teal-600 shadow-sm'
+                                            : 'bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-700 hover:border-teal-500/50'
+                                        }`}
+                                      />
+                                    </button>
+                                  );
+                                })()}
                               </td>
                             );
                           })}

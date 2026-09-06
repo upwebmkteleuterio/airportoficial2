@@ -84,6 +84,34 @@ async function assertCanAccessTurma(turmaId: string): Promise<void> {
   }
 }
 
+async function assertCanRecordAttendance(turmaId: string): Promise<void> {
+  const context = await getAuthContext();
+  if (!context) throw new Error('Sessão não autenticada.');
+  if (context.role === UserRole.GESTOR || context.role === UserRole.EQUIPE) return;
+
+  if (context.role === UserRole.INSTRUTOR) {
+    const classIds = await getInstructorClassIds(context);
+    if (classIds.includes(turmaId)) return;
+  }
+
+  if (context.role === UserRole.COORDENADOR) {
+    const { data, error } = await supabase
+      .from('turmas')
+      .select('coordenador_ioad_id, coordenador_iscr_id, coordenador_icar_id')
+      .eq('id', turmaId)
+      .maybeSingle();
+    if (error) throw serviceError(`Não foi possível validar a permissão de frequência da turma ${turmaId}`, error);
+    const turma = data as {
+      coordenador_ioad_id?: string | null;
+      coordenador_iscr_id?: string | null;
+      coordenador_icar_id?: string | null;
+    } | null;
+    if (turma && [turma.coordenador_ioad_id, turma.coordenador_iscr_id, turma.coordenador_icar_id].includes(context.id)) return;
+  }
+
+  throw new Error('Você não tem permissão para registrar frequência nesta turma.');
+}
+
 async function getClassById(id: string): Promise<Turma | undefined> {
   await assertCanAccessTurma(id);
   const { data, error } = await supabase
@@ -539,81 +567,32 @@ export const classService = {
   },
 
   saveDiarioPresenca: async (matriculaId: string, dataAula: string, horarioPeriodo: string, presente: boolean): Promise<DiarioClasse> => {
-    await assertCanManageTurmas();
     const { data: matricula, error: matriculaError } = await supabase
       .from('matriculas')
-      .select('*')
+      .select('turma_id')
       .eq('id', matriculaId)
       .maybeSingle();
     if (matriculaError) throw serviceError(`Não foi possível consultar a matrícula ${matriculaId}`, matriculaError);
     if (!matricula) throw new Error(`Não foi possível registrar a presença: matrícula ${matriculaId} não encontrada`);
 
-    const mat = matricula as Matricula;
-    await assertCanAccessTurma(mat.turma_id);
-    const classData = await getClassById(mat.turma_id);
-    if (!classData) throw new Error(`Não foi possível carregar a turma ${mat.turma_id}`);
+    const turmaId = (matricula as { turma_id: string }).turma_id;
+    await assertCanRecordAttendance(turmaId);
+    await assertCanAccessTurma(turmaId);
+    const classData = await getClassById(turmaId);
+    if (!classData) throw new Error(`Não foi possível carregar a turma ${turmaId}`);
     const sessions = getClassSessions(classData);
-    const sessionExists = sessions.some((session) => session.dataAula === dataAula && session.horarioPeriodo === horarioPeriodo);
-    if (!sessionExists) throw new Error('O período informado não pertence ao turno e às datas da turma.');
-
-    const { data: matches, error: findError } = await supabase
-      .from('diario_classe')
-      .select('*')
-      .eq('matricula_id', matriculaId)
-      .eq('data_aula', dataAula)
-      .eq('horario_periodo', horarioPeriodo)
-      .limit(1);
-    if (findError) throw serviceError('Não foi possível consultar o registro de presença', findError);
-
-    let record: DiarioClasse;
-    const existing = (matches ?? [])[0] as DiarioClasse | undefined;
-    if (existing) {
-      const { data, error } = await supabase
-        .from('diario_classe')
-        .update({ presente })
-        .eq('id', existing.id)
-        .select()
-        .single();
-      if (error) throw serviceError('Não foi possível atualizar o registro de presença', error);
-      record = data as DiarioClasse;
-    } else {
-      const newRecord = {
-        id: newServiceId('freq'),
-        matricula_id: matriculaId,
-        data_aula: dataAula,
-        horario_periodo: horarioPeriodo,
-        presente
-      };
-      const { data, error } = await supabase
-        .from('diario_classe')
-        .insert(newRecord)
-        .select()
-        .single();
-      if (error) throw serviceError('Não foi possível criar o registro de presença', error);
-      record = data as DiarioClasse;
+    if (!sessions.some((session) => session.dataAula === dataAula && session.horarioPeriodo === horarioPeriodo)) {
+      throw new Error('O período informado não pertence ao turno e às datas da turma.');
     }
 
-    const { data: allStudentDiarios, error: diarioListError } = await supabase
-      .from('diario_classe')
-      .select('*')
-      .eq('matricula_id', matriculaId);
-    if (diarioListError) throw serviceError('Não foi possível recalcular a presença da matrícula', diarioListError);
-
-    const expectedKeys = new Set(sessions.map((session) => `${session.dataAula}|${session.horarioPeriodo}`));
-    const diarios = (allStudentDiarios ?? []) as DiarioClasse[];
-    const presentCount = diarios.filter((diario) =>
-      expectedKeys.has(`${diario.data_aula}|${diario.horario_periodo}`) && diario.presente
-    ).length;
-    const totalCount = sessions.length;
-    const percentual = totalCount > 0 ? Math.round((presentCount / totalCount) * 100) : 100;
-
-    const { error: updateError } = await supabase
-      .from('matriculas')
-      .update({ percentual_presenca: percentual })
-      .eq('id', matriculaId);
-    if (updateError) throw serviceError(`Não foi possível atualizar a presença da matrícula ${matriculaId}`, updateError);
-
-    return record;
+    const { data, error } = await supabase.rpc('save_diario_presenca', {
+      p_matricula_id: matriculaId,
+      p_data_aula: dataAula,
+      p_horario_periodo: horarioPeriodo,
+      p_presente: presente,
+    });
+    if (error) throw serviceError('Não foi possível salvar o registro de presença', error);
+    return data as DiarioClasse;
   },
 
   // --- Vínculo Turma x Instrutores ---

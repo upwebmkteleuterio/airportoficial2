@@ -208,6 +208,7 @@ export function useClassDetails(classId: string | null, options: ClassDetailsOpt
     updateMatricula: updateMatriculaMutation.mutateAsync,
     deleteMatricula: deleteMatriculaMutation.mutateAsync,
     saveDiarioPresenca: saveDiarioPresencaMutation.mutateAsync,
+    isSavingDiario: saveDiarioPresencaMutation.isPending,
     saveInstructors: saveInstructorsMutation.mutateAsync,
     isSavingInstructors: saveInstructorsMutation.isPending,
   };
