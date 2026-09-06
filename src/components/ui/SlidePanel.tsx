@@ -32,8 +32,8 @@ export function SlidePanel({ isOpen, onClose, children, maxWidth = 'max-w-md', d
             exit={direction === 'right' ? { x: '100%' } : { y: '100%' }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
             className={direction === 'right' 
-              ? `fixed inset-y-0 right-0 w-full ${maxWidth} bg-white dark:bg-slate-900 shadow-2xl flex flex-col border-l border-gray-200 dark:border-slate-800`
-              : `fixed inset-x-0 bottom-0 mx-auto w-full ${maxWidth} h-[85vh] bg-white dark:bg-slate-900 shadow-2xl flex flex-col border-t border-x border-gray-200 dark:border-slate-800 rounded-t-2xl`
+              ? `fixed inset-y-0 right-0 w-full ${maxWidth} min-h-0 overflow-hidden bg-white dark:bg-slate-900 shadow-2xl flex flex-col border-l border-gray-200 dark:border-slate-800`
+              : `fixed inset-x-0 bottom-0 mx-auto w-full ${maxWidth} h-[85vh] min-h-0 overflow-hidden bg-white dark:bg-slate-900 shadow-2xl flex flex-col border-t border-x border-gray-200 dark:border-slate-800 rounded-t-2xl`
             }
             style={{ zIndex: baseZIndex + 10 }}
           >

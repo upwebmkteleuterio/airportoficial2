@@ -5,14 +5,14 @@ import { Upload, X, Check, ChevronRight, ChevronLeft, MapPin, User, FileCheck, S
 import { useUsers } from '../hooks/useUsers';
 import { useCompanies } from '../hooks/useCompanies';
 import { documentService } from '../services/documentService';
-import { PersonalInfoFields, useStudentFormValidation, isValidFullName, isValidDate, isValidCPF, isValidCEP, isValidPhone } from './shared/StudentFormShared';
+import { PersonalInfoFields, useStudentFormValidation, validateStudentField, dateToDisplay, dateToPayload } from './shared/StudentFormShared';
 import { DocumentStatus, UserRole } from '../types';
 
 interface StudentRegistrationModalProps {
   initialData?: any;
   isOpen: boolean;
   onClose: () => void;
-  onSuccess?: (studentId: string) => void;
+  onSuccess?: (result: { studentId: string; status: 'ativo' | 'pendente' }) => void;
 }
 
 type FileField = 'rg' | 'cpf' | 'cnh' | 'residencia' | 'ensino_medio' | 'antecedentes_federais' | 'antecedentes_estaduais';
@@ -159,7 +159,7 @@ const createFormDataFromInitialData = (initialData?: any): FormData => {
     telefone: initialData.telefone || '',
     empresa_id: initialData.empresa_id || '',
     nome_completo: initialData.nome_completo || '',
-    data_nascimento: initialData.data_nascimento || '',
+    data_nascimento: dateToDisplay(initialData.data_nascimento || ''),
     nome_mae: initialData.nome_mae || '',
     nome_pai: initialData.nome_pai || '',
     rg: initialData.rg || '',
@@ -251,7 +251,9 @@ const readDraft = (): StoredDraft | null => {
     Object.keys(formData).forEach((key) => {
       if (key === 'senha_temporaria') return;
       const value = parsed.formData[key];
-      if (typeof value === 'string') formData[key as keyof FormData] = value as never;
+      if (typeof value === 'string') {
+        formData[key as keyof FormData] = (key === 'data_nascimento' ? dateToDisplay(value) : value) as never;
+      }
     });
     return {
       formData,
@@ -269,13 +271,6 @@ const clearStoredDraft = () => {
   draftFilesInMemory = createEmptyFiles();
 };
 
-const isStrongTemporaryPassword = (password: string) => (
-  password.length >= 8 &&
-  /[A-Z]/.test(password) &&
-  /[a-z]/.test(password) &&
-  /\d/.test(password) &&
-  /[^A-Za-z0-9]/.test(password)
-);
 
 const hasDraftContent = (formData: FormData, files: FilesState, fileNames: DraftFileNames, initialPassword: string) => {
   const hasFormValues = Object.entries(formData).some(([key, value]) => {
@@ -321,7 +316,12 @@ export function StudentRegistrationModal({ isOpen, onClose, onSuccess, initialDa
   const initialPasswordRef = useRef(formData.senha_temporaria);
   const openingRef = useRef(false);
 
-  const { errors, touched, handleBlur, setErrors, setTouched } = useStudentFormValidation(formData, setFormData);
+  const { errors, touched, handleBlur, validateField, validateFields, setErrors, setTouched } = useStudentFormValidation(formData, setFormData);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (contentRef.current) contentRef.current.scrollTop = 0;
+  }, [step]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -380,16 +380,21 @@ export function StudentRegistrationModal({ isOpen, onClose, onSuccess, initialDa
         .replace(/(\d{2})(\d)/, '($1) $2')
         .replace(/(\d{4,5})(\d{4})/, '$1-$2')
         .substring(0, 15);
+    } else if (name === 'data_nascimento') {
+      masked = value.replace(/\D/g, '')
+        .replace(/(\d{2})(\d)/, '$1/$2')
+        .replace(/(\d{2})\/(\d{2})(\d)/, '$1/$2/$3')
+        .substring(0, 10);
     }
     return masked;
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: name === 'data_nascimento' || name === 'senha_temporaria' ? value : applyMask(name, value)
-    }));
+    const nextValue = name === 'senha_temporaria' ? value : applyMask(name, value);
+    setFormData(prev => ({ ...prev, [name]: nextValue }));
+    setTouched(prev => ({ ...prev, [name]: true }));
+    validateField(name, nextValue);
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, fieldName: FileField) => {
@@ -414,34 +419,53 @@ export function StudentRegistrationModal({ isOpen, onClose, onSuccess, initialDa
     void saveDraftFile(fieldName, selectedFile);
   };
 
-  const isStep1Valid = () => (
-    isValidFullName(formData.nome_completo) &&
-    isValidDate(formData.data_nascimento) &&
-    isValidFullName(formData.nome_mae) &&
-    formData.rg.trim().length > 0 &&
-    formData.orgao_expedicao_rg.trim().length > 0 &&
-    isValidCPF(formData.cpf) &&
-    formData.grau_ensino.trim().length > 0 &&
-    isValidPhone(formData.telefone) &&
-    formData.email.includes('@') &&
-    formData.trabalha_aviacao_civil.trim().length > 0 &&
-    formData.trabalha_seguranca_avsec.trim().length > 0 &&
-    isStrongTemporaryPassword(formData.senha_temporaria)
-  );
+  const stepFields: Record<number, string[]> = {
+    1: ['nome_completo', 'data_nascimento', 'cpf', 'nome_mae', 'rg', 'orgao_expedicao_rg', 'grau_ensino', 'telefone', 'email', 'trabalha_aviacao_civil', 'trabalha_seguranca_avsec', 'senha_temporaria'],
+    2: ['cep', 'endereco', 'numero', 'bairro', 'cidade', 'estado']
+  };
 
-  const isStep2Valid = () => (
-    isValidCEP(formData.cep) &&
-    formData.endereco.trim().length > 0 &&
-    formData.numero.trim().length > 0 &&
-    formData.bairro.trim().length > 0 &&
-    formData.cidade.trim().length > 0 &&
-    formData.estado.trim().length > 0
-  );
+  const validateStudentValue = (field: string, value: string) => !validateStudentField(field, value);
+
+  const focusFirstInvalid = (fields: string[]) => {
+    const firstInvalid = fields.find(field => !validateStudentValue(field, formData[field as keyof FormData]));
+    if (!firstInvalid) return;
+    const element = document.querySelector<HTMLElement>(`[name="${firstInvalid}"]`);
+    element?.focus();
+    if (element && contentRef.current) contentRef.current.scrollTo({ top: Math.max(0, element.offsetTop - 24), behavior: 'smooth' });
+  };
+
+  const validateCurrentStep = () => {
+    const fields = stepFields[step] || [];
+    const valid = validateFields(fields);
+    if (!valid) window.requestAnimationFrame(() => focusFirstInvalid(fields));
+    return valid;
+  };
 
   const handleNext = () => {
-    if (step === 1 && isStep1Valid()) setStep(2);
-    else if (step === 2 && isStep2Valid()) setStep(3);
+    if (validateCurrentStep()) setStep(step + 1);
   };
+
+  const requestStep = (targetStep: number) => {
+    if (targetStep <= step) {
+      setStep(targetStep);
+      return;
+    }
+    for (let currentStep = step; currentStep < targetStep; currentStep += 1) {
+      const fields = stepFields[currentStep] || [];
+      if (!validateFields(fields)) {
+        if (currentStep !== step) setStep(currentStep);
+        window.requestAnimationFrame(() => focusFirstInvalid(fields));
+        return;
+      }
+    }
+    setStep(targetStep);
+  };
+
+  const fieldClass = (name: string) => `w-full border ${touched[name] && errors[name] ? 'border-red-500' : 'border-gray-300 dark:border-slate-700'} rounded-lg p-2.5 bg-white dark:bg-slate-850 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-[#005f5f] outline-none`;
+  const fieldA11y = (name: string) => ({
+    'aria-invalid': Boolean(touched[name] && errors[name]),
+    'aria-describedby': touched[name] && errors[name] ? `${name}-error` : undefined
+  });
 
   const handleBack = () => {
     if (step > 1) setStep(step - 1);
@@ -547,13 +571,13 @@ export function StudentRegistrationModal({ isOpen, onClose, onSuccess, initialDa
     return true;
   };
 
-  const resetAfterSuccess = (userId: string) => {
+  const resetAfterSuccess = (userId: string, status: 'ativo' | 'pendente') => {
     clearStoredDraft();
     setDraftToResume(null);
     setCreatedUserId(null);
     setUploadedDocuments({});
     setUploadStates(createEmptyUploadStates());
-    onSuccess?.(userId);
+    onSuccess?.({ studentId: userId, status });
     onClose();
     const nextFormData = createEmptyFormData();
     initialPasswordRef.current = nextFormData.senha_temporaria;
@@ -571,7 +595,7 @@ export function StudentRegistrationModal({ isOpen, onClose, onSuccess, initialDa
     const document = await uploadDocumentField(field, createdUserId);
     const records = document ? { ...uploadedDocuments, [field]: document } : uploadedDocuments;
     if (document) setUploadedDocuments(records);
-    if (document && await promoteCompleteRegistration(createdUserId, records)) resetAfterSuccess(createdUserId);
+    if (document && await promoteCompleteRegistration(createdUserId, records)) resetAfterSuccess(createdUserId, 'ativo');
     setIsLoading(false);
   };
 
@@ -590,7 +614,7 @@ export function StudentRegistrationModal({ isOpen, onClose, onSuccess, initialDa
           empresa_id: formData.empresa_id || undefined,
           termo_lgpd_aceite: true,
           data_aceite_lgpd: new Date().toISOString(),
-          data_nascimento: formData.data_nascimento,
+          data_nascimento: dateToPayload(formData.data_nascimento),
           nome_mae: formData.nome_mae,
           nome_pai: formData.nome_pai,
           rg: formData.rg,
@@ -624,13 +648,12 @@ export function StudentRegistrationModal({ isOpen, onClose, onSuccess, initialDa
       if (hasUploadFailure) return;
 
       if (await promoteCompleteRegistration(userId, records)) {
-        resetAfterSuccess(userId);
+        resetAfterSuccess(userId, 'ativo');
         return;
       }
 
-      resetAfterSuccess(userId);
-    } catch (error) {
-      console.error(error);
+      resetAfterSuccess(userId, 'pendente');
+    } catch {
       alert('Erro ao cadastrar aluno.');
     } finally {
       setIsLoading(false);
@@ -653,22 +676,22 @@ export function StudentRegistrationModal({ isOpen, onClose, onSuccess, initialDa
 
           <div className="px-6 py-4 border-b border-gray-100 dark:border-slate-800 shrink-0">
             <div className="flex items-center justify-between">
-              <button type="button" onClick={() => setStep(1)} className={`flex flex-col items-center flex-1 rounded-xl py-2 transition-colors ${step === 1 ? 'bg-teal-50 dark:bg-teal-900/20 text-[#005f5f] dark:text-teal-400' : 'text-gray-400 dark:text-slate-600 hover:bg-gray-50 dark:hover:bg-slate-800'}`}>
+              <button type="button" onClick={() => requestStep(1)} className={`flex flex-col items-center flex-1 rounded-xl py-2 transition-colors ${step === 1 ? 'bg-teal-50 dark:bg-teal-900/20 text-[#005f5f] dark:text-teal-400' : 'text-gray-400 dark:text-slate-600 hover:bg-gray-50 dark:hover:bg-slate-800'}`}>
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold mb-1 border-2 ${step === 1 ? 'border-[#005f5f] dark:border-teal-400 bg-white dark:bg-slate-800' : 'border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800'}`}>1</div>
                 <span className="text-[10px] uppercase font-bold tracking-wider">Dados Pessoais</span>
               </button>
-              <button type="button" onClick={() => setStep(2)} className={`flex flex-col items-center flex-1 rounded-xl py-2 transition-colors ${step === 2 ? 'bg-teal-50 dark:bg-teal-900/20 text-[#005f5f] dark:text-teal-400' : 'text-gray-400 dark:text-slate-600 hover:bg-gray-50 dark:hover:bg-slate-800'}`}>
+              <button type="button" onClick={() => requestStep(2)} className={`flex flex-col items-center flex-1 rounded-xl py-2 transition-colors ${step === 2 ? 'bg-teal-50 dark:bg-teal-900/20 text-[#005f5f] dark:text-teal-400' : 'text-gray-400 dark:text-slate-600 hover:bg-gray-50 dark:hover:bg-slate-800'}`}>
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold mb-1 border-2 ${step === 2 ? 'border-[#005f5f] dark:border-teal-400 bg-white dark:bg-slate-800' : 'border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800'}`}>2</div>
                 <span className="text-[10px] uppercase font-bold tracking-wider">Endereço</span>
               </button>
-              <button type="button" onClick={() => setStep(3)} className={`flex flex-col items-center flex-1 rounded-xl py-2 transition-colors ${step === 3 ? 'bg-teal-50 dark:bg-teal-900/20 text-[#005f5f] dark:text-teal-400' : 'text-gray-400 dark:text-slate-600 hover:bg-gray-50 dark:hover:bg-slate-800'}`}>
+              <button type="button" onClick={() => requestStep(3)} className={`flex flex-col items-center flex-1 rounded-xl py-2 transition-colors ${step === 3 ? 'bg-teal-50 dark:bg-teal-900/20 text-[#005f5f] dark:text-teal-400' : 'text-gray-400 dark:text-slate-600 hover:bg-gray-50 dark:hover:bg-slate-800'}`}>
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold mb-1 border-2 ${step === 3 ? 'border-[#005f5f] dark:border-teal-400 bg-white dark:bg-slate-800' : 'border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800'}`}>3</div>
                 <span className="text-[10px] uppercase font-bold tracking-wider">Documentos</span>
               </button>
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
+          <div ref={contentRef} className="flex-1 min-h-0 overflow-y-auto p-6 pb-10 custom-scrollbar">
             {step === 1 && (
               <div className="space-y-4 animate-fade-in">
                 <div className="flex items-center gap-2 mb-2 text-slate-800 dark:text-slate-200">
@@ -677,17 +700,20 @@ export function StudentRegistrationModal({ isOpen, onClose, onSuccess, initialDa
                 </div>
                 <PersonalInfoFields formData={formData} handleInputChange={handleInputChange} handleBlur={handleBlur} errors={errors} touched={touched}>
                   <div className="col-span-1 md:col-span-2">
-                    <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 mb-1">Senha temporária *</label>
+                    <label htmlFor="senha_temporaria" className="block text-xs font-bold text-gray-700 dark:text-slate-300 mb-1">Senha temporária *</label>
                     <input
+                      id="senha_temporaria"
                       type="text"
                       name="senha_temporaria"
                       value={formData.senha_temporaria}
                       onChange={handleInputChange}
-                      className="w-full border border-gray-300 dark:border-slate-700 rounded-lg p-2.5 bg-white dark:bg-slate-850 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-[#005f5f] outline-none font-mono"
+                      onBlur={handleBlur}
+                      className={`${fieldClass('senha_temporaria')} font-mono`}
                       autoComplete="new-password"
-                      aria-describedby="temporary-password-help"
+                      {...fieldA11y('senha_temporaria')}
                     />
                     <span id="temporary-password-help" className="text-[11px] text-gray-500 dark:text-slate-400 mt-1 block">Gerada automaticamente. Você pode editá-la antes de concluir o cadastro.</span>
+                    {touched.senha_temporaria && errors.senha_temporaria && <span id="senha_temporaria-error" className="text-red-500 text-xs mt-1 block">{errors.senha_temporaria}</span>}
                   </div>
                   <div className="col-span-1 md:col-span-2">
                     <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 mb-1">Empresa Vinculada (Opcional)</label>
@@ -708,37 +734,37 @@ export function StudentRegistrationModal({ isOpen, onClose, onSuccess, initialDa
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="col-span-1 md:col-span-3">
-                    <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 mb-1">CEP *</label>
-                    <input type="text" name="cep" value={formData.cep} onChange={handleInputChange} onBlur={handleBlur} className="w-full md:w-1/3 border border-gray-300 dark:border-slate-700 rounded-lg p-2.5 bg-white dark:bg-slate-850 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-[#005f5f] outline-none" placeholder="00000-000" />
-                    {touched.cep && errors.cep && <span className="text-red-500 text-xs mt-1 block">{errors.cep}</span>}
+                    <label htmlFor="cep" className="block text-xs font-bold text-gray-700 dark:text-slate-300 mb-1">CEP *</label>
+                    <input id="cep" type="text" name="cep" value={formData.cep} onChange={handleInputChange} onBlur={handleBlur} className={`${fieldClass('cep')} md:w-1/3`} placeholder="00000-000" {...fieldA11y('cep')} />
+                    {touched.cep && errors.cep && <span id="cep-error" className="text-red-500 text-xs mt-1 block">{errors.cep}</span>}
                   </div>
                   <div className="col-span-1 md:col-span-2">
-                    <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 mb-1">Endereço Residencial *</label>
-                    <input type="text" name="endereco" value={formData.endereco} onChange={handleInputChange} onBlur={handleBlur} className="w-full border border-gray-300 dark:border-slate-700 rounded-lg p-2.5 bg-white dark:bg-slate-850 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-[#005f5f] outline-none" placeholder="Rua, Avenida, etc." />
-                    {touched.endereco && errors.endereco && <span className="text-red-500 text-xs mt-1 block">{errors.endereco}</span>}
+                    <label htmlFor="endereco" className="block text-xs font-bold text-gray-700 dark:text-slate-300 mb-1">Endereço Residencial *</label>
+                    <input id="endereco" type="text" name="endereco" value={formData.endereco} onChange={handleInputChange} onBlur={handleBlur} className={fieldClass('endereco')} placeholder="Rua, Avenida, etc." {...fieldA11y('endereco')} />
+                    {touched.endereco && errors.endereco && <span id="endereco-error" className="text-red-500 text-xs mt-1 block">{errors.endereco}</span>}
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 mb-1">Número *</label>
-                    <input type="text" name="numero" value={formData.numero} onChange={handleInputChange} onBlur={handleBlur} className="w-full border border-gray-300 dark:border-slate-700 rounded-lg p-2.5 bg-white dark:bg-slate-850 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-[#005f5f] outline-none" placeholder="Nº" />
-                    {touched.numero && errors.numero && <span className="text-red-500 text-xs mt-1 block">{errors.numero}</span>}
+                    <label htmlFor="numero" className="block text-xs font-bold text-gray-700 dark:text-slate-300 mb-1">Número *</label>
+                    <input id="numero" type="text" name="numero" value={formData.numero} onChange={handleInputChange} onBlur={handleBlur} className={fieldClass('numero')} placeholder="Nº" {...fieldA11y('numero')} />
+                    {touched.numero && errors.numero && <span id="numero-error" className="text-red-500 text-xs mt-1 block">{errors.numero}</span>}
                   </div>
                   <div className="col-span-1 md:col-span-3">
-                    <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 mb-1">Bairro *</label>
-                    <input type="text" name="bairro" value={formData.bairro} onChange={handleInputChange} onBlur={handleBlur} className="w-full border border-gray-300 dark:border-slate-700 rounded-lg p-2.5 bg-white dark:bg-slate-850 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-[#005f5f] outline-none" placeholder="Bairro" />
-                    {touched.bairro && errors.bairro && <span className="text-red-500 text-xs mt-1 block">{errors.bairro}</span>}
+                    <label htmlFor="bairro" className="block text-xs font-bold text-gray-700 dark:text-slate-300 mb-1">Bairro *</label>
+                    <input id="bairro" type="text" name="bairro" value={formData.bairro} onChange={handleInputChange} onBlur={handleBlur} className={fieldClass('bairro')} placeholder="Bairro" {...fieldA11y('bairro')} />
+                    {touched.bairro && errors.bairro && <span id="bairro-error" className="text-red-500 text-xs mt-1 block">{errors.bairro}</span>}
                   </div>
                   <div className="col-span-1 md:col-span-2">
-                    <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 mb-1">Cidade *</label>
-                    <input type="text" name="cidade" value={formData.cidade} onChange={handleInputChange} onBlur={handleBlur} className="w-full border border-gray-300 dark:border-slate-700 rounded-lg p-2.5 bg-white dark:bg-slate-850 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-[#005f5f] outline-none" placeholder="Cidade" />
-                    {touched.cidade && errors.cidade && <span className="text-red-500 text-xs mt-1 block">{errors.cidade}</span>}
+                    <label htmlFor="cidade" className="block text-xs font-bold text-gray-700 dark:text-slate-300 mb-1">Cidade *</label>
+                    <input id="cidade" type="text" name="cidade" value={formData.cidade} onChange={handleInputChange} onBlur={handleBlur} className={fieldClass('cidade')} placeholder="Cidade" {...fieldA11y('cidade')} />
+                    {touched.cidade && errors.cidade && <span id="cidade-error" className="text-red-500 text-xs mt-1 block">{errors.cidade}</span>}
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 mb-1">Estado (UF) *</label>
-                    <select name="estado" value={formData.estado} onChange={handleInputChange} onBlur={handleBlur} className="w-full border border-gray-300 dark:border-slate-700 rounded-lg p-2.5 bg-white dark:bg-slate-850 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-[#005f5f] outline-none">
+                    <label htmlFor="estado" className="block text-xs font-bold text-gray-700 dark:text-slate-300 mb-1">Estado (UF) *</label>
+                    <select id="estado" name="estado" value={formData.estado} onChange={handleInputChange} onBlur={handleBlur} className={fieldClass('estado')} {...fieldA11y('estado')}>
                       <option value="">Selecione</option>
                       {['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'].map(uf => <option key={uf} value={uf}>{uf}</option>)}
                     </select>
-                    {touched.estado && errors.estado && <span className="text-red-500 text-xs mt-1 block">{errors.estado}</span>}
+                    {touched.estado && errors.estado && <span id="estado-error" className="text-red-500 text-xs mt-1 block">{errors.estado}</span>}
                   </div>
                 </div>
               </div>
@@ -751,6 +777,9 @@ export function StudentRegistrationModal({ isOpen, onClose, onSuccess, initialDa
                   <h4 className="font-bold">Anexar Documentos</h4>
                 </div>
                 <p className="text-xs text-gray-500 dark:text-slate-400 mb-4">Selecione os arquivos correspondentes para cada documento. Arquivos nos formatos PDF, JPG ou PNG. O envio de documentos pode ser concluído parcialmente. Este cadastro será revisado manualmente pela escola e não passará pela IA.</p>
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 mb-4 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
+                  <strong>Documentação obrigatória para ativação:</strong> todos os documentos indicados nesta etapa precisam ser enviados e aprovados para que o aluno seja ativado. Se faltar algum documento, o cadastro será salvo como pendente e ficará em <strong>Aprovações Pendentes</strong> para completar a documentação.
+                </div>
                 <div className="mb-4">
                   <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 mb-1">Tipo de Documento de Identificação</label>
                   <select name="tipo_documento" value={formData.tipo_documento} onChange={handleInputChange} className="w-full border border-gray-300 dark:border-slate-700 rounded-lg p-2.5 bg-white dark:bg-slate-850 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-[#005f5f] outline-none">
@@ -828,7 +857,7 @@ export function StudentRegistrationModal({ isOpen, onClose, onSuccess, initialDa
           <div className="px-6 py-4 border-t border-gray-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 shrink-0 flex items-center justify-between">
             <button onClick={step === 1 ? requestClose : handleBack} className="px-4 py-2 text-sm font-semibold text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white transition-colors">{step === 1 ? 'Cancelar' : <><ChevronLeft className="w-4 h-4 inline mr-1" />Voltar</>}</button>
             {step < 3 ? (
-              <button type="button" onClick={handleNext} disabled={step === 1 ? !isStep1Valid() : !isStep2Valid()} className="px-6 py-2 bg-[#005f5f] hover:bg-[#004d4d] disabled:bg-gray-400 disabled:hover:bg-gray-400 text-white flex items-center gap-2 rounded-lg font-semibold text-sm">
+              <button type="button" onClick={handleNext} className="px-6 py-2 bg-[#005f5f] hover:bg-[#004d4d] text-white flex items-center gap-2 rounded-lg font-semibold text-sm">
                 Próximo
                 <ChevronRight className="w-4 h-4" />
               </button>

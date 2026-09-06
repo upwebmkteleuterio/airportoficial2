@@ -2168,8 +2168,8 @@ Equipe Airport`;
         initialData={selectedStudentForEdit}
         isOpen={registrationModalOpen}
         onClose={() => { setRegistrationModalOpen(false); setSelectedStudentForEdit(null); }}
-        onSuccess={(newStudentId) => {
-          setSelectedAlunoId(newStudentId);
+        onSuccess={({ studentId }) => {
+          setSelectedAlunoId(studentId);
           setAddStudentOpen(true);
         }}
       />

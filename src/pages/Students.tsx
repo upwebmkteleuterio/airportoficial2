@@ -23,6 +23,7 @@ import { DocumentAccessGrant } from '../services/documentAccessService';
 
 export function Students() {
   const [registrationModalOpen, setRegistrationModalOpen] = useState(false);
+  const [registrationNotice, setRegistrationNotice] = useState<'ativo' | 'pendente' | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   
   const [detailsPanelOpen, setDetailsPanelOpen] = useState(false);
@@ -61,16 +62,23 @@ export function Students() {
   // Pagination is performed by Supabase; only the current page is kept in memory.
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 50;
-  const { users, total, isLoading } = useUsers({
+  const { users, total, isLoading, refetch } = useUsers({
     page: currentPage,
     pageSize: itemsPerPage,
     role: UserRole.ALUNO,
+    status: 'ativo',
     search: searchQuery
   });
 
   useEffect(() => {
     setCurrentPage(1);
   }, [searchQuery]);
+
+  useEffect(() => {
+    if (!registrationNotice) return;
+    const timer = window.setTimeout(() => setRegistrationNotice(null), 6000);
+    return () => window.clearTimeout(timer);
+  }, [registrationNotice]);
 
   const totalPages = Math.ceil(total / itemsPerPage) || 1;
   const paginatedStudents = users;
@@ -342,11 +350,20 @@ export function Students() {
         initialData={selectedStudentForEdit}
         isOpen={registrationModalOpen}
         onClose={() => { setRegistrationModalOpen(false); setSelectedStudentForEdit(null); }}
-        onSuccess={() => {
+        onSuccess={({ status }) => {
           setRegistrationModalOpen(false);
-          // Optional: Refresh list or show toast
+          setSelectedStudentForEdit(null);
+          setRegistrationNotice(status);
+          void refetch();
         }}
       />
+      {registrationNotice && (
+        <div role="status" className="fixed bottom-5 left-1/2 z-[70] -translate-x-1/2 rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-xl dark:border-slate-700 dark:bg-slate-900 dark:text-white">
+          {registrationNotice === 'ativo'
+            ? 'Aluno cadastrado e ativado com sucesso.'
+            : 'Cadastro salvo. O aluno está em Aprovações Pendentes aguardando documentação completa.'}
+        </div>
+      )}
     </div>
   );
 }

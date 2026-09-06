@@ -330,9 +330,10 @@ export default function PublicEnrollment() {
                 <PersonalInfoFields 
                   formData={formData} 
                   handleInputChange={handleChange} 
-                  handleBlur={handleBlur} 
-                  errors={errors} 
+                  handleBlur={handleBlur}
+                  errors={errors}
                   touched={touched}
+                  dateFormat="payload"
                 />
               </div>
             )}
