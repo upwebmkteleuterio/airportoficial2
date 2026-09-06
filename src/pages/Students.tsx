@@ -65,7 +65,6 @@ export function Students() {
     page: currentPage,
     pageSize: itemsPerPage,
     role: UserRole.ALUNO,
-    status: 'ativo',
     search: searchQuery
   });
 
