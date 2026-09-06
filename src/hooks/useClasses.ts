@@ -77,6 +77,7 @@ export function useClasses(options: ClassesOptions = {}) {
     total: classesQuery.data?.total || 0,
     isLoading: classesQuery.isLoading,
     isError: classesQuery.isError,
+    getClassEditability: classService.getEditability,
     createClass: createClassMutation.mutateAsync,
     isCreating: createClassMutation.isPending,
     updateClass: updateClassMutation.mutateAsync,
@@ -102,19 +103,19 @@ export function useClassDetails(classId: string | null) {
   const matriculasQuery = useQuery({
     queryKey: ['matriculas', classId],
     queryFn: () => classId ? classService.getMatriculasByTurma(classId) : Promise.resolve([]),
-    enabled: !!classId,
+    enabled: !!classId && !!classQuery.data,
   });
 
   const diarioQuery = useQuery({
     queryKey: ['diario', classId],
     queryFn: () => classId ? classService.getDiarioByTurma(classId) : Promise.resolve([]),
-    enabled: !!classId,
+    enabled: !!classId && !!classQuery.data,
   });
 
   const instructorsQuery = useQuery({
     queryKey: ['class-instructors', classId],
     queryFn: () => classId ? classService.getInstrutoresByTurma(classId) : Promise.resolve([]),
-    enabled: !!classId,
+    enabled: !!classId && !!classQuery.data,
   });
 
   // Mutations

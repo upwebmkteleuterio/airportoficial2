@@ -151,8 +151,10 @@ export function Dashboard() {
         modals,
         setModalOpen,
         setRoute,
-        setSelectedClassId
+        setSelectedClassId,
+        userLogged
     } = useUIStore();
+    const isInstructor = userLogged?.role === 'INSTRUTOR';
 
     const [currentPage, setCurrentPage] = useState(1);
     const [turmaInstructorsMap, setTurmaInstructorsMap] = useState<Record<string, string[]>>({});
@@ -173,6 +175,7 @@ export function Dashboard() {
         updateClass,
         deleteClass,
         getInstrutoresByTurma,
+        getClassEditability,
         saveInstrutoresForTurma,
         isLoading
     } = useClasses({
@@ -183,6 +186,7 @@ export function Dashboard() {
     });
 
     const [editingClassId, setEditingClassId] = useState<string | null>(null);
+    const [lockedClassFields, setLockedClassFields] = useState<string[]>([]);
     const [classToDelete, setClassToDelete] = useState<Turma | null>(null);
     const [isHelpOpen, setIsHelpOpen] = useState(false);
 
@@ -452,6 +456,7 @@ export function Dashboard() {
         setFormNotes("");
         setFormVigilante(false);
         setEditingClassId(null);
+        setLockedClassFields([]);
     };
 
     const continueClassDraft = () => {
@@ -820,7 +825,7 @@ export function Dashboard() {
                         <HelpCircle className="h-4 w-4" aria-hidden="true" />
                         Ajuda
                     </button>
-                    <button
+                    {!isInstructor && (<button
                         id="btn-new-class"
                         type="button"
                         onClick={() => {
@@ -831,7 +836,7 @@ export function Dashboard() {
                     >
                         <Plus className="w-4 h-4" />
                         Nova Turma
-                    </button>
+                    </button>)}
                 </div>
             </div>
             {}
@@ -955,8 +960,8 @@ export function Dashboard() {
                         <thead
                             className="sticky top-0 bg-slate-50 dark:bg-slate-850 z-10 border-b border-gray-200 dark:border-slate-800 font-bold uppercase tracking-wider text-gray-500 dark:text-slate-400">
                             <tr>
-                                <th
-                                    className="px-4 py-3 w-10 text-center border-r border-gray-200/50 dark:border-slate-800/50"></th>
+                                {!isInstructor && <th
+                                    className="px-4 py-3 w-10 text-center border-r border-gray-200/50 dark:border-slate-800/50"></th>}
                                 {visibleColumns.id_anac && <th
                                     className="px-4 py-3 border-r border-gray-200/50 dark:border-slate-800/50">ID ANAC</th>}
                                 {visibleColumns.id_interno && <th
@@ -1007,7 +1012,7 @@ export function Dashboard() {
                             className="divide-y divide-gray-150 dark:divide-slate-800 text-gray-700 dark:text-slate-200 font-mono">
                             {isLoading ? (<tr>
                                 <td
-                                    colSpan={Object.values(visibleColumns).filter(Boolean).length + 1}
+                                    colSpan={Object.values(visibleColumns).filter(Boolean).length + (isInstructor ? 0 : 1)}
                                     className="px-4 py-8 text-center">
                                     <div className="flex flex-col items-center justify-center gap-2 text-gray-500">
                                         <div
@@ -1017,7 +1022,7 @@ export function Dashboard() {
                                 </td>
                             </tr>) : paginatedClasses.length === 0 ? (<tr>
                                 <td
-                                    colSpan={Object.values(visibleColumns).filter(Boolean).length + 1}
+                                    colSpan={Object.values(visibleColumns).filter(Boolean).length + (isInstructor ? 0 : 1)}
                                     className="px-4 py-12 text-center text-gray-500 font-sans">
                                     <div
                                         className="flex flex-col items-center justify-center gap-2.5 max-w-sm mx-auto">
@@ -1052,7 +1057,7 @@ export function Dashboard() {
                                         key={item.id}
                                         onClick={() => handleViewClass(item.id)}
                                         className={`hover:bg-slate-50 dark:hover:bg-slate-850/50 transition-colors h-[38px] group cursor-pointer even:bg-slate-50/30 dark:even:bg-slate-900/30 ${trColor}`}>
-                                        <td
+                                        {!isInstructor && (<td
                                             className="px-4 py-2 text-center border-r border-gray-200/30 dark:border-slate-800/30 relative"
                                             onClick={e => e.stopPropagation()}>
                                             <div className="flex items-center justify-center">
@@ -1113,6 +1118,14 @@ export function Dashboard() {
                                                                     return;
                                                                 }
 
+                                                                try {
+                                                                    const editability = await getClassEditability(item.id);
+                                                                    setLockedClassFields(editability.lockedFields.map(String));
+                                                                } catch (error) {
+                                                                    console.error("Não foi possível consultar o estado estrutural da turma", error);
+                                                                    return;
+                                                                }
+
                                                                 setModalOpen("newClassOpen", true);
                                                             }}
                                                             className="w-full text-left px-4 py-2 text-xs font-semibold text-teal-600 dark:text-teal-400 hover:bg-gray-50 dark:hover:bg-slate-800 flex items-center gap-2">
@@ -1130,7 +1143,7 @@ export function Dashboard() {
                                                     </div>)}
                                                 </div>
                                             </div>
-                                        </td>
+                                        </td>)}
                                         {visibleColumns.id_anac && (<td
                                             className={`px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 font-semibold ${item.status_prazo_notas === ClassStatusPrazo.ATRASADO ? "text-red-500 dark:text-red-400" : "text-slate-900 dark:text-white"}`}>
                                             {item.id_anac}
@@ -1209,16 +1222,24 @@ export function Dashboard() {
                                             className="px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 font-sans text-center"
                                             onClick={e => e.stopPropagation()}>
                                             <div className="flex items-center justify-center gap-2">
-                                                <span
-                                                    className={`text-xs font-semibold ${!item.nota_lancada ? "text-gray-800 dark:text-gray-200" : "text-gray-400"}`}>Não</span>
-                                                <button
-                                                    onClick={e => handleToggleNotaLancada(e, item.id, !!item.nota_lancada)}
-                                                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors cursor-pointer ${item.nota_lancada ? "bg-teal-500" : "bg-gray-300 dark:bg-slate-600"}`}>
-                                                    <span
-                                                        className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${item.nota_lancada ? "translate-x-4.5" : "translate-x-1"}`} />
-                                                </button>
-                                                <span
-                                                    className={`text-xs font-semibold ${item.nota_lancada ? "text-teal-600 dark:text-teal-400" : "text-gray-400"}`}>Sim</span>
+                                                {isInstructor ? (
+                                                    <span className={`text-xs font-semibold ${item.nota_lancada ? "text-teal-600 dark:text-teal-400" : "text-gray-400"}`}>
+                                                        {item.nota_lancada ? "Sim" : "Não"}
+                                                    </span>
+                                                ) : (
+                                                    <>
+                                                        <span
+                                                            className={`text-xs font-semibold ${!item.nota_lancada ? "text-gray-800 dark:text-gray-200" : "text-gray-400"}`}>Não</span>
+                                                        <button
+                                                            onClick={e => handleToggleNotaLancada(e, item.id, !!item.nota_lancada)}
+                                                            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors cursor-pointer ${item.nota_lancada ? "bg-teal-500" : "bg-gray-300 dark:bg-slate-600"}`}>
+                                                            <span
+                                                                className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${item.nota_lancada ? "translate-x-4.5" : "translate-x-1"}`} />
+                                                        </button>
+                                                        <span
+                                                            className={`text-xs font-semibold ${item.nota_lancada ? "text-teal-600 dark:text-teal-400" : "text-gray-400"}`}>Sim</span>
+                                                    </>
+                                                )}
                                             </div>
                                         </td>)}
                                         {visibleColumns.prazo && (<td
@@ -1284,7 +1305,7 @@ export function Dashboard() {
                 </div>
             </div>
             {}
-            <SlidePanel isOpen={modals.newClassOpen} onClose={handleCloseClassModal}>
+            <SlidePanel isOpen={modals.newClassOpen && !isInstructor} onClose={handleCloseClassModal}>
                 {}
                 <div
                     className="px-6 py-5 border-b border-gray-200 dark:border-slate-800 flex justify-between items-center bg-gray-50 dark:bg-slate-850 shrink-0">
@@ -1313,6 +1334,7 @@ export function Dashboard() {
                                     type="text"
                                     placeholder="ANC-2023-..."
                                     value={formIdAnac}
+                                    disabled={lockedClassFields.includes('id_anac')}
                                     onChange={e => setFormIdAnac(e.target.value)}
                                     className="w-full border border-gray-300 dark:border-slate-700 rounded px-3 py-2 bg-white dark:bg-slate-850 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-teal-500 font-mono" />
                             </div>
@@ -1325,6 +1347,7 @@ export function Dashboard() {
                                     type="number"
                                     placeholder="Somente números"
                                     value={formIdInterno}
+                                    disabled={lockedClassFields.includes('id_interno_escola')}
                                     onChange={e => setFormIdInterno(e.target.value)}
                                     className="w-full border border-gray-300 dark:border-slate-700 rounded px-3 py-2 bg-white dark:bg-slate-850 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-teal-500 font-mono" />
                             </div>
@@ -1339,6 +1362,7 @@ export function Dashboard() {
                                     <select
                                         id="form-curso-select"
                                         value={formCurso}
+                                        disabled={lockedClassFields.includes('curso_id')}
                                         onChange={e => setFormCurso(e.target.value)}
                                         className="w-full appearance-none border border-gray-300 dark:border-slate-700 rounded px-3 py-2.5 bg-white dark:bg-slate-850 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500">
                                         <option value="" disabled>Selecione um curso</option>
@@ -1356,6 +1380,7 @@ export function Dashboard() {
                                     <select
                                         id="form-turno-select"
                                         value={formTurno}
+                                        disabled={lockedClassFields.includes('turno')}
                                         onChange={e => {
                                             const val = e.target.value;
                                             setFormTurno(val);
@@ -1396,6 +1421,7 @@ export function Dashboard() {
                                     id="form-time-start"
                                     type="time"
                                     value={formHorarioInicio}
+                                    disabled={lockedClassFields.includes('horario_aulas')}
                                     onChange={e => {
                                         setFormHorarioInicio(e.target.value);
                                         setFormHorarioAulas(`${e.target.value} - ${formHorarioTermino}`);
@@ -1409,6 +1435,7 @@ export function Dashboard() {
                                     id="form-time-end"
                                     type="time"
                                     value={formHorarioTermino}
+                                    disabled={lockedClassFields.includes('horario_aulas')}
                                     onChange={e => {
                                         setFormHorarioTermino(e.target.value);
                                         setFormHorarioAulas(`${formHorarioInicio} - ${e.target.value}`);
@@ -1447,6 +1474,7 @@ export function Dashboard() {
                                     id="form-date-start"
                                     type="date"
                                     value={formDataInicio}
+                                    disabled={lockedClassFields.includes('data_inicio')}
                                     onChange={e => setFormDataInicio(e.target.value)}
                                     className="w-full border border-gray-300 dark:border-slate-700 rounded px-3 py-2 bg-white dark:bg-slate-850 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 font-mono" />
                             </div>
@@ -1458,6 +1486,7 @@ export function Dashboard() {
                                     id="form-date-end"
                                     type="date"
                                     value={formDataTermino}
+                                    disabled={lockedClassFields.includes('data_termino')}
                                     onChange={e => setFormDataTermino(e.target.value)}
                                     className="w-full border border-gray-300 dark:border-slate-700 rounded px-3 py-2 bg-white dark:bg-slate-850 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 font-mono" />
                             </div>

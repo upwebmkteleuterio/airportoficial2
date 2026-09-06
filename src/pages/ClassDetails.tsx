@@ -13,7 +13,6 @@ import {
   PlaneTakeoff,
   FolderOpen,
   UserPlus,
-  Upload,
   FileDown,
   Printer,
   CheckCircle2,
@@ -49,7 +48,6 @@ import { useCompanies } from '../hooks/useCompanies';
 import { useDocuments } from '../hooks/useDocuments';
 import { useUIStore } from '../store/uiStore';
 import { useAudit } from '../hooks/useAudit';
-import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { SlidePanel } from '../components/ui/SlidePanel';
 import { FolderIcon } from '../components/ui/FolderIcon';
@@ -127,7 +125,8 @@ export function NotaInput({ value, onChange }: { value?: number, onChange: (val?
 }
 
 function ClassDetails() {
-  const { selectedClassId, setRoute, setSelectedClassId } = useUIStore();
+  const { selectedClassId, setRoute, setSelectedClassId, userLogged } = useUIStore();
+  const isInstructor = userLogged?.role === 'INSTRUTOR';
   const { createLog } = useAudit();
 
   const {
@@ -149,6 +148,13 @@ function ClassDetails() {
   const { companies } = useCompanies();
   const { documents, updateDocument, isLoading: isLoadingDocuments } = useDocuments();
 
+  useEffect(() => {
+    if (isInstructor && selectedClassId && !isLoadingClass && !classData) {
+      setSelectedClassId(null);
+      setRoute('dashboard');
+    }
+  }, [classData, isInstructor, isLoadingClass, selectedClassId, setRoute, setSelectedClassId]);
+
   // Selected tab state
   const [activeTab, setActiveTab] = useState<'students' | 'frequency' | 'visit' | 'ged' | 'grades'>('students');
   const [sortOrder, setSortOrder] = useState('az'); // az, za, newest, oldest
@@ -163,6 +169,7 @@ function ClassDetails() {
   const [accessGrant, setAccessGrant] = useState<DocumentAccessGrant | null>(null);
 
   const handleOpenDocuments = (student: any) => {
+    if (isInstructor) return;
     setAccessGrant(null);
     setSelectedStudentForDocs(student);
     setPasswordModalOpen(true);
@@ -409,9 +416,6 @@ function ClassDetails() {
     doc.save(`Oficio_Solicitacao_Visita_Tecnica_Turma_${classData.id_anac}.pdf`);
   };
 
-  // Import CSV Simulator State
-  const [csvFileUploaded, setCsvFileUploaded] = useState(false);
-
   // Active course
   const course = useMemo(() => {
     return courses.find((c) => c.id === classData?.curso_id);
@@ -433,7 +437,11 @@ function ClassDetails() {
     // Gen dates day by day
     const current = new Date(start);
     while (current <= end) {
-      dates.push(new Date(current).toISOString().split('T')[0]);
+      dates.push([
+        current.getFullYear(),
+        String(current.getMonth() + 1).padStart(2, '0'),
+        String(current.getDate()).padStart(2, '0'),
+      ].join('-'));
       current.setDate(current.getDate() + 1);
     }
     return dates;
@@ -452,7 +460,11 @@ function ClassDetails() {
     // Gen dates day by day
     const current = new Date(start);
     while (current <= end) {
-      const dateStr = new Date(current).toISOString().split('T')[0];
+      const dateStr = [
+        current.getFullYear(),
+        String(current.getMonth() + 1).padStart(2, '0'),
+        String(current.getDate()).padStart(2, '0'),
+      ].join('-');
       
       periods.forEach(period => {
         sessions.push({ dateStr, period });
@@ -463,8 +475,39 @@ function ClassDetails() {
     return sessions;
   }, [classData]);
 
+  const handleExportFrequencyCSV = () => {
+    if (!classData) return;
+    const escapeCsv = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+    const headers = ['Turma', 'Matricula', 'Aluno', 'RE', 'Data', 'Período', 'Presente', 'Percentual de presença'];
+    const rows = matriculas.flatMap((matricula) => classSessions.map(({ dateStr, period }) => {
+      const attendance = diario.find((record) =>
+        record.matricula_id === matricula.id && record.data_aula === dateStr && record.horario_periodo === period
+      );
+      return [
+        classData.id,
+        matricula.id,
+        matricula.aluno_id,
+        matricula.codigo_re,
+        dateStr,
+        period,
+        attendance?.presente === true ? 'Sim' : 'Não',
+        matricula.percentual_presenca,
+      ].map(escapeCsv).join(';');
+    }));
+    const csvContent = '\ufeff' + [headers.map(escapeCsv).join(';'), ...rows].join('\n');
+    const url = URL.createObjectURL(new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `frequencia_${classData.id_anac || classData.id}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   // Generate Document Action (Tela 2.6)
   const handleGenerateDoc = () => {
+    if (isInstructor) return;
     const docsMap: { [key: string]: string } = {
       '1': 'Programação Semanal',
       '2': 'Regulamento do Curso',
@@ -495,6 +538,7 @@ function ClassDetails() {
 
   // Add Student Action
   const handleAddStudentSubmit = async () => {
+    if (isInstructor) return;
     if (!selectedAlunoId) {
       alert('Selecione um aluno da lista.');
       return;
@@ -527,17 +571,9 @@ function ClassDetails() {
     }
   };
 
-  // Import CSV Simulator
-  const handleImportCSV = () => {
-    setCsvFileUploaded(true);
-    setTimeout(() => {
-      alert('Planilha AVSEC processada! 5 novos alunos importados e matriculados na turma em lote.');
-      setCsvFileUploaded(false);
-    }, 1000);
-  };
-
   // Handle grade change
   const handleGradeChange = async (matriculaId: string, type: '1ª CH' | '2ª CH', val: string) => {
+    if (isInstructor) return;
     const numVal = parseFloat(val);
     if (isNaN(numVal) && val !== '') return;
 
@@ -608,15 +644,14 @@ function ClassDetails() {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Action trigger for generating documents */}
-          <button
+          {!isInstructor && (<button
             id="btn-open-doc-generator"
             onClick={() => setGenerateDocOpen(true)}
             className="bg-[#0a192f] dark:bg-slate-950 hover:bg-[#112240] text-white px-4 py-2.5 rounded-lg font-bold text-xs flex items-center gap-2 cursor-pointer shadow-md transition-colors border border-[#112240] dark:border-slate-850"
           >
             <FileDown className="w-4 h-4 text-teal-400" />
             Gerar Documentos PDFs
-          </button>
+          </button>)}
         </div>
       </div>
 
@@ -652,7 +687,7 @@ function ClassDetails() {
           </span>
         </button>
 
-        <button
+        {!isInstructor && (<button
           id="tab-visit"
           onClick={() => setActiveTab('visit')}
           className={`pb-3 font-semibold text-sm transition-colors relative cursor-pointer ${
@@ -665,9 +700,9 @@ function ClassDetails() {
             <PlaneTakeoff className="w-4 h-4" />
             Visita Técnica
           </span>
-        </button>
+        </button>)}
 
-        <button
+        {!isInstructor && (<button
           id="tab-ged"
           onClick={() => setActiveTab('ged')}
           className={`pb-3 font-semibold text-sm transition-colors relative cursor-pointer ${
@@ -680,9 +715,9 @@ function ClassDetails() {
             <FolderOpen className="w-4 h-4" />
             Documentos GED
           </span>
-        </button>
+        </button>)}
 
-        <button
+        {!isInstructor && (<button
           id="tab-grades"
           onClick={() => setActiveTab('grades')}
           className={`pb-3 font-semibold text-sm transition-colors relative cursor-pointer ${
@@ -695,7 +730,7 @@ function ClassDetails() {
             <ClipboardList className="w-4 h-4" />
             Notas
           </span>
-        </button>
+        </button>)}
       </div>
 
       {/* TAB CONTENT */}
@@ -706,7 +741,7 @@ function ClassDetails() {
             {/* Actions Panel inside Tab */}
             <div className="flex flex-wrap items-center justify-between gap-4 shrink-0 font-sans">
               <div className="flex items-center gap-3">
-                <CreateMenu 
+                {!isInstructor && (<CreateMenu
                   onSelect={(label) => {
                     if (label === 'Adicionar aluno existente') {
                       setAddStudentOpen(true);
@@ -714,16 +749,7 @@ function ClassDetails() {
                       setRegistrationModalOpen(true);
                     }
                   }}
-                />
-
-                <Button
-                  id="btn-import-csv"
-                  variant="secondary"
-                  onClick={handleImportCSV}
-                  icon={<Upload className="w-4 h-4 text-slate-500" />}
-                >
-                  Importar Planilha AVSEC (.CSV)
-                </Button>
+                />)}
               </div>
 
               <div className="flex items-center gap-3">
@@ -810,13 +836,13 @@ function ClassDetails() {
                         <tr
                           key={m.id}
                           className="hover:bg-teal-500/5 dark:hover:bg-teal-500/10 transition-colors h-[40px] even:bg-slate-50/20 dark:even:bg-slate-900/10 cursor-pointer"
-                          onClick={() => {
+                          onClick={!isInstructor ? () => {
                             setSelectedStudentForDetails(student);
                             setDetailsPanelOpen(true);
-                          }}
+                          } : undefined}
                         >
                           {/* Actions */}
-                          <td
+                          {!isInstructor && (<td
                             className="px-4 py-2 text-center relative"
                             onClick={(e) => e.stopPropagation()}
                           >
@@ -862,7 +888,7 @@ function ClassDetails() {
                               </div>
                               {student && <FolderIcon onClick={(e) => { e.stopPropagation(); handleOpenDocuments(student); }} />}
                             </div>
-                          </td>
+                          </td>)}
                           {/* RE Clickable to open GED */}
                           <td className="px-4 py-2 font-bold text-teal-600 dark:text-teal-400 hover:underline">
                             {m.codigo_re}
@@ -968,15 +994,13 @@ function ClassDetails() {
                   </div>
                 </div>
 
-                <button
-                  onClick={() => {
-                    alert('Exportação iniciada! Gerando planilha de frequência homologada no formato Excel.');
-                  }}
+                {!isInstructor && (<button
+                  onClick={handleExportFrequencyCSV}
                   className="inline-flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-750 rounded-lg px-4 py-2 text-xs font-bold text-slate-800 dark:text-white hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors cursor-pointer shadow-sm"
                 >
                   <FileDown className="w-4 h-4 text-gray-500 dark:text-slate-400" />
                   Exportar
-                </button>
+                </button>)}
               </div>
             </div>
 
@@ -1081,23 +1105,34 @@ function ClassDetails() {
                                 key={dateStr + period + idx}
                                 className="px-3 py-2 border-r border-gray-100 dark:border-slate-800/50 text-center"
                               >
-                                <button
-                                  id={`freq-toggle-${m.id}-${dateStr}-${period.replace(/\//g, '')}`}
-                                  onClick={() =>
-                                    saveDiarioPresenca({
-                                      matriculaId: m.id,
-                                      dataAula: dateStr,
-                                      horarioPeriodo: period,
-                                      presente: !isPresent,
-                                    })
-                                  }
-                                  className={`w-5 h-5 rounded-sm transition-all cursor-pointer mx-auto ${
-                                    isPresent
-                                      ? 'bg-[#005f5f] dark:bg-teal-600 border border-[#005f5f] dark:border-teal-600 shadow-sm'
-                                      : 'bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-700 hover:border-teal-500/50'
-                                  }`}
-                                  aria-label={`Presença de ${student.nome_completo} em ${dateStr} período ${period}`}
-                                />
+                                {isInstructor ? (
+                                  <div
+                                    className={`w-5 h-5 rounded-sm mx-auto ${
+                                      isPresent
+                                        ? 'bg-[#005f5f] dark:bg-teal-600 border border-[#005f5f] dark:border-teal-600 shadow-sm'
+                                        : 'bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-700'
+                                    }`}
+                                    aria-label={`Presença de ${student.nome_completo} em ${dateStr} período ${period}`}
+                                  />
+                                ) : (
+                                  <button
+                                    id={`freq-toggle-${m.id}-${dateStr}-${period.replace(/\//g, '')}`}
+                                    onClick={() =>
+                                      saveDiarioPresenca({
+                                        matriculaId: m.id,
+                                        dataAula: dateStr,
+                                        horarioPeriodo: period,
+                                        presente: !isPresent,
+                                      })
+                                    }
+                                    className={`w-5 h-5 rounded-sm transition-all cursor-pointer mx-auto ${
+                                      isPresent
+                                        ? 'bg-[#005f5f] dark:bg-teal-600 border border-[#005f5f] dark:border-teal-600 shadow-sm'
+                                        : 'bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-700 hover:border-teal-500/50'
+                                    }`}
+                                    aria-label={`Presença de ${student.nome_completo} em ${dateStr} período ${period}`}
+                                  />
+                                )}
                               </td>
                             );
                           })}
@@ -1585,7 +1620,7 @@ Equipe Airport`;
       </div>
 
       {/* --- MODAL DE GERAÇÃO DE DOCUMENTOS GERAIS (Tela 2.6 - Airport) --- */}
-      <Modal isOpen={generateDocOpen} onClose={() => setGenerateDocOpen(false)}>
+      <Modal isOpen={!isInstructor && generateDocOpen} onClose={() => setGenerateDocOpen(false)}>
         <div className="bg-white dark:bg-slate-900 border border-gray-250 dark:border-slate-800 rounded-2xl w-full p-6 shadow-2xl font-sans relative flex flex-col items-center text-center">
           {/* Close button on top right */}
           <button

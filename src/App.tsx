@@ -38,8 +38,14 @@ const queryClient = new QueryClient({
 });
 
 function AppContent() {
-  const { userLogged, activeRoute, themeMode, sidebarCollapsed } = useUIStore();
+  const { userLogged, activeRoute, themeMode, sidebarCollapsed, setRoute } = useUIStore();
   const { isLoading: isSessionLoading } = useSessionContext();
+
+  useEffect(() => {
+    if (userLogged?.role === 'INSTRUTOR' && !['dashboard', 'class-details'].includes(activeRoute)) {
+      setRoute('dashboard');
+    }
+  }, [activeRoute, setRoute, userLogged?.role]);
 
   useEffect(() => {
     const root = window.document.documentElement;
@@ -89,6 +95,10 @@ function AppContent() {
 
   // Render Admin / Team view
   const renderActiveRoute = () => {
+    if (userLogged.role === 'INSTRUTOR' && !['dashboard', 'class-details'].includes(activeRoute)) {
+      return <Dashboard />;
+    }
+
     switch (activeRoute) {
       case 'dashboard':
         return <Dashboard />;

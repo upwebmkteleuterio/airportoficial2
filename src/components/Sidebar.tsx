@@ -78,7 +78,10 @@ export function Sidebar() {
     setRoute(route);
   };
 
-  const navGroups = [
+  const navGroups = userLogged?.role === 'INSTRUTOR' ? [{
+    title: 'Turmas',
+    items: [{ id: 'dashboard', icon: LayoutDashboard, label: 'Turmas' }],
+  }] : [
     {
       title: 'Turmas e Cursos',
       items: [

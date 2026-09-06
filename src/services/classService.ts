@@ -1,5 +1,5 @@
 import { supabase } from '../integrations/supabase/client';
-import { Turma, Matricula, DiarioClasse } from '../types';
+import { Turma, Matricula, DiarioClasse, UserRole } from '../types';
 import { getAttendancePeriodsForShift } from '../utils/attendanceRules';
 import { newServiceId, serviceError } from './supabaseErrors';
 
@@ -22,7 +22,51 @@ export interface ClassPage {
   total: number;
 }
 
+type AuthContext = {
+  id: string;
+  role: UserRole;
+};
+
+async function getAuthContext(): Promise<AuthContext | null> {
+  const { data, error } = await supabase.auth.getUser();
+  if (error || !data.user) return null;
+  const metadata = data.user.user_metadata ?? {};
+  const roleValue = data.user.app_metadata?.role ?? metadata.role;
+  const role = Object.values(UserRole).includes(roleValue as UserRole)
+    ? roleValue as UserRole
+    : UserRole.ALUNO;
+  return { id: metadata.legacy_id ?? data.user.id, role };
+}
+
+async function getInstructorClassIds(context: AuthContext): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('turma_instrutores')
+    .select('turma_id')
+    .eq('instrutor_id', context.id);
+  if (error) throw serviceError('Não foi possível validar o escopo do instrutor', error);
+  return ((data ?? []) as Array<{ turma_id: string }>).map((relation) => relation.turma_id);
+}
+
+async function assertCanManageTurmas(): Promise<void> {
+  const context = await getAuthContext();
+  if (!context) throw new Error('Sessão não autenticada.');
+  if (context.role === UserRole.INSTRUTOR) {
+    throw new Error('Instrutores têm acesso somente de leitura às turmas vinculadas.');
+  }
+}
+
+async function assertCanAccessTurma(turmaId: string): Promise<void> {
+  const context = await getAuthContext();
+  if (!context) throw new Error('Sessão não autenticada.');
+  if (context.role !== UserRole.INSTRUTOR) return;
+  const classIds = await getInstructorClassIds(context);
+  if (!classIds.includes(turmaId)) {
+    throw new Error('A turma não está vinculada ao instrutor autenticado.');
+  }
+}
+
 async function getClassById(id: string): Promise<Turma | undefined> {
+  await assertCanAccessTurma(id);
   const { data, error } = await supabase
     .from('turmas')
     .select('*')
@@ -32,17 +76,77 @@ async function getClassById(id: string): Promise<Turma | undefined> {
   return data ? data as Turma : undefined;
 }
 
+async function getClassState(id: string): Promise<{ turma: Turma; hasDiary: boolean; hasEnrollments: boolean }> {
+  const turma = await getClassById(id);
+  if (!turma) throw new Error(`Não foi possível atualizar a turma ${id}: turma não encontrada`);
+
+  const { data: matriculas, error: matriculasError } = await supabase
+    .from('matriculas')
+    .select('id, nota_1_chamada, nota_2_chamada, resultado_final')
+    .eq('turma_id', id);
+  if (matriculasError) throw serviceError(`Não foi possível consultar o estado da turma ${id}`, matriculasError);
+
+  const matriculaRows = (matriculas ?? []) as Array<{
+    id: string;
+    nota_1_chamada?: number;
+    nota_2_chamada?: number;
+    resultado_final?: number;
+  }>;
+  let hasDiary = false;
+  if (matriculaRows.length > 0) {
+    const { data: diario, error: diarioError } = await supabase
+      .from('diario_classe')
+      .select('id')
+      .in('matricula_id', matriculaRows.map((matricula) => matricula.id))
+      .limit(1);
+    if (diarioError) throw serviceError(`Não foi possível consultar o diário da turma ${id}`, diarioError);
+    hasDiary = (diario ?? []).length > 0;
+  }
+
+  return {
+    turma,
+    hasDiary,
+    hasEnrollments: matriculaRows.length > 0,
+  };
+}
+
+function getClassSessions(turma: Turma): Array<{ dataAula: string; horarioPeriodo: string }> {
+  const start = new Date(turma.data_inicio + 'T00:00:00');
+  const end = new Date(turma.data_termino + 'T00:00:00');
+  const periods = getAttendancePeriodsForShift(turma.turno);
+  const sessions: Array<{ dataAula: string; horarioPeriodo: string }> = [];
+  const current = new Date(start);
+  while (current <= end) {
+    const dataAula = [
+      current.getFullYear(),
+      String(current.getMonth() + 1).padStart(2, '0'),
+      String(current.getDate()).padStart(2, '0'),
+    ].join('-');
+    periods.forEach((horarioPeriodo) => sessions.push({ dataAula, horarioPeriodo }));
+    current.setDate(current.getDate() + 1);
+  }
+  return sessions;
+}
+
 export const classService = {
   // --- Turmas CRUD ---
   getAll: async (): Promise<Turma[]> => {
-    const { data, error } = await supabase
-      .from('turmas')
-      .select('*');
+    const context = await getAuthContext();
+    if (!context) throw new Error('Sessão não autenticada.');
+    let query = supabase.from('turmas').select('*');
+    if (context?.role === UserRole.INSTRUTOR) {
+      const classIds = await getInstructorClassIds(context);
+      if (classIds.length === 0) return [];
+      query = query.in('id', classIds);
+    }
+    const { data, error } = await query;
     if (error) throw serviceError('Não foi possível carregar as turmas', error);
     return (data ?? []) as Turma[];
   },
 
   getPage: async ({ page, pageSize, search, courseIds }: ClassPageOptions): Promise<ClassPage> => {
+    const context = await getAuthContext();
+    if (!context) throw new Error('Sessão não autenticada.');
     const from = Math.max(0, page - 1) * pageSize;
     const to = from + pageSize - 1;
     let query = supabase
@@ -51,6 +155,11 @@ export const classService = {
       .order('id_interno_escola', { ascending: true })
       .range(from, to);
 
+    if (context?.role === UserRole.INSTRUTOR) {
+      const classIds = await getInstructorClassIds(context);
+      if (classIds.length === 0) return { data: [], total: 0 };
+      query = query.in('id', classIds);
+    }
     if (courseIds) {
       if (courseIds.length === 0) return { data: [], total: 0 };
       query = query.in('curso_id', courseIds);
@@ -71,7 +180,18 @@ export const classService = {
 
   getById: async (id: string): Promise<Turma | undefined> => getClassById(id),
 
+  getEditability: async (id: string): Promise<{ lockedFields: Array<keyof Turma> }> => {
+    const { hasDiary, hasEnrollments } = await getClassState(id);
+    return {
+      lockedFields: [
+        ...(hasDiary ? ['turno', 'horario_aulas', 'data_inicio', 'data_termino'] as Array<keyof Turma> : []),
+        ...(hasEnrollments ? ['curso_id', 'id_anac', 'id_interno_escola'] as Array<keyof Turma> : []),
+      ],
+    };
+  },
+
   create: async (turma: Omit<Turma, 'id' | 'id_interno_escola' | 'qt_alunos_matriculados'> & { id?: string }): Promise<Turma> => {
+    await assertCanManageTurmas();
     const { data: existingClasses, error: listError } = await supabase
       .from('turmas')
       .select('id_interno_escola');
@@ -98,6 +218,18 @@ export const classService = {
   },
 
   update: async (id: string, updates: Partial<Turma>): Promise<Turma> => {
+    await assertCanManageTurmas();
+    const { turma, hasDiary, hasEnrollments } = await getClassState(id);
+    const diaryLockedFields: Array<keyof Turma> = ['turno', 'horario_aulas', 'data_inicio', 'data_termino'];
+    const enrollmentLockedFields: Array<keyof Turma> = ['curso_id', 'id_anac', 'id_interno_escola'];
+    const lockedFields = [...(hasDiary ? diaryLockedFields : []), ...(hasEnrollments ? enrollmentLockedFields : [])];
+    const changedLockedField = lockedFields.find((field) =>
+      Object.prototype.hasOwnProperty.call(updates, field) && updates[field] !== turma[field]
+    );
+    if (changedLockedField) {
+      throw new Error(`O campo estrutural ${String(changedLockedField)} não pode ser alterado após o início da operação da turma.`);
+    }
+
     const { id: _ignoredId, ...classUpdates } = updates;
     const { data, error } = await supabase
       .from('turmas')
@@ -111,6 +243,7 @@ export const classService = {
   },
 
   delete: async (id: string): Promise<boolean> => {
+    await assertCanManageTurmas();
     const { data: matriculas, error: matriculasError } = await supabase
       .from('matriculas')
       .select('id')
@@ -148,6 +281,7 @@ export const classService = {
 
   // --- Matrículas (Alunos na Turma) CRUD ---
   getMatriculasByTurma: async (turmaId: string): Promise<Matricula[]> => {
+    await assertCanAccessTurma(turmaId);
     const { data, error } = await supabase
       .from('matriculas')
       .select('*')
@@ -157,15 +291,31 @@ export const classService = {
   },
 
   getMatriculasByAluno: async (alunoId: string): Promise<Matricula[]> => {
-    const { data, error } = await supabase
+    const context = await getAuthContext();
+    if (!context) throw new Error('Sessão não autenticada.');
+    let query = supabase
       .from('matriculas')
       .select('*')
       .eq('aluno_id', alunoId);
+    if (context.role === UserRole.INSTRUTOR) {
+      const classIds = await getInstructorClassIds(context);
+      if (classIds.length === 0) return [];
+      query = query.in('turma_id', classIds);
+    }
+    const { data, error } = await query;
     if (error) throw serviceError(`Não foi possível carregar as matrículas do aluno ${alunoId}`, error);
     return (data ?? []) as Matricula[];
   },
 
   createMatricula: async (matricula: Omit<Matricula, 'id' | 'codigo_re' | 'percentual_presenca'>): Promise<Matricula> => {
+    await assertCanManageTurmas();
+    await assertCanAccessTurma(matricula.turma_id);
+    const classData = await getClassById(matricula.turma_id);
+    if (!classData) throw new Error(`Não foi possível carregar a turma ${matricula.turma_id}`);
+    const sessions = getClassSessions(classData);
+    if (sessions.length === 0) {
+      throw new Error('Não é possível matricular um aluno em uma turma sem períodos válidos de diário.');
+    }
     const { data: existingMatriculas, error: listError } = await supabase
       .from('matriculas')
       .select('codigo_re');
@@ -191,28 +341,31 @@ export const classService = {
     if (error) throw serviceError('Não foi possível criar a matrícula', error);
     const createdMatricula = data as Matricula;
 
-    const classData = await getClassById(matricula.turma_id);
-    if (classData) {
+    {
       const { error: countError } = await supabase
         .from('turmas')
         .update({ qt_alunos_matriculados: classData.qt_alunos_matriculados + 1 })
         .eq('id', matricula.turma_id);
       if (countError) throw serviceError(`Não foi possível atualizar a quantidade de alunos da turma ${matricula.turma_id}`, countError);
 
-      const start = new Date(classData.data_inicio + 'T00:00:00');
-      const end = new Date(classData.data_termino + 'T00:00:00');
-      const diarioRows: DiarioClasse[] = [];
-      const current = new Date(start);
-      while (current <= end) {
-        diarioRows.push({
+      const { data: existingDiario, error: diarioListError } = await supabase
+        .from('diario_classe')
+        .select('data_aula, horario_periodo')
+        .eq('matricula_id', createdMatricula.id);
+      if (diarioListError) throw serviceError(`Não foi possível consultar o diário da matrícula ${createdMatricula.id}`, diarioListError);
+
+      const existingKeys = new Set(((existingDiario ?? []) as Array<{ data_aula: string; horario_periodo: string }>).map(
+        (row) => `${row.data_aula}|${row.horario_periodo}`
+      ));
+      const diarioRows: DiarioClasse[] = sessions
+        .filter(({ dataAula, horarioPeriodo }) => !existingKeys.has(`${dataAula}|${horarioPeriodo}`))
+        .map(({ dataAula, horarioPeriodo }) => ({
           id: newServiceId('freq'),
           matricula_id: createdMatricula.id,
-          data_aula: current.toISOString().split('T')[0],
-          horario_periodo: 'Tarde',
+          data_aula: dataAula,
+          horario_periodo: horarioPeriodo,
           presente: true
-        });
-        current.setDate(current.getDate() + 1);
-      }
+        }));
 
       if (diarioRows.length > 0) {
         const { error: diarioError } = await supabase
@@ -226,6 +379,15 @@ export const classService = {
   },
 
   updateMatricula: async (id: string, updates: Partial<Matricula>): Promise<Matricula> => {
+    await assertCanManageTurmas();
+    const { data: currentMatricula, error: currentError } = await supabase
+      .from('matriculas')
+      .select('turma_id')
+      .eq('id', id)
+      .maybeSingle();
+    if (currentError) throw serviceError(`Não foi possível consultar a matrícula ${id}`, currentError);
+    if (!currentMatricula) throw new Error(`Não foi possível atualizar a matrícula ${id}: matrícula não encontrada`);
+    await assertCanAccessTurma((currentMatricula as { turma_id: string }).turma_id);
     const { id: _ignoredId, ...matriculaUpdates } = updates;
     const { data, error } = await supabase
       .from('matriculas')
@@ -239,6 +401,7 @@ export const classService = {
   },
 
   deleteMatricula: async (id: string): Promise<boolean> => {
+    await assertCanManageTurmas();
     const { data: matricula, error: findError } = await supabase
       .from('matriculas')
       .select('*')
@@ -248,6 +411,7 @@ export const classService = {
     if (!matricula) return false;
 
     const mat = matricula as Matricula;
+    await assertCanAccessTurma(mat.turma_id);
     const { error: diarioError } = await supabase
       .from('diario_classe')
       .delete()
@@ -274,6 +438,7 @@ export const classService = {
 
   // --- Diário de Classe (Frequência) ---
   getDiarioByTurma: async (turmaId: string): Promise<DiarioClasse[]> => {
+    await assertCanAccessTurma(turmaId);
     const { data: matriculas, error: matriculasError } = await supabase
       .from('matriculas')
       .select('id')
@@ -292,21 +457,39 @@ export const classService = {
   },
 
   saveDiarioPresenca: async (matriculaId: string, dataAula: string, horarioPeriodo: string, presente: boolean): Promise<DiarioClasse> => {
-    const { data: existing, error: findError } = await supabase
+    await assertCanManageTurmas();
+    const { data: matricula, error: matriculaError } = await supabase
+      .from('matriculas')
+      .select('*')
+      .eq('id', matriculaId)
+      .maybeSingle();
+    if (matriculaError) throw serviceError(`Não foi possível consultar a matrícula ${matriculaId}`, matriculaError);
+    if (!matricula) throw new Error(`Não foi possível registrar a presença: matrícula ${matriculaId} não encontrada`);
+
+    const mat = matricula as Matricula;
+    await assertCanAccessTurma(mat.turma_id);
+    const classData = await getClassById(mat.turma_id);
+    if (!classData) throw new Error(`Não foi possível carregar a turma ${mat.turma_id}`);
+    const sessions = getClassSessions(classData);
+    const sessionExists = sessions.some((session) => session.dataAula === dataAula && session.horarioPeriodo === horarioPeriodo);
+    if (!sessionExists) throw new Error('O período informado não pertence ao turno e às datas da turma.');
+
+    const { data: matches, error: findError } = await supabase
       .from('diario_classe')
       .select('*')
       .eq('matricula_id', matriculaId)
       .eq('data_aula', dataAula)
       .eq('horario_periodo', horarioPeriodo)
-      .maybeSingle();
+      .limit(1);
     if (findError) throw serviceError('Não foi possível consultar o registro de presença', findError);
 
     let record: DiarioClasse;
+    const existing = (matches ?? [])[0] as DiarioClasse | undefined;
     if (existing) {
       const { data, error } = await supabase
         .from('diario_classe')
         .update({ presente })
-        .eq('id', (existing as DiarioClasse).id)
+        .eq('id', existing.id)
         .select()
         .single();
       if (error) throw serviceError('Não foi possível atualizar o registro de presença', error);
@@ -334,46 +517,30 @@ export const classService = {
       .eq('matricula_id', matriculaId);
     if (diarioListError) throw serviceError('Não foi possível recalcular a presença da matrícula', diarioListError);
 
-    const { data: matricula, error: matriculaError } = await supabase
-      .from('matriculas')
-      .select('*')
-      .eq('id', matriculaId)
-      .maybeSingle();
-    if (matriculaError) throw serviceError(`Não foi possível consultar a matrícula ${matriculaId}`, matriculaError);
-
+    const expectedKeys = new Set(sessions.map((session) => `${session.dataAula}|${session.horarioPeriodo}`));
     const diarios = (allStudentDiarios ?? []) as DiarioClasse[];
-    const presentCount = diarios.filter((diario) => diario.presente).length;
-    let totalCount = diarios.length;
-    if (matricula) {
-      const classData = await getClassById((matricula as Matricula).turma_id);
-      if (classData) {
-        const start = new Date(classData.data_inicio + 'T00:00:00');
-        const end = new Date(classData.data_termino + 'T00:00:00');
-        let days = 0;
-        const current = new Date(start);
-        while (current <= end) {
-          days++;
-          current.setDate(current.getDate() + 1);
-        }
-        const periods = getAttendancePeriodsForShift(classData.turno);
-        totalCount = days * periods.length;
-      }
-    }
+    const presentCount = diarios.filter((diario) =>
+      expectedKeys.has(`${diario.data_aula}|${diario.horario_periodo}`) && diario.presente
+    ).length;
+    const totalCount = sessions.length;
     const percentual = totalCount > 0 ? Math.round((presentCount / totalCount) * 100) : 100;
 
-    if (matricula) {
-      const { error: updateError } = await supabase
-        .from('matriculas')
-        .update({ percentual_presenca: percentual })
-        .eq('id', matriculaId);
-      if (updateError) throw serviceError(`Não foi possível atualizar a presença da matrícula ${matriculaId}`, updateError);
-    }
+    const { error: updateError } = await supabase
+      .from('matriculas')
+      .update({ percentual_presenca: percentual })
+      .eq('id', matriculaId);
+    if (updateError) throw serviceError(`Não foi possível atualizar a presença da matrícula ${matriculaId}`, updateError);
 
     return record;
   },
 
   // --- Vínculo Turma x Instrutores ---
   getTurmasByInstrutor: async (instrutorId: string): Promise<TurmaInstrutorRel[]> => {
+    const context = await getAuthContext();
+    if (!context) throw new Error('Sessão não autenticada.');
+    if (context.role === UserRole.INSTRUTOR && context.id !== instrutorId) {
+      throw new Error('Instrutor não pode consultar vínculos de outro perfil.');
+    }
     const { data, error } = await supabase
       .from('turma_instrutores')
       .select('*')
@@ -383,6 +550,7 @@ export const classService = {
   },
 
   getInstrutoresByTurma: async (turmaId: string): Promise<TurmaInstrutorRel[]> => {
+    await assertCanAccessTurma(turmaId);
     const { data, error } = await supabase
       .from('turma_instrutores')
       .select('*')
@@ -392,6 +560,8 @@ export const classService = {
   },
 
   saveInstrutoresForTurma: async (turmaId: string, instrutores: { instrutor_id: string; funcao: string }[]): Promise<TurmaInstrutorRel[]> => {
+    await assertCanManageTurmas();
+    await assertCanAccessTurma(turmaId);
     const { error: deleteError } = await supabase
       .from('turma_instrutores')
       .delete()
