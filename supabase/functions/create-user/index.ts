@@ -7,7 +7,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const allowedRoles = new Set(["GESTOR", "EQUIPE", "ALUNO", "INSTRUTOR", "COORDENADOR"]);
+const creatableRoles = new Set(["ALUNO", "INSTRUTOR", "COORDENADOR"]);
 const allowedOrigins = new Set(["interno", "b2b", "migracao"]);
 const allowedStatuses = new Set(["pendente", "ativo", "recusado"]);
 
@@ -62,6 +62,7 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  let createdAuthUserId: string | null = null;
   try {
     const authorization = req.headers.get("Authorization");
     if (!authorization?.startsWith("Bearer ")) {
@@ -111,20 +112,30 @@ Deno.serve(async (req) => {
     const role = typeof body.role === "string" ? body.role : "";
     const nomeCompleto = typeof body.nome_completo === "string" ? body.nome_completo.trim() : "";
     const initialPassword = typeof body.password === "string" ? body.password : "";
-    if (!email || !email.includes("@") || !allowedRoles.has(role) || !nomeCompleto || !isStrongPassword(initialPassword)) {
+    const hasOrigin = Object.prototype.hasOwnProperty.call(body, "origem_cadastro");
+    const hasStatus = Object.prototype.hasOwnProperty.call(body, "status");
+    const requestedOrigin = optionalText(body.origem_cadastro);
+    const requestedStatus = optionalText(body.status);
+    if (
+      !email ||
+      !email.includes("@") ||
+      !creatableRoles.has(role) ||
+      !nomeCompleto ||
+      !isStrongPassword(initialPassword) ||
+      (hasOrigin && (requestedOrigin === null || !allowedOrigins.has(requestedOrigin))) ||
+      (hasStatus && (requestedStatus === null || !allowedStatuses.has(requestedStatus)))
+    ) {
       return new Response(JSON.stringify({ error: "Dados de usuário inválidos ou senha inicial fraca" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const legacyId = typeof body.id === "string" && body.id ? body.id : `user-${crypto.randomUUID()}`;
-    const origin = role === "INSTRUTOR"
-      ? "interno"
-      : allowedOrigins.has(String(body.origem_cadastro)) ? String(body.origem_cadastro) : "interno";
-    const status = role === "INSTRUTOR"
-      ? "ativo"
-      : allowedStatuses.has(String(body.status)) ? String(body.status) : "ativo";
+    const legacyId = typeof body.id === "string" && body.id.trim() ? body.id.trim() : `user-${crypto.randomUUID()}`;
+    const origin = requestedOrigin ?? "interno";
+    const status = role === "ALUNO" ? "pendente" : "ativo";
+    const companyId = optionalText(body.empresa_id);
+    const pendingClassId = origin === "b2b" ? optionalText(body.turma_id_pendente) : null;
     const fotoPath = typeof body.foto_url === "string" && body.foto_url.trim().startsWith(`avatars/${legacyId}/`)
       ? body.foto_url.trim()
       : null;
@@ -157,26 +168,38 @@ Deno.serve(async (req) => {
         certificacao_avsec: ["ISCR", "IOAD", "IOAR"].includes(String(body.certificacao_avsec))
           ? body.certificacao_avsec
           : "",
-        empresa_id: optionalText(body.empresa_id),
+        empresa_id: companyId,
         tipo_documento_selecionado: body.tipo_documento_selecionado === "identidade_sem_cpf" || body.tipo_documento_selecionado === "cnh"
           ? body.tipo_documento_selecionado
           : "identidade_cpf",
-        turma_id_pendente: optionalText(body.turma_id_pendente),
+        turma_id_pendente: pendingClassId,
         origem_cadastro: origin,
         foto_url: fotoPath,
       },
-      app_metadata: {
-        role,
-        origem_cadastro: origin,
-        status,
-      },
     });
 
-    if (createError || !created.user) {
-      return new Response(JSON.stringify({ error: createError?.message ?? "Não foi possível criar o usuário" }), {
+    if (created.user) createdAuthUserId = created.user.id;
+    if (createError) throw createError;
+    if (!created.user) {
+      return new Response(JSON.stringify({ error: "Não foi possível criar o usuário" }), {
         status: 409,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    const { error: profileUpdateError } = await adminClient
+      .from("profiles")
+      .update({
+        role,
+        status,
+        origem_cadastro: origin,
+        empresa_id: companyId,
+        turma_id_pendente: pendingClassId,
+      })
+      .eq("id", created.user.id);
+
+    if (profileUpdateError) {
+      throw profileUpdateError;
     }
 
     const { data: profile, error: createdProfileError } = await adminClient
@@ -186,14 +209,13 @@ Deno.serve(async (req) => {
       .single();
 
     if (createdProfileError || !profile) {
-      await adminClient.auth.admin.deleteUser(created.user.id);
       throw createdProfileError ?? new Error("Perfil não foi criado pelo trigger");
     }
 
     const profileMatchesRequestedRole = profile.role === role;
     const profileMatchesWorkflow = profile.status === status && profile.origem_cadastro === origin;
-    if (!profileMatchesRequestedRole || !profileMatchesWorkflow) {
-      const { error: cleanupError } = await adminClient.auth.admin.deleteUser(created.user.id);
+    const profileMatchesRelatedFields = profile.empresa_id === companyId && profile.turma_id_pendente === pendingClassId;
+    if (!profileMatchesRequestedRole || !profileMatchesWorkflow || !profileMatchesRelatedFields) {
       console.error(`[${functionName}] perfil inconsistente após criação`, {
         legacyId,
         authUserId: created.user.id,
@@ -203,7 +225,10 @@ Deno.serve(async (req) => {
         returnedStatus: profile.status,
         requestedOrigin: origin,
         returnedOrigin: profile.origem_cadastro,
-        cleanupError: cleanupError?.message,
+        requestedCompanyId: companyId,
+        returnedCompanyId: profile.empresa_id,
+        requestedPendingClassId: pendingClassId,
+        returnedPendingClassId: profile.turma_id_pendente,
       });
       throw new Error("Perfil criado com dados inconsistentes; o usuário não foi cadastrado");
     }
@@ -213,7 +238,32 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
-    console.error(`[${functionName}] falha ao criar usuário`, errorDetails(error));
+    if (createdAuthUserId) {
+      try {
+        const cleanupUrl = Deno.env.get("SUPABASE_URL");
+        const cleanupServiceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+        if (!cleanupUrl || !cleanupServiceRoleKey) throw new Error("Configuração segura do Supabase ausente");
+        const cleanupClient = createClient(cleanupUrl, cleanupServiceRoleKey, {
+          auth: { autoRefreshToken: false, persistSession: false },
+        });
+        const { error: cleanupError } = await cleanupClient.auth.admin.deleteUser(createdAuthUserId);
+        if (cleanupError) {
+          console.error(`[${functionName}] falha na limpeza do usuário Auth`, {
+            authUserId: createdAuthUserId,
+            cleanupError: errorDetails(cleanupError),
+          });
+        }
+      } catch (cleanupError) {
+        console.error(`[${functionName}] exceção na limpeza do usuário Auth`, {
+          authUserId: createdAuthUserId,
+          cleanupError: errorDetails(cleanupError),
+        });
+      }
+    }
+    console.error(`[${functionName}] falha ao criar usuário`, {
+      ...errorDetails(error),
+      authUserId: createdAuthUserId,
+    });
     return new Response(JSON.stringify({ error: "Não foi possível concluir o cadastro" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
