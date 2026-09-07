@@ -13,6 +13,7 @@ import Companies from '../pages/Companies';
 import Students from '../pages/Students';
 import Reports from '../pages/Reports';
 import StudentDashboard from '../pages/StudentDashboard';
+import MyAccount from '../pages/MyAccount';
 import Courses from '../pages/Courses';
 import Addresses from '../pages/Addresses';
 import Instructors from '../pages/Instructors';
@@ -32,10 +33,11 @@ function SessionLoading() {
 function RequireSession() {
   const { isLoading, session } = useSessionContext();
   const { userLogged } = useUIStore();
+  const location = useLocation();
 
   if (isLoading) return <SessionLoading />;
   if (!session || !userLogged) return <Navigate to="/login" replace />;
-  if (userLogged.role === 'ALUNO') return <StudentDashboard />;
+  if (userLogged.role === 'ALUNO' && location.pathname !== '/minha-conta') return <StudentDashboard />;
   return <Outlet />;
 }
 
@@ -101,6 +103,12 @@ function StudentOnlyRoute() {
   return userLogged?.role === 'ALUNO' ? <StudentDashboard /> : <Navigate to="/dashboard" replace />;
 }
 
+function AccountRoute() {
+  const userLogged = useUIStore((state) => state.userLogged);
+  if (userLogged?.role === 'ALUNO') return <MyAccount />;
+  return <AppLayout><MyAccount /></AppLayout>;
+}
+
 function AdminLayout() {
   return <AppLayout />;
 }
@@ -117,6 +125,7 @@ export function AppRoutes() {
 
         <Route element={<RequireSession />}>
           <Route path="painel-aluno" element={<StudentOnlyRoute />} />
+          <Route path="minha-conta" element={<AccountRoute />} />
           <Route element={<AdminLayout />}>
             <Route index element={<AdminPage><Dashboard /></AdminPage>} />
             <Route path="dashboard" element={<AdminPage><Dashboard /></AdminPage>} />

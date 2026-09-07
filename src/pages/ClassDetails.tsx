@@ -76,6 +76,13 @@ const formatClassDate = (value: unknown, options?: Intl.DateTimeFormatOptions) =
   return date ? date.toLocaleDateString('pt-BR', options) : 'Data não informada';
 };
 
+const parseFinalResult = (value: unknown): number | null => {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const parsed = Number(value.replace(',', '.'));
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
 const renderExamStatus = (nota: number | null | undefined, res: string | null | undefined, isSecondCh: boolean) => {
   if (typeof nota === 'number' && Number.isFinite(nota)) {
     if (nota >= 7.0) {
@@ -981,6 +988,7 @@ function ClassDetails() {
                       const attendancePercentage = typeof m.percentual_presenca === 'number' && Number.isFinite(m.percentual_presenca)
                         ? m.percentual_presenca
                         : 0;
+                      const finalResult = parseFinalResult(m.resultado_final);
                       const b2b = companies.find((c) => c.id === m.empresa_b2b_id);
 
                       return (
@@ -1069,7 +1077,7 @@ function ClassDetails() {
                           </td>
                           <td className="px-4 py-2 text-center">
                             <div className="font-bold">
-                              {typeof m.resultado_final === 'number' ? m.resultado_final.toFixed(1).replace('.', ',') : '—'}
+                              {finalResult === null ? '—' : finalResult.toFixed(1).replace('.', ',')}
                             </div>
                             {m.status_resultado_final && (
                               <span className={`text-[10px] font-bold uppercase ${

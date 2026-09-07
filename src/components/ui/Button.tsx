@@ -1,14 +1,20 @@
-import React from 'react';
+import type { MouseEventHandler, ReactNode } from 'react';
 
 type ButtonVariant = 'primary' | 'secondary';
 
-interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+interface ButtonProps {
   variant?: ButtonVariant;
-  icon?: React.ReactNode;
-  children: React.ReactNode;
+  icon?: ReactNode;
+  children: ReactNode;
+  className?: string;
+  disabled?: boolean;
+  type?: 'button' | 'submit' | 'reset';
+  onClick?: MouseEventHandler<HTMLButtonElement>;
+  title?: string;
+  'aria-label'?: string;
 }
 
-export function Button({ variant = 'primary', icon, children, className = '', ...props }: ButtonProps) {
+export function Button({ variant = 'primary', icon, children, className = '', disabled, type, onClick, title, 'aria-label': ariaLabel }: ButtonProps) {
   const baseStyles = 'px-4 py-2.5 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 shadow-sm transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed';
   
   const variants = {
@@ -17,7 +23,14 @@ export function Button({ variant = 'primary', icon, children, className = '', ..
   };
 
   return (
-    <button className={`${baseStyles} ${variants[variant]} ${className}`} {...props}>
+    <button
+      type={type}
+      onClick={onClick}
+      title={title}
+      aria-label={ariaLabel}
+      disabled={disabled}
+      className={`${baseStyles} ${variants[variant]} ${className}`}
+    >
       {icon}
       {children}
     </button>

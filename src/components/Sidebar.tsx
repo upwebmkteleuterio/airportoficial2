@@ -6,7 +6,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { LayoutDashboard, FileArchive, Building2, ShieldAlert, LogOut, LoaderCircle, Users, PanelLeftClose, PanelLeftOpen, Settings, Bell, User, BookOpen, GraduationCap, UserCog, MapPin, Clock, type LucideIcon } from 'lucide-react';
+import { LayoutDashboard, FileArchive, Building2, ShieldAlert, LogOut, LoaderCircle, Users, PanelLeftClose, PanelLeftOpen, User, BookOpen, GraduationCap, UserCog, MapPin, Clock, type LucideIcon } from 'lucide-react';
 import { supabase } from '../integrations/supabase/client';
 import { useSessionContext } from '../contexts/SessionContext';
 import { Tooltip } from './ui/Tooltip';
@@ -226,17 +226,13 @@ export function Sidebar() {
         <div className={`flex items-center gap-1 w-full ${sidebarCollapsed ? 'flex-col' : 'justify-around px-2'}`}>
           <ThemeToggle />
           <button
-            title="Notificações"
-            className="w-9 h-9 flex items-center justify-center rounded-full text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white hover:bg-slate-200/50 dark:hover:bg-slate-800 transition-colors relative"
+            type="button"
+            onClick={() => setRoute('minha-conta')}
+            title="Minha conta"
+            aria-label="Minha conta"
+            className="w-9 h-9 flex items-center justify-center rounded-full text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white hover:bg-slate-200/50 dark:hover:bg-slate-800 transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500/50"
           >
-            <Bell className="w-4 h-4" />
-            <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full"></span>
-          </button>
-          <button
-            title="Configurações"
-            className="w-9 h-9 flex items-center justify-center rounded-full text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white hover:bg-slate-200/50 dark:hover:bg-slate-800 transition-colors"
-          >
-            <Settings className="w-4 h-4" />
+            <User className="w-4 h-4" aria-hidden="true" />
           </button>
           <button
             type="button"
@@ -245,7 +241,7 @@ export function Sidebar() {
             title="Encerrar sessão"
             aria-label="Encerrar sessão"
             aria-busy={isLoggingOut}
-            className={`h-9 flex items-center justify-center rounded-full text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-slate-200/50 dark:hover:bg-slate-800 transition-colors disabled:cursor-wait disabled:opacity-60 ${sidebarCollapsed ? 'w-9' : 'gap-1.5 px-2'}`}
+            className={`h-9 flex items-center justify-center rounded-full text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-slate-200/50 dark:hover:bg-slate-800 transition-colors disabled:cursor-wait disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-teal-500/50 ${sidebarCollapsed ? 'w-9' : 'gap-1.5 px-2'}`}
           >
             {isLoggingOut ? <LoaderCircle className="w-4 h-4 animate-spin" aria-hidden="true" /> : <LogOut className="w-4 h-4" aria-hidden="true" />}
             {!sidebarCollapsed && <span className="text-xs font-semibold">Sair</span>}

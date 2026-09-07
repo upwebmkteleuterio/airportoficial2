@@ -19,6 +19,7 @@ const routePaths: Record<string, string> = {
   instrutores: '/instrutores',
   coordenadores: '/coordenadores',
   'meu-cadastro': '/meu-cadastro',
+  'minha-conta': '/minha-conta',
   login: '/login',
 };
 
