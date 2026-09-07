@@ -63,7 +63,7 @@ import { useCourses } from "../hooks/useCourses";
 import { shiftService } from "../services/shifts";
 import { useAddresses } from "../hooks/useAddresses";
 import { useUIStore } from "../store/uiStore";
-import { ClassStatusPrazo, InstructorFuncao, Turma } from "../types";
+import { ClassStatusPrazo, InstructorFuncao, Turma, UserRole } from "../types";
 import { getStatusPrazoNotas } from "../utils/statusPrazoNotas";
 import { Modal } from "../components/ui/Modal";
 import { HelpModal } from "../components/ui/HelpModal";
@@ -193,8 +193,8 @@ export function Dashboard() {
         users
     } = useUsers();
 
-    const instructorUsers = useMemo(() => users.filter(user => user.role === "INSTRUTOR").slice().sort(
-        (first, second) => Number(second.status === "ativo") - Number(first.status === "ativo")
+    const instructorUsers = useMemo(() => users.filter(user => user.role === "INSTRUTOR" && user.status === "ativo").slice().sort(
+        (first, second) => first.nome_completo.localeCompare(second.nome_completo, "pt-BR")
     ), [users]);
 
     const {
@@ -257,8 +257,11 @@ export function Dashboard() {
     const [formAplicador, setFormAplicador] = useState("");
 
     const applicatorUsers = useMemo(
-        () => users.filter(user => user.status === "ativo" || user.id === formAplicador),
-        [users, formAplicador]
+        () => users.filter(user =>
+            user.status === "ativo" &&
+            [UserRole.EQUIPE, UserRole.INSTRUTOR, UserRole.COORDENADOR].includes(user.role)
+        ),
+        [users]
     );
 
     const resolveProfileId = (value: string | null | undefined, candidates: typeof users) => {
@@ -268,7 +271,7 @@ export function Dashboard() {
             return "";
 
         if (candidates.length === 0)
-            return normalizedValue;
+            return "";
 
         return candidates.find(
             user => user.id === normalizedValue || user.nome_completo === normalizedValue
@@ -489,7 +492,7 @@ export function Dashboard() {
         setFormIoad(resolveProfileId(draft.formIoad, instructorUsers));
         setFormIscr(resolveProfileId(draft.formIscr, instructorUsers));
         setFormIcar(resolveProfileId(draft.formIcar, instructorUsers));
-        setFormAplicador(resolveProfileId(draft.formAplicador, users));
+        setFormAplicador(resolveProfileId(draft.formAplicador, applicatorUsers));
         setFormVigilante(draft.formVigilante);
         setFormNotes(draft.formNotes);
         setClassDraftToResume(null);
@@ -743,7 +746,7 @@ export function Dashboard() {
                         coordenador_ioad_id: normalizeForeignKeyValue(formIoad) || undefined,
                         coordenador_iscr_id: normalizeForeignKeyValue(formIscr) || undefined,
                         coordenador_icar_id: normalizeForeignKeyValue(formIcar) || undefined,
-                        aplicador_id: normalizeForeignKeyValue(formAplicador) || undefined
+                        aplicador_id: resolveProfileId(formAplicador, applicatorUsers) || undefined
                     }
                 });
             } else {
@@ -769,7 +772,7 @@ export function Dashboard() {
                     coordenador_ioad_id: normalizeForeignKeyValue(formIoad) || undefined,
                     coordenador_iscr_id: normalizeForeignKeyValue(formIscr) || undefined,
                     coordenador_icar_id: normalizeForeignKeyValue(formIcar) || undefined,
-                    aplicador_id: normalizeForeignKeyValue(formAplicador) || undefined,
+                    aplicador_id: resolveProfileId(formAplicador, applicatorUsers) || undefined,
                     gestor_turma_id: "user-admin-1",
                     nota_lancada: false,
                     dias_para_vencimento: 5,
@@ -1121,7 +1124,7 @@ export function Dashboard() {
                                                                 setFormIoad(resolveProfileId(item.coordenador_ioad_id, instructorUsers));
                                                                 setFormIscr(resolveProfileId(item.coordenador_iscr_id, instructorUsers));
                                                                 setFormIcar(resolveProfileId(item.coordenador_icar_id, instructorUsers));
-                                                                setFormAplicador(resolveProfileId(item.aplicador_id, users));
+                                                                setFormAplicador(resolveProfileId(item.aplicador_id, applicatorUsers));
                                                                 setFormNotes(item.anotacoes_turma || "");
                                                                 setFormVigilante(item.vigilante_sem_deslocamento);
 

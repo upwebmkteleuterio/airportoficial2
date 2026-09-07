@@ -56,6 +56,7 @@ import { PasswordModal } from '../components/ui/PasswordModal';
 import { SharedDocumentsPanel } from '../components/SharedDocumentsPanel';
 import { StudentDetailsPanel } from '../components/StudentDetailsPanel';
 import { DocumentAccessGrant } from '../services/documentAccessService';
+import type { Matricula } from '../types';
 
 import { CreateMenu } from '../components/ui/CreateMenu';
 import { StudentRegistrationModal } from '../components/StudentRegistrationModal';
@@ -103,7 +104,7 @@ const renderExamStatus = (nota: number | null | undefined, res: string | null | 
   }
 };
 
-export function NotaInput({ value, onChange }: { value?: number | null, onChange: (val?: number) => void }) {
+export function NotaInput({ value, onChange, disabled = false }: { value?: number | null, onChange: (val: number | null) => void; disabled?: boolean }) {
   const [localVal, setLocalVal] = useState(value !== undefined && value !== null ? String(value).replace('.', ',') : '');
 
   useEffect(() => {
@@ -114,6 +115,7 @@ export function NotaInput({ value, onChange }: { value?: number | null, onChange
     <input
       type="text"
       value={localVal}
+      disabled={disabled}
       onChange={(e) => {
         let val = e.target.value.replace(/[^0-9,]/g, '');
         if (val.includes(',')) {
@@ -125,7 +127,7 @@ export function NotaInput({ value, onChange }: { value?: number | null, onChange
       onBlur={() => {
         let num = parseFloat(localVal.replace(',', '.'));
         if (localVal === '') {
-          onChange(undefined);
+          onChange(null);
         } else if (!isNaN(num)) {
           if (num > 10) num = 10;
           onChange(num);
@@ -134,7 +136,7 @@ export function NotaInput({ value, onChange }: { value?: number | null, onChange
           setLocalVal(value !== undefined && value !== null ? String(value).replace('.', ',') : '');
         }
       }}
-      className="w-16 mx-auto px-2 py-1 text-center border border-gray-300 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-sm focus:outline-none focus:ring-1 focus:ring-teal-500"
+      className="w-16 mx-auto px-2 py-1 text-center border border-gray-300 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-sm focus:outline-none focus:ring-1 focus:ring-teal-500 disabled:cursor-wait disabled:opacity-60"
       placeholder="0,0"
       aria-label="Nota"
     />
@@ -297,6 +299,9 @@ function ClassDetails() {
   const [formSoftware, setFormSoftware] = useState('AeroFS');
   const addStudentSubmitRef = useRef(false);
   const deleteMatriculaSubmitRef = useRef(false);
+  const [pendingGrades, setPendingGrades] = useState<Record<string, { nota1: number | null; nota2: number | null }>>({});
+  const [savingGradeId, setSavingGradeId] = useState<string | null>(null);
+  const [gradeError, setGradeError] = useState<string | null>(null);
 
   // Discard Confirmation state for dirty student enrollment modal
   const [showStudentDiscardConfirm, setShowStudentDiscardConfirm] = useState(false);
@@ -516,7 +521,7 @@ function ClassDetails() {
 
   // Alunos candidates for adding
   const availableStudents = useMemo(() => {
-    return users.filter((u) => u.role === 'ALUNO' && !matriculatedAlunoIds.includes(u.id));
+    return users.filter((u) => u.role === 'ALUNO' && u.status === 'ativo' && !matriculatedAlunoIds.includes(u.id));
   }, [users, matriculatedAlunoIds]);
 
   // Dates list for frequency table based on start and end dates
@@ -637,6 +642,11 @@ function ClassDetails() {
       alert('Selecione um aluno da lista.');
       return;
     }
+    if (!availableStudents.some((student) => student.id === selectedAlunoId)) {
+      setSelectedAlunoId('');
+      alert('Selecione um aluno ativo disponível na lista.');
+      return;
+    }
     addStudentSubmitRef.current = true;
 
     try {
@@ -669,37 +679,60 @@ function ClassDetails() {
     }
   };
 
-  // Handle grade change
-  const handleGradeChange = async (matriculaId: string, type: '1ª CH' | '2ª CH', val: string) => {
-    if (isInstructor) return;
-    const numVal = parseFloat(val);
-    if (isNaN(numVal) && val !== '') return;
+  const handleGradeDraftChange = (matricula: Matricula, field: 'nota1' | 'nota2', value: number | null) => {
+    setGradeError(null);
+    setPendingGrades((current) => {
+      const existing = current[matricula.id] ?? {
+        nota1: matricula.nota_1_chamada ?? null,
+        nota2: matricula.nota_2_chamada ?? null,
+      };
+      return {
+        ...current,
+        [matricula.id]: { ...existing, [field]: value },
+      };
+    });
+  };
 
-    const updates: Partial<any> = {};
-    if (type === '1ª CH') {
-      updates.nota_1_chamada = val === '' ? undefined : numVal;
-    } else {
-      updates.nota_2_chamada = val === '' ? undefined : numVal;
+  const handleGradeCancel = (matriculaId: string) => {
+    setPendingGrades((current) => {
+      const next = { ...current };
+      delete next[matriculaId];
+      return next;
+    });
+    setGradeError(null);
+  };
+
+  const handleGradeConfirm = async (matricula: Matricula) => {
+    const draft = pendingGrades[matricula.id];
+    if (!draft || savingGradeId) return;
+
+    setSavingGradeId(matricula.id);
+    setGradeError(null);
+    const maxNota = [draft.nota1, draft.nota2].filter((nota): nota is number => typeof nota === 'number' && Number.isFinite(nota)).reduce<number | null>(
+      (highest, nota) => highest === null ? nota : Math.max(highest, nota),
+      null,
+    );
+
+    try {
+      await updateMatricula({
+        id: matricula.id,
+        updates: {
+          nota_1_chamada: draft.nota1,
+          nota_2_chamada: draft.nota2,
+          resultado_final: maxNota,
+          status_resultado_final: maxNota === null ? null : maxNota >= 7 ? 'Aprovado' : 'Reprovado',
+        } as Partial<Matricula>,
+      });
+      setPendingGrades((current) => {
+        const next = { ...current };
+        delete next[matricula.id];
+        return next;
+      });
+    } catch (error) {
+      setGradeError(error instanceof Error ? error.message : 'Não foi possível salvar a nota.');
+    } finally {
+      setSavingGradeId(null);
     }
-
-    // Calcular resultado final se tiver notas
-    const m = allMatriculas.find((mat) => mat.id === matriculaId);
-    if (m) {
-      const nota1 = type === '1ª CH' ? (val === '' ? undefined : numVal) : m.nota_1_chamada;
-      const nota2 = type === '2ª CH' ? (val === '' ? undefined : numVal) : m.nota_2_chamada;
-
-      let finalScore = nota1;
-      if (nota2 !== undefined && (nota1 === undefined || nota2 > nota1)) {
-        finalScore = nota2;
-      }
-
-      if (finalScore !== undefined) {
-        updates.resultado_final = finalScore;
-        updates.status_resultado_final = finalScore >= 7.0 ? 'Aprovado' : 'Reprovado';
-      }
-    }
-
-    await updateMatricula({ id: matriculaId, updates });
   };
 
   // Filter documents that belong to students in this class
@@ -815,7 +848,7 @@ function ClassDetails() {
           </span>
         </button>)}
 
-        {!isInstructor && (<button
+        <button
           id="tab-grades"
           onClick={() => setActiveTab('grades')}
           className={`pb-3 font-semibold text-sm transition-colors relative cursor-pointer ${
@@ -828,7 +861,7 @@ function ClassDetails() {
             <ClipboardList className="w-4 h-4" />
             Notas
           </span>
-        </button>)}
+        </button>
       </div>
 
       {/* TAB CONTENT */}
@@ -898,7 +931,7 @@ function ClassDetails() {
                       <th className="px-4 py-3 text-center">%</th>
                       <th className="px-4 py-3 text-center w-24">1ª CH</th>
                       <th className="px-4 py-3 text-center w-24">2ª CH</th>
-                      <th className="px-4 py-3 text-center">Resultado</th>
+                      <th className="px-4 py-3 text-center">Média / Resultado</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-150 dark:divide-slate-800 font-mono text-gray-700 dark:text-slate-200">
@@ -1022,30 +1055,26 @@ function ClassDetails() {
                               {attendancePercentage}%
                             </span>
                           </td>
-                          {/* 1ª Chamada Icon Status */}
-                          <td className="px-4 py-2 text-center">
-                            {renderExamStatus(m.nota_1_chamada, m.status_resultado_final, false)}
+                          <td className="px-4 py-2 text-center font-semibold">
+                            {typeof m.nota_1_chamada === 'number' ? m.nota_1_chamada.toFixed(1).replace('.', ',') : '—'}
                           </td>
-                          {/* 2ª Chamada Icon Status */}
-                          <td className="px-4 py-2 text-center">
-                            {renderExamStatus(m.nota_2_chamada, m.status_resultado_final, true)}
+                          <td className="px-4 py-2 text-center font-semibold">
+                            {typeof m.nota_2_chamada === 'number' ? m.nota_2_chamada.toFixed(1).replace('.', ',') : '—'}
                           </td>
-                          {/* Resultado Final Badge */}
                           <td className="px-4 py-2 text-center">
-                            {m.status_resultado_final ? (
-                              <span
-                                className={`px-2 py-0.5 rounded font-bold uppercase text-[10px] ${
-                                  m.status_resultado_final === 'Aprovado'
-                                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-400'
-                                    : m.status_resultado_final === 'Pendente'
-                                    ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-400'
-                                    : 'bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-400'
-                                }`}
-                              >
+                            <div className="font-bold">
+                              {typeof m.resultado_final === 'number' ? m.resultado_final.toFixed(1).replace('.', ',') : '—'}
+                            </div>
+                            {m.status_resultado_final && (
+                              <span className={`text-[10px] font-bold uppercase ${
+                                m.status_resultado_final === 'Aprovado'
+                                  ? 'text-emerald-600 dark:text-emerald-400'
+                                  : m.status_resultado_final === 'Pendente'
+                                  ? 'text-amber-600 dark:text-amber-400'
+                                  : 'text-red-600 dark:text-red-400'
+                              }`}>
                                 {m.status_resultado_final}
                               </span>
-                            ) : (
-                              <span className="text-gray-400 dark:text-slate-600">-</span>
                             )}
                           </td>
                         </tr>
@@ -1367,13 +1396,14 @@ function ClassDetails() {
                         ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
                         : studentName.substring(0, 2).toUpperCase();
                       
-                      const nota1 = m.nota_1_chamada;
-                      const nota2 = m.nota_2_chamada;
-                      
-                      let maxNota = nota1 || 0;
-                      if (nota2 !== undefined && nota2 > maxNota) {
-                        maxNota = nota2;
-                      }
+                      const draft = pendingGrades[m.id];
+                      const nota1 = draft ? draft.nota1 : (m.nota_1_chamada ?? null);
+                      const nota2 = draft ? draft.nota2 : (m.nota_2_chamada ?? null);
+                      const maxNota = [nota1, nota2].filter((nota): nota is number => typeof nota === 'number' && Number.isFinite(nota)).reduce<number | null>(
+                        (highest, nota) => highest === null ? nota : Math.max(highest, nota),
+                        null,
+                      );
+                      const isSavingGrade = savingGradeId === m.id;
 
                       return (
                         <tr key={m.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-850/30 transition-colors h-[52px]">
@@ -1386,19 +1416,42 @@ function ClassDetails() {
                             </span>
                           </td>
                           <td className="px-4 py-2 border-r border-gray-150 dark:border-slate-800/80 text-center">
-                            <NotaInput value={nota1} onChange={(val) => updateMatricula({ id: m.id, updates: { nota_1_chamada: val } })} />
+                            <NotaInput value={nota1} onChange={(value) => handleGradeDraftChange(m, 'nota1', value)} disabled={savingGradeId !== null} />
                           </td>
                           <td className="px-4 py-2 border-r border-gray-150 dark:border-slate-800/80 text-center">
-                            <NotaInput value={nota2} onChange={(val) => updateMatricula({ id: m.id, updates: { nota_2_chamada: val } })} />
+                            <NotaInput value={nota2} onChange={(value) => handleGradeDraftChange(m, 'nota2', value)} disabled={savingGradeId !== null} />
                           </td>
                           <td className="px-4 py-2 text-center">
                             <span className={`inline-block px-2 py-1 rounded text-xs font-bold ${
-                               maxNota >= 7 ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300' 
-                               : maxNota > 0 ? 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300'
+                               maxNota !== null && maxNota >= 7 ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300'
+                               : maxNota !== null ? 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300'
                                : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
                             }`}>
-                              {maxNota > 0 ? maxNota.toFixed(1).replace('.', ',') : '-'}
+                              {maxNota !== null ? maxNota.toFixed(1).replace('.', ',') : '-'}
                             </span>
+                            {draft && (
+                              <div className="mt-2 flex flex-col items-center gap-1">
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleGradeConfirm(m)}
+                                    disabled={isSavingGrade || savingGradeId !== null}
+                                    className="rounded bg-teal-600 px-2 py-1 text-[10px] font-bold text-white hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:cursor-wait disabled:opacity-60"
+                                  >
+                                    {isSavingGrade ? 'Salvando...' : 'Confirmar'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleGradeCancel(m.id)}
+                                    disabled={isSavingGrade}
+                                    className="rounded border border-slate-300 px-2 py-1 text-[10px] font-bold text-slate-600 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                                  >
+                                    Cancelar
+                                  </button>
+                                </div>
+                                {gradeError && <span className="max-w-[180px] whitespace-normal text-[10px] text-red-600" role="alert">{gradeError}</span>}
+                              </div>
+                            )}
                           </td>
                         </tr>
                       );
@@ -2080,17 +2133,18 @@ Equipe Airport`;
                           const name = typeof stud.nome_completo === 'string' ? stud.nome_completo : 'Aluno sem nome';
                           const cpf = typeof stud.cpf === 'string' ? stud.cpf : 'CPF não informado';
                           return (
-                          <div
+                          <button
+                            type="button"
                             key={stud.id}
                             onClick={() => {
                               setSelectedAlunoId(stud.id);
                               setStudentSearchQuery(`${name} (CPF: ${cpf})`);
                               setIsStudentDropdownOpen(false);
                             }}
-                            className="p-2.5 hover:bg-gray-100 dark:hover:bg-slate-800 cursor-pointer text-xs text-slate-800 dark:text-slate-200"
+                            className="block w-full p-2.5 text-left hover:bg-gray-100 dark:hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-teal-500 cursor-pointer text-xs text-slate-800 dark:text-slate-200"
                           >
                             {name} (CPF: {cpf})
-                          </div>
+                          </button>
                           );
                         })
                       )}

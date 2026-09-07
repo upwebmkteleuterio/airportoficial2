@@ -84,6 +84,21 @@ async function assertCanAccessTurma(turmaId: string): Promise<void> {
   }
 }
 
+async function assertCanUpdateMatricula(turmaId: string, updates: Partial<Matricula>): Promise<void> {
+  const context = await getAuthContext();
+  if (!context) throw new Error('Sessão não autenticada.');
+  if (context.role !== UserRole.INSTRUTOR) {
+    await assertCanManageTurmas();
+    return;
+  }
+
+  await assertCanAccessTurma(turmaId);
+  const allowedGradeFields = new Set(['nota_1_chamada', 'nota_2_chamada', 'resultado_final', 'status_resultado_final']);
+  if (Object.keys(updates).some((field) => !allowedGradeFields.has(field))) {
+    throw new Error('Instrutores podem alterar somente as notas das turmas vinculadas.');
+  }
+}
+
 async function assertCanRecordAttendance(turmaId: string): Promise<void> {
   const context = await getAuthContext();
   if (!context) throw new Error('Sessão não autenticada.');
@@ -469,6 +484,15 @@ export const classService = {
     await assertCanAccessTurma(matricula.turma_id);
     const classData = await getClassById(matricula.turma_id);
     if (!classData) throw new Error(`Não foi possível carregar a turma ${matricula.turma_id}`);
+    const { data: aluno, error: alunoError } = await supabase
+      .from('profiles')
+      .select('role, status')
+      .eq('legacy_id', matricula.aluno_id)
+      .maybeSingle();
+    if (alunoError) throw serviceError(`Não foi possível validar o aluno ${matricula.aluno_id}`, alunoError);
+    if (!aluno || aluno.role !== UserRole.ALUNO || aluno.status !== 'ativo') {
+      throw new Error('Somente alunos ativos podem ser matriculados nesta turma.');
+    }
     const sessions = getClassSessions(classData);
     if (sessions.length === 0) {
       throw new Error('Não é possível matricular um aluno em uma turma sem períodos válidos de diário.');
@@ -486,7 +510,7 @@ export const classService = {
       ...matricula,
       id: newServiceId('mat'),
       codigo_re: nextRe,
-      percentual_presenca: 100,
+      percentual_presenca: 0,
       status_matricula: 'Ativo' as const
     };
 
@@ -526,7 +550,7 @@ export const classService = {
           matricula_id: createdMatricula.id,
           data_aula: dataAula,
           horario_periodo: horarioPeriodo,
-          presente: true
+          presente: false
         }));
 
       if (diarioRows.length > 0) {
@@ -541,7 +565,6 @@ export const classService = {
   },
 
   updateMatricula: async (id: string, updates: Partial<Matricula>): Promise<Matricula> => {
-    await assertCanManageTurmas();
     const { data: currentMatricula, error: currentError } = await supabase
       .from('matriculas')
       .select('turma_id')
@@ -549,7 +572,31 @@ export const classService = {
       .maybeSingle();
     if (currentError) throw serviceError(`Não foi possível consultar a matrícula ${id}`, currentError);
     if (!currentMatricula) throw new Error(`Não foi possível atualizar a matrícula ${id}: matrícula não encontrada`);
-    await assertCanAccessTurma((currentMatricula as { turma_id: string }).turma_id);
+    const turmaId = (currentMatricula as { turma_id: string }).turma_id;
+    await assertCanUpdateMatricula(turmaId, updates);
+
+    const context = await getAuthContext();
+    if (!context) throw new Error('Sessão não autenticada.');
+    if (context.role === UserRole.INSTRUTOR) {
+      const hasGradeUpdate = ['nota_1_chamada', 'nota_2_chamada', 'resultado_final', 'status_resultado_final'].some(
+        (field) => Object.prototype.hasOwnProperty.call(updates, field)
+      );
+      if (!hasGradeUpdate) {
+        throw new Error('Informe ao menos um campo de nota para atualizar.');
+      }
+
+      const { data, error } = await supabase.rpc('update_matricula_notas', {
+        p_matricula_id: id,
+        p_nota_1_chamada: updates.nota_1_chamada ?? null,
+        p_nota_2_chamada: updates.nota_2_chamada ?? null,
+        p_resultado_final: updates.resultado_final ?? null,
+        p_status_resultado_final: updates.status_resultado_final ?? null,
+      });
+      if (error) throw serviceError(`Não foi possível atualizar as notas da matrícula ${id}`, error);
+      if (!data) throw new Error(`Não foi possível atualizar as notas da matrícula ${id}: matrícula não encontrada`);
+      return data as Matricula;
+    }
+
     const { id: _ignoredId, ...matriculaUpdates } = updates;
     const { data, error } = await supabase
       .from('matriculas')

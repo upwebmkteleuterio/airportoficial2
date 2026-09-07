@@ -30,21 +30,21 @@ function SessionLoading() {
 }
 
 function RequireSession() {
-  const { isLoading } = useSessionContext();
+  const { isLoading, session } = useSessionContext();
   const { userLogged } = useUIStore();
 
   if (isLoading) return <SessionLoading />;
-  if (!userLogged) return <Navigate to="/login" replace />;
+  if (!session || !userLogged) return <Navigate to="/login" replace />;
   if (userLogged.role === 'ALUNO') return <StudentDashboard />;
   return <Outlet />;
 }
 
 function LoginRoute() {
-  const { isLoading } = useSessionContext();
+  const { isLoading, session } = useSessionContext();
   const { userLogged } = useUIStore();
 
   if (isLoading) return <SessionLoading />;
-  if (userLogged) return <Navigate to="/dashboard" replace />;
+  if (session && userLogged) return <Navigate to="/dashboard" replace />;
   return <Login />;
 }
 

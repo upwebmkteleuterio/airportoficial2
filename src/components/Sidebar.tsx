@@ -4,6 +4,7 @@
  */
 
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { LayoutDashboard, FileArchive, Building2, ShieldAlert, LogOut, LoaderCircle, Users, PanelLeftClose, PanelLeftOpen, Settings, Bell, User, BookOpen, GraduationCap, UserCog, MapPin, Clock, type LucideIcon } from 'lucide-react';
 import { supabase } from '../integrations/supabase/client';
@@ -34,7 +35,7 @@ function clearAuthenticationStorage() {
   const clearStorage = (storage: Storage) => {
     storageKeysToClear.forEach((key) => storage.removeItem(key));
     Object.keys(storage)
-      .filter((key) => /auth-token|previous[-_]?page|last[-_]?page|last[-_]?route|email.*confirm|confirm.*email/i.test(key))
+      .filter((key) => /^(?:sb-[a-z0-9-]+-auth-token|cbjjs-auth-token)$/i.test(key))
       .forEach((key) => storage.removeItem(key));
   };
 
@@ -43,6 +44,7 @@ function clearAuthenticationStorage() {
 }
 
 export function Sidebar() {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { clearSession } = useSessionContext();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -68,6 +70,7 @@ export function Sidebar() {
       clearSession();
       resetAll();
       clearAuthenticationStorage();
+      navigate('/login', { replace: true });
       setIsLoggingOut(false);
     }
 

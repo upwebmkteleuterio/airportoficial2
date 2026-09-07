@@ -206,6 +206,7 @@ export function useClassDetails(classId: string | null, options: ClassDetailsOpt
     createMatricula: createMatriculaMutation.mutateAsync,
     isCreatingMatricula: createMatriculaMutation.isPending,
     updateMatricula: updateMatriculaMutation.mutateAsync,
+    isUpdatingMatricula: updateMatriculaMutation.isPending,
     deleteMatricula: deleteMatriculaMutation.mutateAsync,
     isDeletingMatricula: deleteMatriculaMutation.isPending,
     saveDiarioPresenca: saveDiarioPresencaMutation.mutateAsync,
