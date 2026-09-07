@@ -9,6 +9,7 @@ type UploadDocumentInput = Omit<Documento, 'id' | 'data_criacao' | 'url_armazena
 };
 
 const allowedUploadTypes = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
+type ReplacementOptions = Partial<Pick<Documento, 'status' | 'origem_cadastro' | 'metodo_verificacao' | 'storage_area'>>;
 
 function safeFileName(fileName: string) {
   return fileName.trim().replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 120) || 'documento';
@@ -153,7 +154,7 @@ export const documentService = {
     return data as Documento;
   },
 
-  createReplacement: async (source: Documento, file: File, onProgress?: (progress: number) => void): Promise<Documento> => {
+  createReplacement: async (source: Documento, file: File, onProgress?: (progress: number) => void, options: ReplacementOptions = {}): Promise<Documento> => {
     validateUploadType(file);
     if (source.status !== DocumentStatus.RECUSADO || source.esta_atual === false) {
       throw new Error('Somente a versão recusada atual pode receber uma substituição.');
@@ -162,7 +163,8 @@ export const documentService = {
     const documentId = newServiceId('doc');
     const version = (source.versao ?? 1) + 1;
     const groupId = source.grupo_documento_id || `${source.usuario_id}:${source.tipo_documento}`;
-    const storagePath = `${source.usuario_id}/temporarios/${documentId}-${safeFileName(file.name)}`;
+    const storageArea = options.storage_area || 'temporarios';
+    const storagePath = `${source.usuario_id}/${storageArea}/${documentId}-${safeFileName(file.name)}`;
     const hash = await sha256(file);
     try {
       await uploadWithProgress(storagePath, file, onProgress);
@@ -179,10 +181,10 @@ export const documentService = {
         url_armazenamento: storagePath,
         arquivo_nome: file.name,
         hash_sha256: hash,
-        status: DocumentStatus.PENDENTE,
-        origem_cadastro: source.origem_cadastro,
-        metodo_verificacao: 'manual',
-        storage_area: 'temporarios',
+        status: options.status || DocumentStatus.PENDENTE,
+        origem_cadastro: options.origem_cadastro || source.origem_cadastro,
+        metodo_verificacao: options.metodo_verificacao || 'manual',
+        storage_area: storageArea,
         grupo_documento_id: groupId,
         versao: version,
         substitui_documento_id: source.id,

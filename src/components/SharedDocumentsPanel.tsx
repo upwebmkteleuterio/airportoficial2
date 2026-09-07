@@ -4,7 +4,7 @@ import { SlidePanel } from './ui/SlidePanel';
 import { FileText, Download, ExternalLink, X, Maximize2, Loader2, AlertTriangle, ShieldCheck, Image as ImageIcon } from 'lucide-react';
 import { avatarService } from '../services/avatarService';
 import { documentAccessService, DocumentAccessGrant, DocumentAccessItem, DocumentAuditAction } from '../services/documentAccessService';
-import { DocumentStatus, Usuario } from '../types';
+import { DocumentStatus, Usuario, UserRole } from '../types';
 
 interface SharedDocumentsPanelProps {
   isOpen: boolean;
@@ -195,6 +195,9 @@ export function SharedDocumentsPanel({ isOpen, onClose, student, accessGrant }: 
             {entries.map((entry) => {
               const isActive = activeEntry?.id === entry.id;
               const document = entry.kind === 'document' ? entry.item.document : null;
+              const displayedStatus = document?.status === DocumentStatus.PENDENTE && student.role === UserRole.INSTRUTOR
+                ? DocumentStatus.APROVADO
+                : document?.status;
               const fileName = entry.kind === 'photo' ? entry.fileName : entry.item.document.arquivo_nome;
               return (
                 <button
@@ -218,9 +221,9 @@ export function SharedDocumentsPanel({ isOpen, onClose, student, accessGrant }: 
                       </p>
                     </div>
                   </div>
-                  {document && (
-                    <span className={`ml-2 shrink-0 px-2 py-0.5 rounded-full text-[10px] font-semibold ${statusBadge[document.status] || 'bg-gray-100 text-gray-600 dark:bg-slate-800 dark:text-slate-300'}`}>
-                      {document.status}
+                  {document && displayedStatus && (
+                    <span className={`ml-2 shrink-0 px-2 py-0.5 rounded-full text-[10px] font-semibold ${statusBadge[displayedStatus] || 'bg-gray-100 text-gray-600 dark:bg-slate-800 dark:text-slate-300'}`}>
+                      {displayedStatus}
                     </span>
                   )}
                 </button>

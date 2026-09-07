@@ -364,18 +364,24 @@ export function StaffRegistrationModal({ isOpen, onClose, onSuccess, onError, in
     const file = files[field];
     if (!file) return null;
     const existing = uploadedDocuments[field];
+    const isInstructorRegistration = role === UserRole.INSTRUTOR;
     setUploadStates(prev => ({ ...prev, [field]: { status: 'uploading', progress: 0 } }));
     try {
       const document = existing
-        ? await documentService.createReplacement(existing, file)
+        ? await documentService.createReplacement(existing, file, undefined, isInstructorRegistration ? {
+          status: DocumentStatus.APROVADO,
+          origem_cadastro: 'interno',
+          metodo_verificacao: 'nao_aplicavel',
+          storage_area: 'oficiais',
+        } : undefined)
         : await documentService.uploadFile({
           file,
           usuario_id: userId,
           tipo_documento: documentTypes[field],
-          status: DocumentStatus.PENDENTE,
+          status: isInstructorRegistration ? DocumentStatus.APROVADO : DocumentStatus.PENDENTE,
           origem_cadastro: 'interno',
-          metodo_verificacao: 'manual',
-          storage_area: 'temporarios',
+          metodo_verificacao: isInstructorRegistration ? 'nao_aplicavel' : 'manual',
+          storage_area: isInstructorRegistration ? 'oficiais' : 'temporarios',
           grupo_documento_id: `${userId}:${documentTypes[field]}`,
           onProgress: (progress) => setUploadStates(prev => ({
             ...prev,
@@ -933,7 +939,7 @@ export function StaffRegistrationModal({ isOpen, onClose, onSuccess, onError, in
                 <h4 className="font-bold">Anexar Documentos</h4>
               </div>
               <p className="text-xs text-gray-500 dark:text-slate-400 mb-4">
-                Selecione os arquivos que deseja anexar. O envio pode ser concluído parcialmente; os documentos ficam pendentes para conferência manual.
+                Selecione os arquivos que deseja anexar. O envio pode ser concluído parcialmente; {role === UserRole.INSTRUTOR ? 'os documentos do instrutor são aprovados automaticamente.' : 'os documentos ficam pendentes para conferência manual.'}
               </p>
 
               <div className="mb-4">
