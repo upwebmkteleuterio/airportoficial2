@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   Search,
   Filter,
@@ -12,7 +13,6 @@ import {
 } from 'lucide-react';
 import { useUsers } from '../hooks/useUsers';
 import { UserRole } from '../types';
-import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { StaffRegistrationModal } from '../components/StaffRegistrationModal';
 import { FolderIcon } from '../components/ui/FolderIcon';
@@ -23,6 +23,7 @@ import { DocumentAccessGrant } from '../services/documentAccessService';
 
 
 export function Coordinators() {
+  const queryClient = useQueryClient();
   const [registrationModalOpen, setRegistrationModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   
@@ -88,12 +89,14 @@ export function Coordinators() {
             Gerenciamento de todos os coordenadors cadastrados no sistema.
           </p>
         </div>
-        <Button
+        <button
+          type="button"
           onClick={() => setRegistrationModalOpen(true)}
-          icon={<UserPlus className="w-4 h-4" />}
+          className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-slate-800 dark:bg-teal-600 dark:hover:bg-teal-500"
         >
+          <UserPlus className="w-4 h-4" />
           Cadastrar Coordenador
-        </Button>
+        </button>
       </div>
 
       {/* Filter and Count Bar */}
@@ -339,7 +342,8 @@ export function Coordinators() {
         onClose={() => { setRegistrationModalOpen(false); setSelectedStaffForEdit(null); }}
         onSuccess={() => {
           setRegistrationModalOpen(false);
-          // Optional: Refresh list or show toast
+          queryClient.invalidateQueries({ queryKey: ['users'] });
+          void queryClient.refetchQueries({ queryKey: ['users'] });
         }}
       />
     </div>

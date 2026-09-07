@@ -113,6 +113,7 @@ export function StaffRegistrationModal({ isOpen, onClose, onSuccess, onError, in
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreviewUrl, setAvatarPreviewUrl] = useState('');
   const avatarInputRef = useRef<HTMLInputElement>(null);
+  const submitRef = useRef(false);
 
   // Step 1: Personal Data
   useEffect(() => {
@@ -470,6 +471,8 @@ export function StaffRegistrationModal({ isOpen, onClose, onSuccess, onError, in
   };
 
   const handleSubmit = async () => {
+    if (submitRef.current || isLoading) return;
+    submitRef.current = true;
     let avatarPath: string | undefined;
     try {
       setIsLoading(true);
@@ -596,6 +599,7 @@ export function StaffRegistrationModal({ isOpen, onClose, onSuccess, onError, in
           : `Erro ao salvar ${role === UserRole.INSTRUTOR ? 'o instrutor' : 'o coordenador'}.`);
       }
     } finally {
+      submitRef.current = false;
       setIsLoading(false);
     }
   };

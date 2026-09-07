@@ -20,6 +20,11 @@ import { SharedDocumentsPanel } from '../components/SharedDocumentsPanel';
 import { StudentDetailsPanel } from '../components/StudentDetailsPanel';
 import { DocumentAccessGrant } from '../services/documentAccessService';
 
+const formatStudentDate = (value: unknown) => {
+  if (typeof value !== 'string' || !value.trim()) return '-';
+  const date = new Date(value.includes('T') ? value : `${value}T12:00:00`);
+  return Number.isNaN(date.getTime()) ? '-' : date.toLocaleDateString('pt-BR');
+};
 
 export function Students() {
   const [registrationModalOpen, setRegistrationModalOpen] = useState(false);
@@ -249,11 +254,11 @@ export function Students() {
                       </div>
                     </td>
                                         <td className="px-5 py-2.5 text-gray-500 dark:text-slate-400">
-                      {aluno.data_nascimento ? new Date(aluno.data_nascimento + 'T12:00:00Z').toLocaleDateString('pt-BR') : '-'}
-                    </td>
-                    <td className="px-5 py-2.5 text-gray-500 dark:text-slate-400">
-                      {aluno.data_aceite_lgpd ? new Date(aluno.data_aceite_lgpd).toLocaleDateString('pt-BR') : '-'}
-                    </td>
+                                          {formatStudentDate(aluno.data_nascimento)}
+                                        </td>
+                                        <td className="px-5 py-2.5 text-gray-500 dark:text-slate-400">
+                                          {formatStudentDate(aluno.data_aceite_lgpd)}
+                                        </td>
                   </tr>
                 ))
               )}

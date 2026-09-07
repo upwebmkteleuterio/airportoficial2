@@ -273,21 +273,27 @@ export const classService = {
     };
   },
 
-  create: async (turma: Omit<Turma, 'id' | 'id_interno_escola' | 'qt_alunos_matriculados'> & { id?: string }): Promise<Turma> => {
+  create: async (turma: Omit<Turma, 'id' | 'qt_alunos_matriculados'> & { id?: string }): Promise<Turma> => {
     await assertCanManageTurmas();
-    const { data: existingClasses, error: listError } = await supabase
-      .from('turmas')
-      .select('id_interno_escola');
-    if (listError) throw serviceError('Não foi possível calcular o identificador interno da turma', listError);
+    const idAnac = String(turma.id_anac ?? '').trim();
+    const idInterno = Number(String(turma.id_interno_escola ?? '').trim());
+    if (!idAnac || !Number.isInteger(idInterno)) {
+      throw new Error('Informe o ID ANAC e o ID interno da escola da turma.');
+    }
 
-    const internalIds = ((existingClasses ?? []) as Array<{ id_interno_escola: number }>).map(
-      (item) => Number(item.id_interno_escola)
-    );
-    const nextIdInterno = internalIds.length > 0 ? Math.max(...internalIds) + 1 : 100;
+    const [{ data: anacRows, error: anacError }, { data: internalRows, error: internalError }] = await Promise.all([
+      supabase.from('turmas').select('id, id_anac').eq('id_anac', idAnac).limit(1),
+      supabase.from('turmas').select('id, id_interno_escola').eq('id_interno_escola', idInterno).limit(1),
+    ]);
+    if (anacError || internalError) throw serviceError('Não foi possível validar os identificadores da turma', anacError ?? internalError);
+    if (((anacRows ?? []) as Array<{ id?: string }>).length > 0) throw new Error(`Já existe uma turma com o ID ANAC "${idAnac}".`);
+    if (((internalRows ?? []) as Array<{ id?: string }>).length > 0) throw new Error(`Já existe uma turma com o ID interno "${idInterno}".`);
+
     const newClass = {
       ...turma,
       id: turma.id || newServiceId('turma'),
-      id_interno_escola: nextIdInterno,
+      id_anac: idAnac,
+      id_interno_escola: idInterno,
       qt_alunos_matriculados: 0
     };
 
@@ -296,7 +302,19 @@ export const classService = {
       .insert(newClass)
       .select()
       .single();
-    if (error) throw serviceError('Não foi possível criar a turma', error);
+    if (error) {
+      if ((error as { code?: string }).code === '23505') {
+        const conflictText = [
+          (error as { detail?: string }).detail,
+          (error as { message?: string }).message,
+          (error as { hint?: string }).hint,
+        ].filter(Boolean).join(' ').toLowerCase();
+        if (conflictText.includes('id_anac')) throw new Error(`Já existe uma turma com o ID ANAC "${idAnac}".`);
+        if (conflictText.includes('id_interno_escola')) throw new Error(`Já existe uma turma com o ID interno "${idInterno}".`);
+        throw new Error('Os identificadores informados já estão cadastrados em outra turma.');
+      }
+      throw serviceError('Não foi possível criar a turma', error);
+    }
     return data as Turma;
   },
 
@@ -314,13 +332,42 @@ export const classService = {
     }
 
     const { id: _ignoredId, ...classUpdates } = updates;
+    const identifiers = {
+      id_anac: typeof classUpdates.id_anac === 'string' ? classUpdates.id_anac.trim() : undefined,
+      id_interno_escola: classUpdates.id_interno_escola === undefined ? undefined : Number(String(classUpdates.id_interno_escola).trim()),
+    };
+    if (identifiers.id_anac !== undefined && !identifiers.id_anac) {
+      throw new Error('Informe um ID ANAC válido para a turma.');
+    }
+    if (identifiers.id_interno_escola !== undefined && !Number.isInteger(identifiers.id_interno_escola)) {
+      throw new Error('O ID interno da escola deve ser um número inteiro.');
+    }
+    if (identifiers.id_anac !== undefined || identifiers.id_interno_escola !== undefined) {
+      const checks = await Promise.all([
+        identifiers.id_anac === undefined ? Promise.resolve({ data: [], error: null }) : supabase.from('turmas').select('id').eq('id_anac', identifiers.id_anac).neq('id', id).limit(1),
+        identifiers.id_interno_escola === undefined ? Promise.resolve({ data: [], error: null }) : supabase.from('turmas').select('id').eq('id_interno_escola', identifiers.id_interno_escola).neq('id', id).limit(1),
+      ]);
+      const duplicateError = checks.find((check) => check.error)?.error;
+      if (duplicateError) throw serviceError(`Não foi possível validar os identificadores da turma ${id}`, duplicateError);
+      if (checks[0].data?.length) throw new Error(`Já existe outra turma com o ID ANAC "${identifiers.id_anac}".`);
+      if (checks[1].data?.length) throw new Error(`Já existe outra turma com o ID interno "${identifiers.id_interno_escola}".`);
+      if (identifiers.id_anac !== undefined) classUpdates.id_anac = identifiers.id_anac;
+      if (identifiers.id_interno_escola !== undefined) classUpdates.id_interno_escola = identifiers.id_interno_escola;
+    }
     const { data, error } = await supabase
       .from('turmas')
       .update(classUpdates)
       .eq('id', id)
       .select()
       .maybeSingle();
-    if (error) throw serviceError(`Não foi possível atualizar a turma ${id}`, error);
+    if (error) {
+      if ((error as { code?: string }).code === '23505') {
+        if (identifiers.id_anac !== undefined) throw new Error(`Já existe outra turma com o ID ANAC "${identifiers.id_anac}".`);
+        if (identifiers.id_interno_escola !== undefined) throw new Error(`Já existe outra turma com o ID interno "${identifiers.id_interno_escola}".`);
+        throw new Error('Os identificadores informados já estão cadastrados em outra turma.');
+      }
+      throw serviceError(`Não foi possível atualizar a turma ${id}`, error);
+    }
     if (!data) throw new Error(`Não foi possível atualizar a turma ${id}: turma não encontrada`);
     return data as Turma;
   },
@@ -448,7 +495,12 @@ export const classService = {
       .insert(newMat)
       .select()
       .single();
-    if (error) throw serviceError('Não foi possível criar a matrícula', error);
+    if (error) {
+      if ((error as { code?: string }).code === '23505') {
+        throw new Error('Este aluno já está matriculado nesta turma.');
+      }
+      throw serviceError('Não foi possível criar a matrícula', error);
+    }
     const createdMatricula = data as Matricula;
 
     {

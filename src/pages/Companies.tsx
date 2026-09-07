@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import {
   Plus,
   Copy,
@@ -54,6 +54,8 @@ export function Companies() {
     deleteCompany,
     isLoading,
     isDeleting,
+    isCreating,
+    isUpdating,
   } = useCompanies();
   const { activeEmployeeCounts, isLoadingActiveEmployeeCounts } = useActiveEmployeeCounts();
   const { createLog } = useAudit();
@@ -76,6 +78,7 @@ export function Companies() {
   const [isDateFilterOpen, setIsDateFilterOpen] = useState(false);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const companySubmitRef = useRef(false);
 
   // Form states
   const [formCnpj, setFormCnpj] = useState('');
@@ -138,10 +141,12 @@ export function Companies() {
   };
 
   const handleSaveCompany = async () => {
+    if (companySubmitRef.current || isCreating || isUpdating) return;
     if (!formCnpj || !formRazao || !formFantasia) {
       alert('Por favor, preencha todos os campos obrigatórios: Razão Social, Nome Fantasia e CNPJ.');
       return;
     }
+    companySubmitRef.current = true;
 
     try {
       if (editingCompanyId) {
@@ -193,15 +198,21 @@ export function Companies() {
       setAddCompanyOpen(false);
     } catch (err) {
       console.error(err);
+      alert('Não foi possível salvar a empresa. Verifique os dados e tente novamente.');
+    } finally {
+      companySubmitRef.current = false;
     }
   };
 
   // Filter companies
   const filteredCompanies = useMemo(() => {
     return companies.filter((comp) => {
-      const matchQuery = comp.razao_social.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          comp.cnpj.includes(searchQuery) ||
-                          (comp.nome_fantasia && comp.nome_fantasia.toLowerCase().includes(searchQuery.toLowerCase()));
+      const razaoSocial = typeof comp.razao_social === 'string' ? comp.razao_social : '';
+      const cnpj = typeof comp.cnpj === 'string' ? comp.cnpj : '';
+      const nomeFantasia = typeof comp.nome_fantasia === 'string' ? comp.nome_fantasia : '';
+      const matchQuery = razaoSocial.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          cnpj.includes(searchQuery) ||
+                          nomeFantasia.toLowerCase().includes(searchQuery.toLowerCase());
       const hasDateFilter = Boolean(startDate || endDate);
       const companyCreatedDate = comp.created_at?.slice(0, 10);
       const matchCreatedDate = !hasDateFilter || (
@@ -726,10 +737,11 @@ export function Companies() {
             id="btn-confirm-add-company"
             type="button"
             onClick={handleSaveCompany}
-            className="px-4 py-2 bg-teal-500 hover:bg-teal-600 text-slate-900 font-bold rounded text-xs transition-colors shadow-sm flex items-center gap-2"
+            disabled={isCreating || isUpdating}
+            className="px-4 py-2 bg-teal-500 hover:bg-teal-600 disabled:cursor-not-allowed disabled:opacity-60 text-slate-900 font-bold rounded text-xs transition-colors shadow-sm flex items-center gap-2"
           >
             <Check className="w-4 h-4" />
-            Salvar Empresa
+            {isCreating || isUpdating ? 'Salvando...' : 'Salvar Empresa'}
           </button>
         </div>
       </SlidePanel>

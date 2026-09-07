@@ -43,7 +43,7 @@ export function useClasses(options: ClassesOptions = {}) {
 
   // Mutations
   const createClassMutation = useMutation({
-    mutationFn: (newClass: Omit<Turma, 'id' | 'id_interno_escola' | 'qt_alunos_matriculados'>) => classService.create(newClass),
+    mutationFn: (newClass: Omit<Turma, 'id' | 'qt_alunos_matriculados'>) => classService.create(newClass),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['classes'] });
     }
@@ -207,6 +207,7 @@ export function useClassDetails(classId: string | null, options: ClassDetailsOpt
     isCreatingMatricula: createMatriculaMutation.isPending,
     updateMatricula: updateMatriculaMutation.mutateAsync,
     deleteMatricula: deleteMatriculaMutation.mutateAsync,
+    isDeletingMatricula: deleteMatriculaMutation.isPending,
     saveDiarioPresenca: saveDiarioPresencaMutation.mutateAsync,
     isSavingDiario: saveDiarioPresencaMutation.isPending,
     saveInstructors: saveInstructorsMutation.mutateAsync,

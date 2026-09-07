@@ -60,8 +60,23 @@ import { DocumentAccessGrant } from '../services/documentAccessService';
 import { CreateMenu } from '../components/ui/CreateMenu';
 import { StudentRegistrationModal } from '../components/StudentRegistrationModal';
 
-const renderExamStatus = (nota: number | undefined, res: string | undefined, isSecondCh: boolean) => {
-  if (nota !== undefined) {
+const parseClassDate = (value: unknown): Date | null => {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const datePart = value.slice(0, 10);
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(datePart);
+  if (!match) return null;
+  const date = new Date(`${datePart}T12:00:00`);
+  if (Number.isNaN(date.getTime()) || date.getFullYear() !== Number(match[1]) || date.getMonth() + 1 !== Number(match[2]) || date.getDate() !== Number(match[3])) return null;
+  return date;
+};
+
+const formatClassDate = (value: unknown, options?: Intl.DateTimeFormatOptions) => {
+  const date = parseClassDate(value);
+  return date ? date.toLocaleDateString('pt-BR', options) : 'Data não informada';
+};
+
+const renderExamStatus = (nota: number | null | undefined, res: string | null | undefined, isSecondCh: boolean) => {
+  if (typeof nota === 'number' && Number.isFinite(nota)) {
     if (nota >= 7.0) {
       return (
         <div className="flex items-center justify-center text-emerald-600 dark:text-emerald-400" title={`Nota: ${nota.toFixed(1)}`}>
@@ -197,8 +212,10 @@ function ClassDetails() {
     matriculatedAlunoIds,
     diario,
     createMatricula,
+    isCreatingMatricula,
     updateMatricula,
     deleteMatricula,
+    isDeletingMatricula,
     saveDiarioPresenca,
     isSavingDiario,
   } = useClassDetails(selectedClassId, {
@@ -277,6 +294,8 @@ function ClassDetails() {
   const [isStudentDropdownOpen, setIsStudentDropdownOpen] = useState(false);
   const [selectedCompanyId, setSelectedCompanyId] = useState('');
   const [formSoftware, setFormSoftware] = useState('AeroFS');
+  const addStudentSubmitRef = useRef(false);
+  const deleteMatriculaSubmitRef = useRef(false);
 
   // Discard Confirmation state for dirty student enrollment modal
   const [showStudentDiscardConfirm, setShowStudentDiscardConfirm] = useState(false);
@@ -349,10 +368,10 @@ function ClassDetails() {
     doc.setFont('helvetica', 'bold');
     doc.text('Cmte. Roberto Silva', 15, 51);
     
-    const formattedDate = new Date(classData.data_termino + 'T00:00:00').toLocaleDateString('pt-BR', { 
-      day: 'numeric', 
-      month: 'long', 
-      year: 'numeric' 
+    const formattedDate = formatClassDate(classData.data_termino, {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
     });
     doc.text(formattedDate, 110, 51);
 
@@ -503,8 +522,9 @@ function ClassDetails() {
   const classDates = useMemo(() => {
     if (!classData) return [];
     const dates = [];
-    const start = new Date(classData.data_inicio + 'T00:00:00');
-    const end = new Date(classData.data_termino + 'T00:00:00');
+    const start = parseClassDate(classData.data_inicio);
+    const end = parseClassDate(classData.data_termino);
+    if (!start || !end || start > end) return dates;
 
     // Gen dates day by day
     const current = new Date(start);
@@ -524,8 +544,9 @@ function ClassDetails() {
   const classSessions = useMemo(() => {
     if (!classData) return [];
     const sessions = [];
-    const start = new Date(classData.data_inicio + 'T00:00:00');
-    const end = new Date(classData.data_termino + 'T00:00:00');
+    const start = parseClassDate(classData.data_inicio);
+    const end = parseClassDate(classData.data_termino);
+    if (!start || !end || start > end) return sessions;
 
     const periods = getAttendancePeriodsForShift(classData.turno);
 
@@ -610,11 +631,12 @@ function ClassDetails() {
 
   // Add Student Action
   const handleAddStudentSubmit = async () => {
-    if (isInstructor) return;
-    if (!selectedAlunoId) {
+    if (isInstructor || addStudentSubmitRef.current || isCreatingMatricula) return;
+    if (!selectedAlunoId || !classData?.id) {
       alert('Selecione um aluno da lista.');
       return;
     }
+    addStudentSubmitRef.current = true;
 
     try {
       await createMatricula({
@@ -639,7 +661,10 @@ function ClassDetails() {
       setSelectedAlunoId('');
       setSelectedCompanyId('');
     } catch (err) {
-      console.error(err);
+      const message = err instanceof Error ? err.message : 'Não foi possível matricular o aluno.';
+      alert(message.includes('já está matriculado') ? message : 'Não foi possível matricular o aluno. Tente novamente.');
+    } finally {
+      addStudentSubmitRef.current = false;
     }
   };
 
@@ -903,8 +928,19 @@ function ClassDetails() {
                       </tr>
                     ) : matriculas.map((m) => {
                       const student = users.find((u) => u.id === m.aluno_id);
-                      const studentName = m.aluno_nome || student?.nome_completo || 'Aluno Desconhecido';
-                      const studentCpf = m.aluno_cpf || student?.cpf || '---.---.---.--';
+                      const studentName = typeof m.aluno_nome === 'string' && m.aluno_nome.trim()
+                        ? m.aluno_nome
+                        : typeof student?.nome_completo === 'string' && student.nome_completo.trim()
+                          ? student.nome_completo
+                          : 'Aluno desconhecido';
+                      const studentCpf = typeof m.aluno_cpf === 'string' && m.aluno_cpf.trim()
+                        ? m.aluno_cpf
+                        : typeof student?.cpf === 'string' && student.cpf.trim()
+                          ? student.cpf
+                          : 'CPF não informado';
+                      const attendancePercentage = typeof m.percentual_presenca === 'number' && Number.isFinite(m.percentual_presenca)
+                        ? m.percentual_presenca
+                        : 0;
                       const b2b = companies.find((c) => c.id === m.empresa_b2b_id);
 
                       return (
@@ -951,7 +987,7 @@ function ClassDetails() {
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         setOpenMenuStudentId(null);
-                                        setMatriculaToDelete({ id: m.id, studentName: student?.nome_completo });
+                                        setMatriculaToDelete({ id: m.id, studentName });
                                       }}
                                       className="w-full text-left px-4 py-2 text-xs font-semibold text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 flex items-center gap-2"
                                     >
@@ -981,8 +1017,8 @@ function ClassDetails() {
                             {studentName}
                           </td>
                           <td className="px-4 py-2 text-center font-bold">
-                            <span className={m.percentual_presenca < 75 ? 'text-red-500' : 'text-slate-900 dark:text-slate-200'}>
-                              {m.percentual_presenca}%
+                            <span className={attendancePercentage < 75 ? 'text-red-500' : 'text-slate-900 dark:text-slate-200'}>
+                              {attendancePercentage}%
                             </span>
                           </td>
                           {/* 1ª Chamada Icon Status */}
@@ -1051,12 +1087,12 @@ function ClassDetails() {
                     <CalendarDays className="w-4 h-4 text-gray-500 dark:text-slate-400" />
                     <span>
                       {(() => {
-                        const date = new Date(classData.data_inicio + 'T12:00:00');
+                        const date = parseClassDate(classData.data_inicio);
                         const months = [
                           'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
                           'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
                         ];
-                        return `${months[date.getMonth()]} ${date.getFullYear()}`;
+                        return date ? `${months[date.getMonth()]} ${date.getFullYear()}` : 'Data não informada';
                       })()}
                     </span>
                     <ChevronDown className="w-4 h-4 text-gray-400" />
@@ -1149,12 +1185,18 @@ function ClassDetails() {
                     ) : allMatriculas.map((m) => {
                       const student = users.find((u) => u.id === m.aluno_id);
                       if (!student) return null;
+                      const studentName = typeof student.nome_completo === 'string' && student.nome_completo.trim()
+                        ? student.nome_completo
+                        : 'Aluno desconhecido';
+                      const attendancePercentage = typeof m.percentual_presenca === 'number' && Number.isFinite(m.percentual_presenca)
+                        ? m.percentual_presenca
+                        : 0;
 
                       // Generate Initials
-                      const parts = student.nome_completo.trim().split(/\s+/);
-                      const initials = parts.length > 1 
+                      const parts = studentName.trim().split(/\s+/);
+                      const initials = parts.length > 1
                         ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
-                        : student.nome_completo.substring(0, 2).toUpperCase();
+                        : studentName.substring(0, 2).toUpperCase();
 
                       return (
                         <tr
@@ -1167,7 +1209,7 @@ function ClassDetails() {
                               {initials}
                             </div>
                             <span className="truncate max-w-[180px] text-sm">
-                              {student.nome_completo}
+                              {studentName}
                             </span>
                           </td>
 
@@ -1175,14 +1217,14 @@ function ClassDetails() {
                           <td className="px-4 py-2 border-r border-gray-150 dark:border-slate-800/80 text-center">
                             <span
                               className={`inline-block px-2.5 py-1 rounded-lg text-[11px] font-bold border ${
-                                m.percentual_presenca === 100
+                                attendancePercentage === 100
                                   ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-450 border-emerald-150 dark:border-emerald-900/30'
-                                  : m.percentual_presenca >= 75
+                                  : attendancePercentage >= 75
                                   ? 'bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-450 border-amber-150 dark:border-amber-900/30'
                                   : 'bg-rose-50 dark:bg-rose-950/20 text-rose-700 dark:text-rose-450 border-rose-150 dark:border-rose-900/30'
                               }`}
                             >
-                              {m.percentual_presenca}%
+                              {attendancePercentage}%
                             </span>
                           </td>
 
@@ -1233,7 +1275,7 @@ function ClassDetails() {
                                       }}
                                       onBlur={cancelAttendanceHold}
                                       className="relative w-7 h-7 rounded-sm transition-all cursor-pointer mx-auto disabled:cursor-wait disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                                      aria-label={`${isPresent ? 'Remover presença' : 'Marcar presença'} de ${student.nome_completo} em ${dateStr}, período ${period}. Pressione e segure por um segundo.`}
+                                      aria-label={`${isPresent ? 'Remover presença' : 'Marcar presença'} de ${studentName} em ${dateStr}, período ${period}. Pressione e segure por um segundo.`}
                                     >
                                       {holdProgress > 0 && (
                                         <span
@@ -1305,11 +1347,14 @@ function ClassDetails() {
                     ) : allMatriculas.map((m) => {
                       const student = users.find((u) => u.id === m.aluno_id);
                       if (!student) return null;
+                      const studentName = typeof student.nome_completo === 'string' && student.nome_completo.trim()
+                        ? student.nome_completo
+                        : 'Aluno desconhecido';
 
-                      const parts = student.nome_completo.trim().split(/\s+/);
-                      const initials = parts.length > 1 
+                      const parts = studentName.trim().split(/\s+/);
+                      const initials = parts.length > 1
                         ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
-                        : student.nome_completo.substring(0, 2).toUpperCase();
+                        : studentName.substring(0, 2).toUpperCase();
                       
                       const nota1 = m.nota_1_chamada;
                       const nota2 = m.nota_2_chamada;
@@ -1326,7 +1371,7 @@ function ClassDetails() {
                               {initials}
                             </div>
                             <span className="truncate max-w-[180px] text-sm">
-                              {student.nome_completo}
+                              {studentName}
                             </span>
                           </td>
                           <td className="px-4 py-2 border-r border-gray-150 dark:border-slate-800/80 text-center">
@@ -1388,7 +1433,7 @@ Prezados,
 
 Encaminhamos em anexo o ofício formal solicitando autorização para visita técnica nas instalações, conforme diretrizes da IS nº 110.
 
-A visita está prevista para ${new Date(classData.data_termino + 'T00:00:00').toLocaleDateString('pt-BR')} sob responsabilidade do Cmte. Roberto Silva. O documento anexo contém a relação completa de ${totalAlunos} alunos aptos.
+A visita está prevista para ${formatClassDate(classData.data_termino)} sob responsabilidade do Cmte. Roberto Silva. O documento anexo contém a relação completa de ${totalAlunos} alunos aptos.
 
 Em caso de dúvidas, favor contatar via telefone informado ou responder a este e-mail.
 
@@ -1420,7 +1465,7 @@ Equipe Airport`;
                   <div>
                     <span className="block text-gray-400 font-bold tracking-wider uppercase">DATA PREVISTA</span>
                     <span className="font-bold text-slate-900">
-                      {new Date(classData.data_termino + 'T00:00:00').toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                      {formatClassDate(classData.data_termino, { day: 'numeric', month: 'long', year: 'numeric' })}
                     </span>
                   </div>
                   <div>
@@ -1864,7 +1909,7 @@ Equipe Airport`;
                   {/* Visual container */}
                   <div className="bg-slate-50 dark:bg-slate-850 rounded-xl border border-gray-200 dark:border-slate-800 h-32 flex items-center justify-center flex-col gap-2">
                     <Contact className="w-10 h-10 text-slate-400 dark:text-slate-500" />
-                    <span className="text-[10px] text-gray-400 font-mono">RG_{selectedStudentForDocs.cpf.replace(/\D/g, '')}.pdf</span>
+                    <span className="text-[10px] text-gray-400 font-mono">RG_{String(selectedStudentForDocs?.cpf ?? '').replace(/\D/g, '') || 'aluno'}.pdf</span>
                   </div>
                 </div>
 
@@ -1886,7 +1931,7 @@ Equipe Airport`;
                   <div className="bg-slate-50 dark:bg-slate-850 rounded-xl border border-gray-200 dark:border-slate-800 h-32 flex items-center justify-center flex-col gap-2">
                     <Home className="w-10 h-10 text-slate-400 dark:text-slate-500" />
                     {compStatus === 'Aprovado' ? (
-                      <span className="text-[10px] text-gray-400 font-mono">COMP_RESIDENCIA_{selectedStudentForDocs.cpf.replace(/\D/g, '')}.pdf</span>
+                      <span className="text-[10px] text-gray-400 font-mono">COMP_RESIDENCIA_{String(selectedStudentForDocs?.cpf ?? '').replace(/\D/g, '') || 'aluno'}.pdf</span>
                     ) : (
                       <span className="text-[10px] text-amber-500 font-semibold font-mono">Pendente de Envio / Revisão</span>
                     )}
@@ -1910,7 +1955,7 @@ Equipe Airport`;
                   {/* Visual container */}
                   <div className="bg-slate-50 dark:bg-slate-850 rounded-xl border border-gray-200 dark:border-slate-800 h-32 flex items-center justify-center flex-col gap-2">
                     <FileCheck2 className="w-10 h-10 text-slate-400 dark:text-slate-500" />
-                    <span className="text-[10px] text-gray-400 font-mono">CERTIDÃO_ANTECEDENTES_{selectedStudentForDocs.cpf.replace(/\D/g, '')}.pdf</span>
+                    <span className="text-[10px] text-gray-400 font-mono">CERTIDÃO_ANTECEDENTES_{String(selectedStudentForDocs?.cpf ?? '').replace(/\D/g, '') || 'aluno'}.pdf</span>
                   </div>
                 </div>
 
@@ -2005,28 +2050,38 @@ Equipe Airport`;
                   />
                   {isStudentDropdownOpen && studentSearchQuery.length > 0 && (
                     <div className="absolute z-10 w-full mt-1 bg-white dark:bg-slate-850 border border-gray-200 dark:border-slate-700 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                      {availableStudents.filter(s => 
-                        s.nome_completo.toLowerCase().includes(studentSearchQuery.toLowerCase()) || 
-                        s.cpf.replace(/\D/g, '').includes(studentSearchQuery.replace(/\D/g, ''))
-                      ).length === 0 ? (
+                      {availableStudents.filter(s => {
+                        const name = typeof s.nome_completo === 'string' ? s.nome_completo : '';
+                        const cpf = typeof s.cpf === 'string' ? s.cpf : '';
+                        const search = studentSearchQuery.toLowerCase();
+                        const numericSearch = studentSearchQuery.replace(/\D/g, '');
+                        return name.toLowerCase().includes(search) || cpf.replace(/\D/g, '').includes(numericSearch);
+                      }).length === 0 ? (
                         <div className="p-3 text-xs text-gray-500 text-center">Nenhum aluno encontrado.</div>
                       ) : (
-                        availableStudents.filter(s => 
-                          s.nome_completo.toLowerCase().includes(studentSearchQuery.toLowerCase()) || 
-                          s.cpf.replace(/\D/g, '').includes(studentSearchQuery.replace(/\D/g, ''))
-                        ).map(stud => (
+                        availableStudents.filter(s => {
+                          const name = typeof s.nome_completo === 'string' ? s.nome_completo : '';
+                          const cpf = typeof s.cpf === 'string' ? s.cpf : '';
+                          const search = studentSearchQuery.toLowerCase();
+                          const numericSearch = studentSearchQuery.replace(/\D/g, '');
+                          return name.toLowerCase().includes(search) || cpf.replace(/\D/g, '').includes(numericSearch);
+                        }).map(stud => {
+                          const name = typeof stud.nome_completo === 'string' ? stud.nome_completo : 'Aluno sem nome';
+                          const cpf = typeof stud.cpf === 'string' ? stud.cpf : 'CPF não informado';
+                          return (
                           <div
                             key={stud.id}
                             onClick={() => {
                               setSelectedAlunoId(stud.id);
-                              setStudentSearchQuery(stud.nome_completo + ' (CPF: ' + stud.cpf + ')');
+                              setStudentSearchQuery(`${name} (CPF: ${cpf})`);
                               setIsStudentDropdownOpen(false);
                             }}
                             className="p-2.5 hover:bg-gray-100 dark:hover:bg-slate-800 cursor-pointer text-xs text-slate-800 dark:text-slate-200"
                           >
-                            {stud.nome_completo} (CPF: {stud.cpf})
+                            {name} (CPF: {cpf})
                           </div>
-                        ))
+                          );
+                        })
                       )}
                     </div>
                   )}
@@ -2085,9 +2140,10 @@ Equipe Airport`;
               <button
                 id="btn-confirm-add-student"
                 onClick={handleAddStudentSubmit}
-                className="px-4 py-2 bg-slate-900 dark:bg-teal-600 hover:bg-slate-850 hover:bg-teal-500 text-white font-semibold text-xs rounded shadow-sm cursor-pointer"
+                disabled={isCreatingMatricula}
+                className="px-4 py-2 bg-slate-900 dark:bg-teal-600 hover:bg-slate-850 hover:bg-teal-500 disabled:cursor-not-allowed disabled:opacity-60 text-white font-semibold text-xs rounded shadow-sm cursor-pointer"
               >
-                Matricular Aluno
+                {isCreatingMatricula ? 'Matriculando...' : 'Matricular Aluno'}
               </button>
             </div>
 
@@ -2145,19 +2201,22 @@ Equipe Airport`;
               </button>
               <button
                 id="btn-confirm-delete-matricula"
+                disabled={isDeletingMatricula}
                 onClick={async () => {
-                  if (!matriculaToDelete) return;
+                  if (!matriculaToDelete || deleteMatriculaSubmitRef.current || isDeletingMatricula) return;
+                  deleteMatriculaSubmitRef.current = true;
                   try {
                     await deleteMatricula(matriculaToDelete.id);
                   } catch (err) {
                     console.error(err);
                   } finally {
+                    deleteMatriculaSubmitRef.current = false;
                     setMatriculaToDelete(null);
                   }
                 }}
-                className="flex-1 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-semibold transition-colors shadow-sm cursor-pointer"
+                className="flex-1 py-2 bg-rose-600 hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-60 text-white rounded-lg text-xs font-semibold transition-colors shadow-sm cursor-pointer"
               >
-                Confirmar Remoção
+                {isDeletingMatricula ? 'Removendo...' : 'Confirmar Remoção'}
               </button>
             </div>
         </div>

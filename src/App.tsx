@@ -27,6 +27,7 @@ import Shifts from './pages/Shifts';
 // Import Components
 import Sidebar from './components/Sidebar';
 import { SplashVideo } from './components/SplashVideo';
+import { ErrorBoundary } from './components/ui/ErrorBoundary';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -105,7 +106,11 @@ function AppContent() {
       case 'turnos':
         return <Shifts />;
       case 'class-details':
-        return <ClassDetails />;
+        return (
+          <ErrorBoundary>
+            <ClassDetails />
+          </ErrorBoundary>
+        );
       case 'central-ged':
         return <CentralGed />;
       case 'empresas':

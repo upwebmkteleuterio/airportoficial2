@@ -48,6 +48,7 @@ export function useCompanies() {
 
     isCreating: createCompanyMutation.isPending,
     updateCompany: updateCompanyMutation.mutateAsync,
+    isUpdating: updateCompanyMutation.isPending,
     deleteCompany: deleteCompanyMutation.mutateAsync,
     isDeleting: deleteCompanyMutation.isPending,
   };

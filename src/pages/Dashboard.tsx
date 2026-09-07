@@ -170,10 +170,13 @@ export function Dashboard() {
         createClass,
         updateClass,
         deleteClass,
+        isDeleting,
         getInstrutoresByTurma,
         getClassEditability,
         saveInstrutoresForTurma,
-        isLoading
+        isLoading,
+        isCreating,
+        isUpdating
     } = useClasses({
         page: currentPage,
         pageSize: itemsPerPage,
@@ -277,6 +280,8 @@ export function Dashboard() {
     const [classDraftToResume, setClassDraftToResume] = useState<ClassDraft | null>(null);
     const [showClassDiscardConfirm, setShowClassDiscardConfirm] = useState(false);
     const classDraftOpeningRef = useRef(false);
+    const classSubmitRef = useRef(false);
+    const deleteClassSubmitRef = useRef(false);
 
     const currentClassDraft = useMemo<ClassDraft>(() => ({
         formIdAnac,
@@ -695,10 +700,17 @@ export function Dashboard() {
     }, [classes, getInstrutoresByTurma]);
 
     const handleSaveClass = async () => {
+        if (classSubmitRef.current || isCreating || isUpdating) return;
         if (!formCurso || !formDataInicio || !formDataTermino || !formIdAnac || !formIdInterno || !formEndereco || !formTurno || !formHorarioInicio || !formHorarioTermino) {
             alert("Por favor, preencha todos os campos obrigatórios (*)");
             return;
         }
+        const internalId = Number(formIdInterno);
+        if (!Number.isInteger(internalId)) {
+            alert('O ID interno da escola deve ser um número inteiro.');
+            return;
+        }
+        classSubmitRef.current = true;
 
         try {
             const selectedCourse = courses.find(c => c.id === formCurso) || courses[0];
@@ -713,7 +725,7 @@ export function Dashboard() {
 
                     updates: {
                         id_anac: formIdAnac,
-                        id_interno_escola: parseInt(formIdInterno, 10),
+                        id_interno_escola: internalId,
                         turno: formTurno as any,
                         horario_aulas: horarioAulas,
                         endereco_realizacao: addressName,
@@ -736,7 +748,8 @@ export function Dashboard() {
                 });
             } else {
                 const createdClass = await createClass({
-                    id_anac: formIdAnac,
+                    id_anac: formIdAnac.trim(),
+                    id_interno_escola: internalId,
                     curso_id: selectedCourse.id,
                     turno: formTurno as any,
                     horario_aulas: horarioAulas,
@@ -787,7 +800,12 @@ export function Dashboard() {
             setShowClassDiscardConfirm(false);
             setModalOpen("newClassOpen", false);
         } catch (err) {
-            console.error(err);
+            const message = err instanceof Error ? err.message : 'Não foi possível salvar a turma.';
+            alert(message.includes('ID ANAC') || message.includes('ID interno') || message.includes('identificadores')
+                ? message
+                : 'Não foi possível salvar a turma. Verifique os dados e tente novamente.');
+        } finally {
+            classSubmitRef.current = false;
         }
     };
 
@@ -1702,7 +1720,8 @@ export function Dashboard() {
                         id="btn-form-save"
                         type="button"
                         onClick={handleSaveClass}
-                        className="px-4 py-2 bg-teal-500 hover:bg-teal-600 text-slate-900 font-bold rounded text-xs transition-colors shadow-sm cursor-pointer">Salvar Turma
+                        disabled={isCreating || isUpdating}
+                        className="px-4 py-2 bg-teal-500 hover:bg-teal-600 disabled:cursor-not-allowed disabled:opacity-60 text-slate-900 font-bold rounded text-xs transition-colors shadow-sm cursor-pointer">{isCreating || isUpdating ? 'Salvando...' : 'Salvar Turma'}
                                   </button>
                 </div>
                 {}
@@ -1806,19 +1825,22 @@ export function Dashboard() {
                                           </button>
                         <button
                             id="btn-confirm-delete-class"
+                            disabled={isDeleting}
                             onClick={async () => {
-                                if (!classToDelete)
+                                if (!classToDelete || deleteClassSubmitRef.current || isDeleting)
                                     return;
+                                deleteClassSubmitRef.current = true;
 
                                 try {
                                     await deleteClass(classToDelete.id);
                                 } catch (err) {
                                     console.error(err);
                                 } finally {
+                                    deleteClassSubmitRef.current = false;
                                     setClassToDelete(null);
                                 }
                             }}
-                            className="flex-1 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-semibold transition-colors shadow-sm cursor-pointer">Confirmar Exclusão
+                            className="flex-1 py-2 bg-rose-600 hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-60 text-white rounded-lg text-xs font-semibold transition-colors shadow-sm cursor-pointer">{isDeleting ? 'Excluindo...' : 'Confirmar Exclusão'}
                                           </button>
                     </div>
                 </div>

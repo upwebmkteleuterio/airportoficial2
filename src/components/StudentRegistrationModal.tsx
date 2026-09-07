@@ -315,6 +315,7 @@ export function StudentRegistrationModal({ isOpen, onClose, onSuccess, initialDa
   const [showCloseConfirmation, setShowCloseConfirmation] = useState(false);
   const initialPasswordRef = useRef(formData.senha_temporaria);
   const openingRef = useRef(false);
+  const submitRef = useRef(false);
 
   const { errors, touched, handleBlur, validateField, validateFields, setErrors, setTouched } = useStudentFormValidation(formData, setFormData);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -600,6 +601,8 @@ export function StudentRegistrationModal({ isOpen, onClose, onSuccess, initialDa
   };
 
   const handleSubmit = async () => {
+    if (submitRef.current || isLoading) return;
+    submitRef.current = true;
     try {
       setIsLoading(true);
       let userId = createdUserId;
@@ -656,6 +659,7 @@ export function StudentRegistrationModal({ isOpen, onClose, onSuccess, initialDa
     } catch {
       alert('Erro ao cadastrar aluno.');
     } finally {
+      submitRef.current = false;
       setIsLoading(false);
     }
   };
