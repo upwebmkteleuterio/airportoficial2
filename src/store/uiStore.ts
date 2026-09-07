@@ -75,7 +75,10 @@ export const useUIStore = create<UIState>()(
       temporaryForms: {},
       scrollPositions: {},
 
-      login: (user) => set({ userLogged: user, activeRoute: user.role === 'ALUNO' ? 'aluno-inicio' : 'dashboard' }),
+      login: (user) => set((state) => ({
+        userLogged: user,
+        activeRoute: state.activeRoute === 'login' ? (user.role === 'ALUNO' ? 'aluno-inicio' : 'dashboard') : state.activeRoute,
+      })),
       logout: () => set({ userLogged: null, activeRoute: 'login', selectedClassId: null }),
       setRoute: (route) => set({ activeRoute: route }),
       setSelectedClassId: (id) => set({ selectedClassId: id }),
