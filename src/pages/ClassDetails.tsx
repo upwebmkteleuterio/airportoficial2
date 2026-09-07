@@ -154,6 +154,7 @@ function ClassDetails() {
   const attendanceHoldTimerRef = useRef<number | null>(null);
   const attendanceHoldAnimationRef = useRef<number | null>(null);
   const attendanceHoldKeyRef = useRef<string | null>(null);
+  const attendanceHoldPointerTargetRef = useRef<HTMLButtonElement | null>(null);
   const attendanceHoldCompletedRef = useRef(false);
   const [attendanceHold, setAttendanceHold] = useState<{ key: string; progress: number } | null>(null);
 
@@ -167,14 +168,16 @@ function ClassDetails() {
       attendanceHoldAnimationRef.current = null;
     }
     attendanceHoldKeyRef.current = null;
+    attendanceHoldPointerTargetRef.current = null;
     attendanceHoldCompletedRef.current = false;
     setAttendanceHold(null);
   };
 
-  const startAttendanceHold = (key: string, action: () => void) => {
+  const startAttendanceHold = (key: string, action: () => void, pointerTarget?: HTMLButtonElement) => {
     cancelAttendanceHold();
     const startedAt = performance.now();
     attendanceHoldKeyRef.current = key;
+    attendanceHoldPointerTargetRef.current = pointerTarget ?? null;
     attendanceHoldCompletedRef.current = false;
 
     const updateProgress = (now: number) => {
@@ -195,6 +198,9 @@ function ClassDetails() {
       }
       setAttendanceHold(null);
       attendanceHoldKeyRef.current = null;
+      const pointerTarget = attendanceHoldPointerTargetRef.current;
+      attendanceHoldPointerTargetRef.current = null;
+      pointerTarget?.blur();
       action();
     }, 1000);
     attendanceHoldAnimationRef.current = window.requestAnimationFrame(updateProgress);
@@ -1292,7 +1298,7 @@ function ClassDetails() {
                                       type="button"
                                       id={`freq-toggle-${m.id}-${dateStr}-${period.replace(/\//g, '')}`}
                                       disabled={isSavingDiario}
-                                      onPointerDown={() => startAttendanceHold(holdKey, holdAction)}
+                                      onPointerDown={(event) => startAttendanceHold(holdKey, holdAction, event.currentTarget)}
                                       onPointerUp={cancelAttendanceHold}
                                       onPointerLeave={cancelAttendanceHold}
                                       onPointerCancel={cancelAttendanceHold}

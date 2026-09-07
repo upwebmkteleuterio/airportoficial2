@@ -585,12 +585,15 @@ export const classService = {
         throw new Error('Informe ao menos um campo de nota para atualizar.');
       }
 
+      const gradeUpdates = {
+        nota_1_chamada: updates.nota_1_chamada ?? null,
+        nota_2_chamada: updates.nota_2_chamada ?? null,
+        resultado_final: updates.resultado_final ?? null,
+        status_resultado_final: updates.status_resultado_final ?? null,
+      };
       const { data, error } = await supabase.rpc('update_matricula_notas', {
         p_matricula_id: id,
-        p_nota_1_chamada: updates.nota_1_chamada ?? null,
-        p_nota_2_chamada: updates.nota_2_chamada ?? null,
-        p_resultado_final: updates.resultado_final ?? null,
-        p_status_resultado_final: updates.status_resultado_final ?? null,
+        p_updates: gradeUpdates,
       });
       if (error) throw serviceError(`Não foi possível atualizar as notas da matrícula ${id}`, error);
       if (!data) throw new Error(`Não foi possível atualizar as notas da matrícula ${id}: matrícula não encontrada`);
