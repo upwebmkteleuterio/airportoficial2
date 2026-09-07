@@ -103,11 +103,11 @@ const renderExamStatus = (nota: number | null | undefined, res: string | null | 
   }
 };
 
-export function NotaInput({ value, onChange }: { value?: number, onChange: (val?: number) => void }) {
-  const [localVal, setLocalVal] = useState(value !== undefined ? String(value).replace('.', ',') : '');
+export function NotaInput({ value, onChange }: { value?: number | null, onChange: (val?: number) => void }) {
+  const [localVal, setLocalVal] = useState(value !== undefined && value !== null ? String(value).replace('.', ',') : '');
 
   useEffect(() => {
-    setLocalVal(value !== undefined ? String(value).replace('.', ',') : '');
+    setLocalVal(value !== undefined && value !== null ? String(value).replace('.', ',') : '');
   }, [value]);
 
   return (
@@ -131,11 +131,12 @@ export function NotaInput({ value, onChange }: { value?: number, onChange: (val?
           onChange(num);
           setLocalVal(String(num).replace('.', ','));
         } else {
-          setLocalVal(value !== undefined ? String(value).replace('.', ',') : '');
+          setLocalVal(value !== undefined && value !== null ? String(value).replace('.', ',') : '');
         }
       }}
       className="w-16 mx-auto px-2 py-1 text-center border border-gray-300 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-sm focus:outline-none focus:ring-1 focus:ring-teal-500"
       placeholder="0,0"
+      aria-label="Nota"
     />
   );
 }
@@ -1133,6 +1134,11 @@ function ClassDetails() {
               </div>
             </div>
 
+            <div className="flex items-start gap-2 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-xs text-teal-900 dark:border-teal-800 dark:bg-teal-950/30 dark:text-teal-200" role="note">
+              <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              <span><strong>Dica:</strong> mantenha pressionado por 1 segundo ou clique duas vezes em uma célula para alterar o status de presença.</span>
+            </div>
+
             {/* Frequência Grid estilo planilha */}
             <div className="flex-1 border border-gray-250 dark:border-slate-800 rounded-2xl overflow-hidden bg-white dark:bg-slate-900 flex flex-col shadow-sm min-h-[250px]">
               <div className="overflow-x-auto overflow-y-auto flex-1 custom-scrollbar">
@@ -1261,6 +1267,11 @@ function ClassDetails() {
                                       onPointerUp={cancelAttendanceHold}
                                       onPointerLeave={cancelAttendanceHold}
                                       onPointerCancel={cancelAttendanceHold}
+                                      onDoubleClick={(event) => {
+                                        event.preventDefault();
+                                        cancelAttendanceHold();
+                                        holdAction();
+                                      }}
                                       onKeyDown={(event) => {
                                         if ((event.key === 'Enter' || event.key === ' ') && !event.repeat) {
                                           event.preventDefault();
@@ -1275,7 +1286,7 @@ function ClassDetails() {
                                       }}
                                       onBlur={cancelAttendanceHold}
                                       className="relative w-7 h-7 rounded-sm transition-all cursor-pointer mx-auto disabled:cursor-wait disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                                      aria-label={`${isPresent ? 'Remover presença' : 'Marcar presença'} de ${studentName} em ${dateStr}, período ${period}. Pressione e segure por um segundo.`}
+                                      aria-label={`${isPresent ? 'Remover presença' : 'Marcar presença'} de ${studentName} em ${dateStr}, período ${period}. Mantenha pressionado por um segundo ou clique duas vezes.`}
                                     >
                                       {holdProgress > 0 && (
                                         <span
