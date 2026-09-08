@@ -10,6 +10,7 @@ type UploadDocumentInput = Omit<Documento, 'id' | 'data_criacao' | 'url_armazena
 
 const allowedUploadTypes = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
 type ReplacementOptions = Partial<Pick<Documento, 'status' | 'origem_cadastro' | 'metodo_verificacao' | 'storage_area'>>;
+const replacementLocks = new Set<string>();
 
 function safeFileName(fileName: string) {
   return fileName.trim().replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 120) || 'documento';
@@ -169,8 +170,13 @@ export const documentService = {
     if (source.status !== DocumentStatus.RECUSADO || source.esta_atual === false) {
       throw new Error('Somente a versão recusada atual pode receber uma substituição.');
     }
+    if (replacementLocks.has(source.id)) {
+      throw new Error('Já existe uma substituição em andamento para este documento.');
+    }
+    replacementLocks.add(source.id);
 
-    const documentId = newServiceId('doc');
+    try {
+      const documentId = newServiceId('doc');
     const version = (source.versao ?? 1) + 1;
     const groupId = source.grupo_documento_id || `${source.usuario_id}:${source.tipo_documento}`;
     const storageArea = options.storage_area || 'temporarios';
@@ -224,7 +230,10 @@ export const documentService = {
       throw serviceError('Não foi possível preservar a relação de substituição', markOldError);
     }
 
-    return replacement as Documento;
+      return replacement as Documento;
+    } finally {
+      replacementLocks.delete(source.id);
+    }
   },
 
   promoteToOfficial: async (document: Documento): Promise<Documento> => {

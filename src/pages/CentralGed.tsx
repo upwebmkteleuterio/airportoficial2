@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ShieldCheck,
   FileCheck,
@@ -42,6 +42,7 @@ import { useClasses } from '../hooks/useClasses';
 import { Documento, DocumentStatus, UserRole, Usuario } from '../types';
 import { approvalService } from '../services/approvalService';
 import { documentService } from '../services/documentService';
+import { userService } from '../services/userService';
 import { getDocumentSelectorLabel, getRequiredDocumentTypes } from '../utils/documentRequirements';
 import { Modal } from '../components/ui/Modal';
 import { Button } from '../components/ui/Button';
@@ -80,7 +81,14 @@ export function CentralGed() {
   const { classes } = useClasses();
 
   // Queue of pending students loaded from the database
-  const { users, total, isFetching: isFetchingUsers } = useUsers({
+  const {
+    users,
+    total,
+    isFetching: isFetchingUsers,
+    isError: isUsersError,
+    error: usersError,
+    refetch: retryUsers
+  } = useUsers({
     page,
     pageSize,
     role: UserRole.ALUNO,
@@ -90,7 +98,24 @@ export function CentralGed() {
     turmaId: selectedTurma
   });
   const pageUserIds = useMemo(() => users.map((user) => user.id), [users]);
-  const { documents, isFetching: isFetchingDocuments } = useDocuments(pageUserIds);
+  const {
+    documents,
+    isFetching: isFetchingDocuments,
+    isError: isDocumentsError,
+    error: documentsError,
+    refetch: retryDocuments
+  } = useDocuments(pageUserIds);
+  const b2bCountQuery = useQuery({
+    queryKey: ['users', 'count', 'b2b-pendente', { search: searchQuery, empresaId: selectedEmpresa, turmaId: selectedTurma }],
+    queryFn: () => userService.getCount({
+      role: UserRole.ALUNO,
+      status: 'pendente',
+      origemCadastro: 'b2b',
+      search: searchQuery,
+      empresaId: selectedEmpresa,
+      turmaId: selectedTurma
+    })
+  });
 
   const [queueItems, setQueueItems] = useState<QueueItem[]>([]);
   
@@ -129,6 +154,9 @@ export function CentralGed() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [actionError, setActionError] = useState('');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewError, setPreviewError] = useState('');
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewRetryToken, setPreviewRetryToken] = useState(0);
   const [activeDocumentId, setActiveDocumentId] = useState<string | null>(null);
   const [reviewTab, setReviewTab] = useState<'documents' | 'replace' | 'data'>('documents');
   const [replacementFiles, setReplacementFiles] = useState<Record<string, File | null>>({});
@@ -169,14 +197,22 @@ export function CentralGed() {
   useEffect(() => {
     let cancelled = false;
     setPreviewUrl(null);
+    setPreviewError('');
+    setPreviewLoading(false);
     if (!activeReviewItem || !selectedReviewDocument) return;
+    setPreviewLoading(true);
     void documentService.createSignedUrl(selectedReviewDocument).then((url) => {
       if (!cancelled) setPreviewUrl(url);
-    }).catch(() => {
-      if (!cancelled) setPreviewUrl(null);
+    }).catch((error) => {
+      if (!cancelled) {
+        setPreviewUrl(null);
+        setPreviewError(error instanceof Error ? error.message : 'Não foi possível carregar a pré-visualização.');
+      }
+    }).finally(() => {
+      if (!cancelled) setPreviewLoading(false);
     });
     return () => { cancelled = true; };
-  }, [activeReviewItem, selectedReviewDocument]);
+  }, [activeReviewItem, selectedReviewDocument, previewRetryToken]);
 
   // Search and company/class filters are applied by Supabase before this page is returned.
   // IA analysis is currently manual for this queue, so non-manual IA filters have no results.
@@ -184,7 +220,11 @@ export function CentralGed() {
   const filteredTotal = selectedIaFilter === 'todos' || selectedIaFilter === 'nao_aplicavel' ? total : 0;
   const totalPages = Math.max(1, Math.ceil(filteredTotal / pageSize));
   const displayPage = Math.min(page, totalPages);
-  const isLoading = isFetchingUsers || isFetchingDocuments || page > totalPages;
+  const hasLoadError = isUsersError || isDocumentsError;
+  const isLoading = !hasLoadError && (isFetchingUsers || isFetchingDocuments || page > totalPages);
+  const loadErrorMessage = isUsersError
+    ? (usersError instanceof Error ? usersError.message : 'Não foi possível carregar os usuários da fila.')
+    : (documentsError instanceof Error ? documentsError.message : 'Não foi possível carregar os documentos da fila.');
   const firstVisibleRecord = filteredTotal === 0 ? 0 : (displayPage - 1) * pageSize + 1;
   const lastVisibleRecord = filteredTotal === 0 ? 0 : Math.min(displayPage * pageSize, filteredTotal);
 
@@ -198,7 +238,7 @@ export function CentralGed() {
 
   // Dynamic Summary Counters
   const countPendente = filteredTotal;
-  const countB2bPendente = useMemo(() => queueItems.filter(i => i.profile.origem_cadastro === 'b2b').length, [queueItems]);
+  const countB2bPendente = b2bCountQuery.data ?? 0;
   const countDocumentacaoCompleta = useMemo(() => queueItems.filter(i => i.missingDocuments.length === 0).length, [queueItems]);
 
   // Actions
@@ -461,9 +501,22 @@ export function CentralGed() {
             <span className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-widest block">
               CADASTROS B2B
             </span>
-            <span className="text-3xl font-extrabold text-red-600 dark:text-red-400 block mt-1.5">
-              {countB2bPendente}
-            </span>
+            {b2bCountQuery.isError ? (
+              <div className="mt-1.5 space-y-1">
+                <p className="text-xs font-semibold text-red-600 dark:text-red-400">Não foi possível consultar.</p>
+                <button
+                  type="button"
+                  onClick={() => void b2bCountQuery.refetch()}
+                  className="inline-flex items-center gap-1 text-[10px] font-bold text-red-700 underline dark:text-red-300"
+                >
+                  <RefreshCw className="h-3 w-3" /> Tentar novamente
+                </button>
+              </div>
+            ) : (
+              <span className="text-3xl font-extrabold text-red-600 dark:text-red-400 block mt-1.5">
+                {countB2bPendente}
+              </span>
+            )}
           </div>
           <div className="w-12 h-12 rounded-xl bg-red-500/10 flex items-center justify-center text-red-600 dark:text-red-400">
             <AlertTriangle className="w-6 h-6" />
@@ -492,20 +545,37 @@ export function CentralGed() {
           <table className="w-full text-left border-collapse whitespace-nowrap text-xs">
             <thead className="sticky top-0 bg-slate-50 dark:bg-slate-850 z-10 border-b border-gray-200 dark:border-slate-800 font-bold uppercase tracking-wider text-gray-500 dark:text-slate-400">
               <tr>
-                <th className="px-5 py-4 w-12 text-center">
-                  <input type="checkbox" className="w-4 h-4 text-[#005f5f] rounded border-gray-300" readOnly />
-                </th>
+                <th className="px-5 py-4 text-center">AÇÕES</th>
                 <th className="px-5 py-4">ALUNO / ID</th>
                 <th className="px-5 py-4">DOCUMENTO</th>
                 <th className="px-5 py-4">DATA UPLOAD</th>
                 <th className="px-5 py-4">ANÁLISE IA</th>
-                <th className="px-5 py-4 text-center">AÇÕES</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-150 dark:divide-slate-800 font-sans text-slate-700 dark:text-slate-200">
-              {isLoading ? (
+              {hasLoadError ? (
                 <tr>
-                  <td colSpan={6} className="px-5 py-12 text-center">
+                  <td colSpan={5} className="px-5 py-12 text-center">
+                    <div className="mx-auto flex max-w-sm flex-col items-center justify-center gap-3 text-red-700 dark:text-red-300">
+                      <AlertCircle className="h-8 w-8" />
+                      <p className="text-sm font-bold">Não foi possível carregar a fila GED.</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">{loadErrorMessage}</p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void retryUsers();
+                          void retryDocuments();
+                        }}
+                        className="inline-flex items-center gap-2 rounded-lg bg-[#005f5f] px-3 py-2 text-xs font-bold text-white hover:bg-[#004d4d]"
+                      >
+                        <RefreshCw className="h-3.5 w-3.5" /> Tentar novamente
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ) : isLoading ? (
+                <tr>
+                  <td colSpan={5} className="px-5 py-12 text-center">
                     <div className="flex flex-col items-center justify-center gap-2 text-gray-500">
                       <div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin"></div>
                       <p className="font-sans text-sm">Carregando fila GED...</p>
@@ -514,7 +584,7 @@ export function CentralGed() {
                 </tr>
               ) : listToRender.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-5 py-12 text-center text-gray-500 font-sans">
+                  <td colSpan={5} className="px-5 py-12 text-center text-gray-500 font-sans">
                     <div className="flex flex-col items-center justify-center gap-2.5 max-w-sm mx-auto">
                       <div className="p-3 bg-amber-500/10 rounded-full text-amber-500">
                         <AlertCircle className="w-6 h-6 animate-pulse" />
@@ -545,9 +615,20 @@ export function CentralGed() {
                       item.status === 'Aprovado' ? 'opacity-65 bg-slate-50/25' : ''
                     }`}
                   >
-                  {/* Checkbox Column */}
+                  {/* Ações Column */}
                   <td className="px-5 py-4 text-center border-r border-gray-100/50 dark:border-slate-800/30">
-                    <input type="checkbox" className="w-4 h-4 text-[#005f5f] rounded border-gray-300 cursor-pointer" readOnly />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActionError('');
+                        setActiveReviewItem(item);
+                        setJustificativaText('');
+                      }}
+                      disabled={isProcessing}
+                      className="px-3 py-1.5 border border-gray-300 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-lg font-bold text-xs cursor-pointer disabled:opacity-50"
+                    >
+                      Revisar
+                    </button>
                   </td>
 
                   {/* Aluno Column */}
@@ -623,23 +704,6 @@ export function CentralGed() {
                     </div>
                   </td>
 
-                  {/* Acoes Column */}
-                  <td className="px-5 py-4 text-center">
-                    <div className="flex items-center justify-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActionError('');
-                          setActiveReviewItem(item);
-                          setJustificativaText('');
-                        }}
-                        disabled={isProcessing}
-                        className="px-3 py-1.5 border border-gray-300 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-lg font-bold text-xs cursor-pointer disabled:opacity-50"
-                      >
-                        Revisar
-                      </button>
-                    </div>
-                  </td>
                 </tr>
                 )))}
             </tbody>
@@ -708,7 +772,7 @@ export function CentralGed() {
 
       
       {/* Filters Modal */}
-      <Modal isOpen={isFiltersModalOpen} onClose={() => setIsFiltersModalOpen(false)}>
+      <Modal isOpen={isFiltersModalOpen} onClose={() => setIsFiltersModalOpen(false)} ariaLabel="Filtros de aprovações pendentes">
         <div className="bg-white dark:bg-slate-900 rounded-xl p-6 shadow-2xl font-sans relative overflow-hidden border border-gray-200 dark:border-slate-800">
           <h3 className="font-display text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2 mb-4">
             <Filter className="w-5 h-5 text-[#005f5f] dark:text-teal-400" />
@@ -783,7 +847,7 @@ export function CentralGed() {
       </Modal>
 
       {/* --- SIDE SLIDING DRAWER / DIALOG FOR MANUAL REVIEW (REVISAR) --- */}
-      <SlidePanel isOpen={!!activeReviewItem} onClose={() => { clearRejectionState(); setActiveReviewItem(null); }}>
+      <SlidePanel isOpen={!!activeReviewItem} onClose={() => { clearRejectionState(); setActiveReviewItem(null); }} ariaLabel="Revisão documental do cadastro">
         {activeReviewItem && (
           <div className="flex flex-col h-full font-sans">
             {/* Drawer Header */}
@@ -891,7 +955,7 @@ export function CentralGed() {
                               setRejectionJustification('');
                               setActionError('');
                             }}
-                            disabled={isProcessing || document.status === DocumentStatus.RECUSADO}
+                            disabled={isProcessing || document.status !== DocumentStatus.PENDENTE || document.esta_atual !== true}
                             aria-expanded={activeRejectDocumentId === document.id}
                             aria-controls={`rejection-panel-${document.id}`}
                             className="rounded bg-red-600 px-2 py-1 font-bold text-white focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-50"
@@ -954,7 +1018,23 @@ export function CentralGed() {
                   Pré-visualização segura
                 </span>
                 <div className="overflow-hidden rounded-xl border border-gray-200 bg-slate-100 dark:border-slate-800 dark:bg-slate-950">
-                  {previewUrl && selectedReviewDocument?.arquivo_nome.match(/\.(jpg|jpeg|png|webp)$/i) ? (
+                  {previewLoading ? (
+                    <div className="flex h-32 items-center justify-center gap-2 text-xs text-slate-500">
+                      <RefreshCw className="h-4 w-4 animate-spin" /> Carregando pré-visualização...
+                    </div>
+                  ) : previewError ? (
+                    <div className="flex min-h-32 flex-col items-center justify-center gap-2 p-4 text-center text-xs text-red-700 dark:text-red-300">
+                      <AlertCircle className="h-5 w-5" />
+                      <p>{previewError}</p>
+                      <button
+                        type="button"
+                        onClick={() => setPreviewRetryToken((current) => current + 1)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-red-200 px-3 py-1.5 font-bold hover:bg-red-50 dark:border-red-900 dark:hover:bg-red-950/30"
+                      >
+                        <RefreshCw className="h-3.5 w-3.5" /> Tentar novamente
+                      </button>
+                    </div>
+                  ) : previewUrl && selectedReviewDocument?.arquivo_nome.match(/\.(jpg|jpeg|png|webp)$/i) ? (
                     <img src={previewUrl} alt={`Pré-visualização de ${selectedReviewDocument?.arquivo_nome}`} className="max-h-64 w-full object-contain" />
                   ) : previewUrl ? (
                     <a href={previewUrl} target="_blank" rel="noreferrer" className="flex h-32 items-center justify-center gap-2 text-xs font-bold text-teal-700 hover:bg-teal-50">

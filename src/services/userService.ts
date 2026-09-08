@@ -17,6 +17,10 @@ export interface UserPage {
   total: number;
 }
 
+export interface UserCountOptions extends UserFilters {
+  origemCadastro?: Usuario['origem_cadastro'];
+}
+
 type UserFilters = Pick<UserPageOptions, 'role' | 'status' | 'search' | 'empresaId' | 'turmaId'>;
 type ProfileRow = Omit<Usuario, 'id'> & { id?: string; legacy_id: string };
 export type CreateUserInput = Omit<Usuario, 'id'> & { id?: string; password?: string };
@@ -86,6 +90,29 @@ export const userService = {
       data: (data ?? []).map((row) => toUsuario(row as ProfileRow)),
       total: count ?? 0
     };
+  },
+
+  getCount: async ({ role, status, search, empresaId, turmaId, origemCadastro }: UserCountOptions = {}): Promise<number> => {
+    let query = supabase
+      .from('profiles')
+      .select('legacy_id', { count: 'exact', head: true });
+
+    if (role) query = query.eq('role', role);
+    if (status) query = query.eq('status', status);
+    if (origemCadastro) query = query.eq('origem_cadastro', origemCadastro);
+    if (empresaId && empresaId !== 'todas') query = query.eq('empresa_id', empresaId);
+    if (turmaId && turmaId !== 'todas') query = query.eq('turma_id_pendente', turmaId);
+    const term = search?.trim();
+    if (term) {
+      const escapedTerm = term.replace(/[^0-9A-Za-zÀ-ÿ@. -]/g, ' ').slice(0, 100);
+      query = query.or(
+        `nome_completo.ilike.%${escapedTerm}%,cpf.ilike.%${escapedTerm}%,email.ilike.%${escapedTerm}%`
+      );
+    }
+
+    const { count, error } = await query;
+    if (error) throw serviceError('Não foi possível contar os cadastros B2B', error);
+    return count ?? 0;
   },
 
   getById: async (id: string): Promise<Usuario | undefined> => {

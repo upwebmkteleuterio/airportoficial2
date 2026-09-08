@@ -51,24 +51,32 @@ async function registerAudit(reviewerId: string, action: string, userId: string,
   });
 }
 
+const replacementLocks = new Set<string>();
+
 export const approvalService = {
   getCurrentReviewerId: getReviewerId,
 
   getMissingDocuments: (profile: Usuario, documents: Documento[]) => missingDocuments(profile, documents),
 
   replaceDocument: async (profile: Usuario, source: Documento, file: File) => {
-    if (profile.status !== 'pendente') throw new Error('Este cadastro não está disponível para substituição.');
-    const replacement = await documentService.createReplacement(source, file);
-    await userService.update(profile.id, { status: 'pendente' });
-    const reviewerId = await getReviewerId();
-    await registerAudit(
-      reviewerId,
-      `Enviou substituto para ${source.arquivo_nome}`,
-      profile.id,
-      replacement,
-      `Substitui o documento ${source.id}`
-    );
-    return replacement;
+    if (replacementLocks.has(source.id)) throw new Error('Já existe uma substituição em andamento para este documento.');
+    replacementLocks.add(source.id);
+    try {
+      if (profile.status !== 'pendente') throw new Error('Este cadastro não está disponível para substituição.');
+      const replacement = await documentService.createReplacement(source, file);
+      await userService.update(profile.id, { status: 'pendente' });
+      const reviewerId = await getReviewerId();
+      await registerAudit(
+        reviewerId,
+        `Enviou substituto para ${source.arquivo_nome}`,
+        profile.id,
+        replacement,
+        `Substitui o documento ${source.id}`
+      );
+      return replacement;
+    } finally {
+      replacementLocks.delete(source.id);
+    }
   },
 
   approveDocument: async (profile: Usuario, document: Documento, notes: string) => {
@@ -94,8 +102,8 @@ export const approvalService = {
     const normalizedReason = reason.trim();
     if (!normalizedReason) throw new Error('Informe o motivo da recusa.');
     if (profile.status !== 'pendente') throw new Error('Este cadastro não está pendente de aprovação.');
-    if (document.esta_atual === false || document.status === DocumentStatus.SUBSTITUIDO) {
-      throw new Error('Somente o documento atual pode ser analisado.');
+    if (document.esta_atual !== true || document.status !== DocumentStatus.PENDENTE) {
+      throw new Error('Somente o documento atual pendente pode ser recusado.');
     }
     const reviewerId = await getReviewerId();
     const rejected = await documentService.update(document.id, {

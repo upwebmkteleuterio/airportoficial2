@@ -72,6 +72,8 @@ export function useUsers(options: UsersOptions = {}) {
     total: usersQuery.data?.total || 0,
     isLoading: usersQuery.isLoading,
     isFetching: usersQuery.isFetching,
+    isError: usersQuery.isError,
+    error: usersQuery.error,
     refetch: usersQuery.refetch,
     createUser: createUserMutation.mutateAsync,
     updateUser: updateUserMutation.mutateAsync,
