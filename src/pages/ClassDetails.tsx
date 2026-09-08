@@ -1934,7 +1934,7 @@ Equipe Airport`;
         </Modal>
 
       {/* --- DRAWERS / OVERLAYS: DETALHES DOCUMENTOS DO ALUNO (Tela Documentos do Aluno - Airport) --- */}
-      <SlidePanel isOpen={!!selectedStudentForDocs} onClose={() => setSelectedStudentForDocs(null)}>
+      <SlidePanel isOpen={false} onClose={() => setSelectedStudentForDocs(null)}>
         {selectedStudentForDocs && (() => {
           const studentDocs = documents.filter(doc => doc.usuario_id === selectedStudentForDocs.id);
         

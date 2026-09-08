@@ -39,7 +39,7 @@ import { useClasses } from '../hooks/useClasses';
 import { Documento, DocumentStatus, UserRole, Usuario } from '../types';
 import { approvalService } from '../services/approvalService';
 import { documentService } from '../services/documentService';
-import { getDocumentSelectorLabel } from '../utils/documentRequirements';
+import { getDocumentSelectorLabel, getRequiredDocumentTypes } from '../utils/documentRequirements';
 import { Modal } from '../components/ui/Modal';
 import { Button } from '../components/ui/Button';
 import { SlidePanel } from '../components/ui/SlidePanel';
@@ -120,11 +120,15 @@ export function CentralGed() {
   const [actionError, setActionError] = useState('');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [activeDocumentId, setActiveDocumentId] = useState<string | null>(null);
-  const [reviewTab, setReviewTab] = useState<'documents' | 'data'>('documents');
+  const [reviewTab, setReviewTab] = useState<'documents' | 'replace' | 'data'>('documents');
   const [replacementFiles, setReplacementFiles] = useState<Record<string, File | null>>({});
   const [replacementLoadingId, setReplacementLoadingId] = useState<string | null>(null);
   const [replacementErrors, setReplacementErrors] = useState<Record<string, string>>({});
+  const [missingFiles, setMissingFiles] = useState<Record<string, File | null>>({});
+  const [missingLoadingId, setMissingLoadingId] = useState<string | null>(null);
+  const [missingErrors, setMissingErrors] = useState<Record<string, string>>({});
   const replacementInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const missingInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const clearRejectionState = () => {
     setActiveRejectDocumentId(null);
@@ -141,12 +145,16 @@ export function CentralGed() {
 
   const selectedReviewDocument = currentReviewDocuments.find((document) => document.id === activeDocumentId)
     ?? currentReviewDocuments[0];
+  const requiredReviewDocumentTypes = useMemo(
+    () => activeReviewItem ? getRequiredDocumentTypes(activeReviewItem.profile.tipo_documento_selecionado) : [],
+    [activeReviewItem]
+  );
 
   useEffect(() => {
     setActiveDocumentId(activeReviewItem?.documents.find((document) => document.esta_atual !== false)?.id ?? null);
     setReviewTab('documents');
     clearRejectionState();
-  }, [activeReviewItem]);
+  }, [activeReviewItem?.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -183,29 +191,79 @@ export function CentralGed() {
 
   // Actions
 
-  const handleReplacementUpload = async (item: QueueItem, document: Documento) => {
-    const file = replacementFiles[document.id];
+  const handleReplacementUpload = async (item: QueueItem, source: Documento) => {
+    const file = replacementFiles[source.id];
     if (!file) return;
 
-    setReplacementLoadingId(document.id);
-    setReplacementErrors((current) => ({ ...current, [document.id]: '' }));
+    setReplacementLoadingId(source.id);
+    setReplacementErrors((current) => ({ ...current, [source.id]: '' }));
     try {
-      await approvalService.replaceDocument(item.profile, document, file);
+      const replacement = await approvalService.replaceDocument(item.profile, source, file);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['users'] }),
         queryClient.invalidateQueries({ queryKey: ['documents'] })
       ]);
-      setReplacementFiles((current) => ({ ...current, [document.id]: null }));
-      if (replacementInputRefs.current[document.id]) {
-        replacementInputRefs.current[document.id]!.value = '';
-      }
+      setActiveReviewItem((current) => {
+        if (!current || current.id !== item.id) return current;
+        const updatedDocuments = [...current.documents.map((candidate) => candidate.id === source.id ? { ...candidate, esta_atual: false } : candidate), replacement];
+        return {
+          ...current,
+          documents: updatedDocuments,
+          missingDocuments: approvalService.getMissingDocuments(current.profile, updatedDocuments)
+        };
+      });
+      setReplacementFiles((current) => ({ ...current, [source.id]: null }));
+      if (replacementInputRefs.current[source.id]) replacementInputRefs.current[source.id]!.value = '';
     } catch (error) {
       setReplacementErrors((current) => ({
         ...current,
-        [document.id]: error instanceof Error ? error.message : 'Não foi possível enviar o documento substituto.'
+        [source.id]: error instanceof Error ? error.message : 'Não foi possível enviar o documento substituto.'
       }));
     } finally {
       setReplacementLoadingId(null);
+    }
+  };
+
+  const handleMissingUpload = async (item: QueueItem, documentType: string) => {
+    const inputKey = `${item.id}:${documentType}`;
+    const file = missingFiles[inputKey];
+    if (!file) return;
+
+    setMissingLoadingId(inputKey);
+    setMissingErrors((current) => ({ ...current, [inputKey]: '' }));
+    try {
+      const uploaded = await documentService.uploadFile({
+        file,
+        usuario_id: item.profile.id,
+        tipo_documento: documentType,
+        status: DocumentStatus.PENDENTE,
+        origem_cadastro: item.profile.origem_cadastro || 'interno',
+        metodo_verificacao: 'manual',
+        storage_area: 'temporarios',
+        grupo_documento_id: `${item.profile.id}:${documentType}`
+      });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['users'] }),
+        queryClient.invalidateQueries({ queryKey: ['documents'] })
+      ]);
+      setActiveReviewItem((current) => {
+        if (!current || current.id !== item.id) return current;
+        const updatedDocuments = [...current.documents, uploaded];
+        return {
+          ...current,
+          documents: updatedDocuments,
+          missingDocuments: approvalService.getMissingDocuments(current.profile, updatedDocuments)
+        };
+      });
+      setMissingFiles((current) => ({ ...current, [inputKey]: null }));
+      if (missingInputRefs.current[inputKey]) missingInputRefs.current[inputKey]!.value = '';
+    } catch (error) {
+      setMissingErrors((current) => ({
+        ...current,
+        [inputKey]: error instanceof Error ? error.message : 'Não foi possível enviar o documento.'
+      }));
+    } finally {
+      setMissingLoadingId(null);
     }
   };
 
@@ -711,6 +769,9 @@ export function CentralGed() {
               <button type="button" onClick={() => setReviewTab('documents')} className={`px-4 py-3 text-xs font-bold border-b-2 ${reviewTab === 'documents' ? 'border-[#005f5f] text-[#005f5f]' : 'border-transparent text-gray-500'}`}>
                 <FileCheck className="mr-1 inline h-4 w-4" />Documentação
               </button>
+              <button type="button" onClick={() => setReviewTab('replace')} className={`px-4 py-3 text-xs font-bold border-b-2 ${reviewTab === 'replace' ? 'border-[#005f5f] text-[#005f5f]' : 'border-transparent text-gray-500'}`}>
+                <RefreshCw className="mr-1 inline h-4 w-4" />Substituir / enviar
+              </button>
               <button type="button" onClick={() => setReviewTab('data')} className={`px-4 py-3 text-xs font-bold border-b-2 ${reviewTab === 'data' ? 'border-[#005f5f] text-[#005f5f]' : 'border-transparent text-gray-500'}`}>
                 <UserCheck className="mr-1 inline h-4 w-4" />Dados do cadastro
               </button>
@@ -754,44 +815,20 @@ export function CentralGed() {
                             </div>
                           </details>
                         )}
-                        {document.status === DocumentStatus.RECUSADO && (
-                          <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900/50 dark:bg-amber-950/20">
-                            <label htmlFor={`replacement-${document.id}`} className="block text-[10px] font-bold text-amber-900 dark:text-amber-200">
-                              Documento recusado — envie um substituto
-                            </label>
-                            <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
-                              <input
-                                ref={(input) => { replacementInputRefs.current[document.id] = input; }}
-                                id={`replacement-${document.id}`}
-                                type="file"
-                                accept="application/pdf,image/jpeg,image/png,image/webp,.pdf,.jpg,.jpeg,.png,.webp"
-                                onChange={(event) => {
-                                  const selectedFile = event.target.files?.[0] ?? null;
-                                  setReplacementFiles((current) => ({ ...current, [document.id]: selectedFile }));
-                                  setReplacementErrors((current) => ({ ...current, [document.id]: '' }));
-                                }}
-                                disabled={replacementLoadingId !== null}
-                                className="min-w-0 flex-1 text-[10px] text-slate-700 file:mr-2 file:rounded file:border-0 file:bg-white file:px-2 file:py-1 file:text-[10px] file:font-bold file:text-slate-700 dark:text-slate-300 dark:file:bg-slate-900 dark:file:text-slate-200"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => void handleReplacementUpload(activeReviewItem, document)}
-                                disabled={!replacementFiles[document.id] || replacementLoadingId !== null}
-                                className="shrink-0 rounded-lg bg-amber-700 px-3 py-2 text-[10px] font-bold text-white transition-colors hover:bg-amber-800 disabled:cursor-not-allowed disabled:opacity-50"
-                              >
-                                {replacementLoadingId === document.id ? 'Enviando...' : 'Enviar substituto'}
-                              </button>
-                            </div>
-                            {replacementErrors[document.id] && (
-                              <p role="alert" className="mt-2 text-[10px] font-semibold text-red-700 dark:text-red-300">
-                                {replacementErrors[document.id]}
-                              </p>
-                            )}
-                          </div>
-                        )}
                       </div>
                       <div className="flex shrink-0 items-start gap-2">
-                        <button type="button" onClick={(event) => { event.stopPropagation(); if (activeRejectDocumentId !== document.id) clearRejectionState(); setActiveDocumentId(document.id); }} className="rounded border border-teal-200 px-2 py-1 font-bold text-teal-700 hover:bg-teal-50" aria-label={`Selecionar ${document.tipo_documento}`}>
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setActiveDocumentId(document.id);
+                            if (previewUrl) window.open(previewUrl, '_blank', 'noopener');
+                          }}
+                          disabled={!previewUrl || selectedReviewDocument?.id !== document.id}
+                          className="rounded border border-teal-200 px-2 py-1 font-bold text-teal-700 hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-40"
+                          aria-label={`Ampliar ${document.tipo_documento}`}
+                          title="Abrir documento em nova aba"
+                        >
                           <Maximize2 className="h-3.5 w-3.5" />
                         </button>
                         <button type="button" onClick={(event) => { event.stopPropagation(); void handleDocumentApprove(activeReviewItem, document, justificativaText); }} disabled={isProcessing || document.status !== DocumentStatus.PENDENTE} className="rounded bg-emerald-600 px-2 py-1 font-bold text-white disabled:opacity-50">Aprovar</button>
@@ -904,6 +941,84 @@ export function CentralGed() {
               </div>
 
               </>}
+
+              {reviewTab === 'replace' && (
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-teal-200 bg-teal-50/60 p-4 text-xs text-teal-900 dark:border-teal-900/50 dark:bg-teal-950/20 dark:text-teal-100">
+                    <p className="font-bold">Documentos da identificação: {getDocumentSelectorLabel(activeReviewItem.profile.tipo_documento_selecionado)}</p>
+                    <p className="mt-1">Anexe documentos ausentes ou substitua somente a versão atual recusada. O histórico permanece na aba Documentação.</p>
+                  </div>
+                  <div className="space-y-3">
+                    {requiredReviewDocumentTypes.map((documentType) => {
+                      const currentDocument = currentReviewDocuments.find((document) => document.tipo_documento === documentType);
+                      const inputKey = `${activeReviewItem.id}:${documentType}`;
+                      const rejectedDocumentId = currentDocument?.id;
+                      const isRejected = currentDocument?.status === DocumentStatus.RECUSADO;
+                      const isMissing = !currentDocument;
+                      const file = isRejected && rejectedDocumentId ? replacementFiles[rejectedDocumentId] : missingFiles[inputKey];
+                      const loading = isRejected && rejectedDocumentId ? replacementLoadingId === rejectedDocumentId : missingLoadingId === inputKey;
+                      const error = isRejected && rejectedDocumentId ? replacementErrors[rejectedDocumentId] : missingErrors[inputKey];
+                      return (
+                        <div key={documentType} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="font-bold text-sm text-slate-900 dark:text-white">{documentType}</p>
+                              {currentDocument ? (
+                                <p className="mt-1 text-[10px] text-slate-500">
+                                  {currentDocument.arquivo_nome} · {currentDocument.status} · versão {currentDocument.versao ?? 1}
+                                </p>
+                              ) : (
+                                <p className="mt-1 text-[10px] font-semibold text-amber-700">Ausente · nenhuma versão enviada</p>
+                              )}
+                            </div>
+                            {currentDocument && !isRejected && (
+                              <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${currentDocument.status === DocumentStatus.APROVADO ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                                {currentDocument.status}
+                              </span>
+                            )}
+                          </div>
+                          {(isMissing || isRejected) && (
+                            <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+                              <input
+                                ref={(input) => {
+                                  if (isRejected && currentDocument) replacementInputRefs.current[currentDocument.id] = input;
+                                  if (isMissing) missingInputRefs.current[inputKey] = input;
+                                }}
+                                type="file"
+                                aria-label={`${isRejected ? 'Substituir' : 'Anexar'} arquivo de ${documentType}`}
+                                accept="application/pdf,image/jpeg,image/png,image/webp,.pdf,.jpg,.jpeg,.png,.webp"
+                                onChange={(event) => {
+                                  const selectedFile = event.target.files?.[0] ?? null;
+                                  if (isRejected && currentDocument) {
+                                    setReplacementFiles((current) => ({ ...current, [currentDocument.id]: selectedFile }));
+                                    setReplacementErrors((current) => ({ ...current, [currentDocument.id]: '' }));
+                                  } else {
+                                    setMissingFiles((current) => ({ ...current, [inputKey]: selectedFile }));
+                                    setMissingErrors((current) => ({ ...current, [inputKey]: '' }));
+                                  }
+                                }}
+                                disabled={loading || replacementLoadingId !== null || missingLoadingId !== null}
+                                className="min-w-0 flex-1 text-[10px] text-slate-700 file:mr-2 file:rounded file:border-0 file:bg-slate-100 file:px-2 file:py-1 file:text-[10px] file:font-bold dark:text-slate-300 dark:file:bg-slate-800"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => isRejected && currentDocument
+                                  ? void handleReplacementUpload(activeReviewItem, currentDocument)
+                                  : void handleMissingUpload(activeReviewItem, documentType)}
+                                disabled={!file || loading || replacementLoadingId !== null || missingLoadingId !== null}
+                                className={`shrink-0 rounded-lg px-3 py-2 text-[10px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-50 ${isRejected ? 'bg-amber-700 hover:bg-amber-800' : 'bg-[#005f5f] hover:bg-[#004d4d]'}`}
+                              >
+                                {loading ? 'Enviando...' : isRejected ? 'Substituir arquivo' : 'Anexar arquivo'}
+                              </button>
+                            </div>
+                          )}
+                          {error && <p role="alert" className="mt-2 text-[10px] font-semibold text-red-700 dark:text-red-300">{error}</p>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {reviewTab === 'data' && (
                 <div className="space-y-6">
