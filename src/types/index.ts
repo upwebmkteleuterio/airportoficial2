@@ -243,3 +243,23 @@ export interface AuditoriaLog {
   /** Autorização temporária vinculada ao acesso documental. */
   autorizacao_id?: string | null;
 }
+
+export interface AuditoriaPerfilResumo {
+  legacy_id: string;
+  nome_completo: string;
+  role: string;
+  email?: string | null;
+}
+
+export interface AuditoriaDocumentoResumo {
+  id: string;
+  arquivo_nome: string;
+  tipo_documento: string;
+  versao: number;
+}
+
+export interface AuditoriaLogView extends AuditoriaLog {
+  operador?: AuditoriaPerfilResumo | null;
+  alvo?: AuditoriaPerfilResumo | null;
+  documento?: AuditoriaDocumentoResumo | null;
+}

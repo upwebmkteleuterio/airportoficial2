@@ -11,6 +11,8 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
   FileText,
   FolderOpen,
   Image as ImageIcon,
@@ -19,20 +21,13 @@ import {
   Copy,
   Check,
   Search,
-  User,
-  UserCog
+  User
 } from 'lucide-react';
 import { useUIStore } from '../store/uiStore';
 import { useAudit } from '../hooks/useAudit';
 import { useUsers } from '../hooks/useUsers';
 import { documentService } from '../services/documentService';
-import { AuditoriaLog, UserRole } from '../types';
-
-interface AuditRow extends AuditoriaLog {
-  operador?: { legacy_id: string; nome_completo: string; role: string; email?: string | null } | null;
-  alvo?: { legacy_id: string; nome_completo: string; role: string; email?: string | null } | null;
-  documento?: { id: string; arquivo_nome: string; tipo_documento: string; versao: number } | null;
-}
+import { AuditoriaLogView, UserRole } from '../types';
 
 interface DocumentOption {
   id: string;
@@ -85,42 +80,39 @@ export function Reports() {
   const [actionFilter, setActionFilter] = useState('');
   const [tableFilter, setTableFilter] = useState('');
   const [operadorFilter, setOperadorFilter] = useState('');
-  const [alvoFilter, setAlvoFilter] = useState('');
+  const [targetSearch, setTargetSearch] = useState('');
   const [documentoFilter, setDocumentoFilter] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [copiedHashId, setCopiedHashId] = useState<string | null>(null);
   const itemsPerPage = 8;
 
-  const { logs: apiLogs, total: auditTotal, isLoading, eventCounts } = useAudit({
+  const { logs: apiLogs, total: auditTotal, isLoading, isFetching, eventCounts } = useAudit({
     page: currentPage,
     pageSize: itemsPerPage,
     search: filters.gedSearchTerm,
     action: actionFilter,
     table: tableFilter,
     operadorId: operadorFilter,
-    alvoId: alvoFilter,
+    targetSearch,
     documentoId: documentoFilter,
+    dateFrom,
+    dateTo,
   });
 
-  const { users: allUsers } = useUsers({});
   const { data: documentOptions = [] } = useQuery<DocumentOption[]>({
     queryKey: ['document-filter-options'],
     queryFn: () => documentService.getFilterOptions(),
   });
-
+  const { users: allUsers } = useUsers({});
   const operators = useMemo(
     () => (allUsers ?? []).filter((user) => user.role === UserRole.GESTOR || user.role === UserRole.EQUIPE),
-    [allUsers],
-  );
-  const targets = useMemo(
-    () => (allUsers ?? []).filter((user) =>
-      [UserRole.ALUNO, UserRole.INSTRUTOR, UserRole.COORDENADOR].includes(user.role as UserRole),
-    ),
     [allUsers],
   );
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [filters.gedSearchTerm, actionFilter, tableFilter, operadorFilter, alvoFilter, documentoFilter]);
+  }, [filters.gedSearchTerm, actionFilter, tableFilter, operadorFilter, targetSearch, documentoFilter, dateFrom, dateTo]);
 
   const totalItems = auditTotal;
   const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
@@ -136,8 +128,10 @@ export function Reports() {
     setActionFilter('');
     setTableFilter('');
     setOperadorFilter('');
-    setAlvoFilter('');
+    setTargetSearch('');
     setDocumentoFilter('');
+    setDateFrom('');
+    setDateTo('');
     setCurrentPage(1);
   };
 
@@ -151,13 +145,14 @@ export function Reports() {
 
   const handleExportCSV = () => {
     const csvHeaders = 'DATA_HORA;OPERADOR;ALVO;DOCUMENTO;TIPO;VERSAO;ACAO;IP;HASH_SHA256\n';
-    const csvRows = (apiLogs as AuditRow[]).map((log) => {
-      const operador = log.operador?.nome_completo ?? log.usuario_id;
+    const csvRows = (apiLogs as AuditoriaLogView[]).map((log) => {
+      const operador = log.operador?.email || log.operador?.nome_completo || log.usuario_id;
       const alvo = log.alvo?.nome_completo ?? log.alvo_id ?? '';
       const documento = log.documento?.arquivo_nome ?? '';
       const tipo = log.documento_tipo ?? '';
       const versao = log.versao ?? '';
-      const acao = actionLabels[log.acao]?.label ?? log.acao;
+      const actionBase = log.acao.split(' | ', 1)[0];
+      const acao = actionLabels[actionBase]?.label ?? log.acao;
       return `"${new Date(log.data_hora).toLocaleString('pt-BR')}";"${operador}";"${alvo}";"${documento}";"${tipo}";"${versao}";"${acao}";"${log.ip_address ?? ''}";"${log.hash_sha256}"`;
     }).join('\n');
 
@@ -189,6 +184,9 @@ export function Reports() {
   }, [totalPages, currentPage]);
 
   const selectClassName = 'pl-3 pr-8 py-1.5 w-full bg-gray-50 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200 focus:outline-none focus:border-teal-500 font-sans text-xs appearance-none cursor-pointer';
+  const kpiPeriodLabel = eventCounts?.periodoInicio
+    ? new Date(`${eventCounts.periodoInicio}T12:00:00`).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+    : 'mês corrente';
 
   return (
     <div id="reports-page" className="flex-1 flex flex-col p-6 gap-6 overflow-y-auto font-sans text-xs">
@@ -293,24 +291,20 @@ export function Reports() {
             </div>
           </div>
 
-          {/* ALUNO/INSTRUTOR FILTER */}
-          <div className="flex flex-col gap-1">
-            <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Aluno/Instrutor</span>
-            <div className="relative">
-              <select
-                value={alvoFilter}
-                onChange={(e) => setAlvoFilter(e.target.value)}
-                aria-label="Filtrar por usuário-alvo"
-                className={selectClassName + ' w-52'}
-              >
-                <option value="">Todos os Usuários</option>
-                {targets.map((target) => (
-                  <option key={target.id} value={target.id}>
-                    {target.nome_completo} ({roleLabels[target.role] ?? target.role})
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none w-4 h-4" />
+          {/* TARGET SEARCH */}
+          <div className="flex flex-col gap-1 w-full sm:w-auto flex-1 min-w-[220px]">
+            <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Nome de aluno/instrutor acessado</span>
+            <div className="relative group">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500 w-4 h-4" />
+              <input
+                id="target-reports-search-input"
+                type="text"
+                value={targetSearch}
+                onChange={(e) => setTargetSearch(e.target.value)}
+                placeholder="Nome, email ou ID..."
+                aria-label="Buscar nome de aluno ou instrutor acessado"
+                className="w-full pl-9 pr-4 py-1.5 bg-gray-50 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200 focus:outline-none focus:border-teal-500 font-sans text-xs"
+              />
             </div>
           </div>
 
@@ -351,6 +345,30 @@ export function Reports() {
               </select>
               <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none w-4 h-4" />
             </div>
+          </div>
+
+          {/* DATE FILTERS */}
+          <div className="flex flex-col gap-1">
+            <label htmlFor="reports-date-from" className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">De</label>
+            <input
+              id="reports-date-from"
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              aria-label="Filtrar auditoria a partir de"
+              className="px-3 py-1.5 w-36 bg-gray-50 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200 focus:outline-none focus:border-teal-500 font-sans text-xs"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label htmlFor="reports-date-to" className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Até</label>
+            <input
+              id="reports-date-to"
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              aria-label="Filtrar auditoria até"
+              className="px-3 py-1.5 w-36 bg-gray-50 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200 focus:outline-none focus:border-teal-500 font-sans text-xs"
+            />
           </div>
 
           {/* Limpar Filtros */}
@@ -406,10 +424,12 @@ export function Reports() {
                   </td>
                 </tr>
               ) : (
-                (apiLogs as AuditRow[]).map((log) => {
-                  const actionInfo = actionLabels[log.acao];
+                (apiLogs as AuditoriaLogView[]).map((log) => {
+                  const actionBase = log.acao.split(' | ', 1)[0];
+                  const actionInfo = actionLabels[actionBase];
                   const ActionIcon = actionInfo?.icon ?? FileText;
-                  const operadorNome = log.operador?.nome_completo ?? log.usuario_id;
+                  const operadorNome = log.operador?.nome_completo || log.usuario_id;
+                  const operadorEmail = log.operador?.email?.trim() || null;
                   const alvoNome = log.alvo?.nome_completo ?? log.alvo_id ?? '—';
                   const alvoRole = log.alvo ? (roleLabels[log.alvo.role] ?? log.alvo.role) : null;
                   const documentoNome = log.documento?.arquivo_nome ?? null;
@@ -431,10 +451,10 @@ export function Reports() {
                           </div>
                           <div className="flex flex-col">
                             <span className="text-slate-700 dark:text-slate-200 font-sans text-xs font-semibold">
-                              {operadorNome}
+                              {operadorEmail ?? operadorNome}
                             </span>
                             <span className="text-[10px] text-gray-400 truncate">
-                              {log.operador?.email ? log.operador.email : log.operador ? (roleLabels[log.operador.role] ?? log.operador.role) : 'Operador'}
+                              {operadorEmail ? operadorNome : log.operador ? (roleLabels[log.operador.role] ?? log.operador.role) : 'Operador'}
                             </span>
                           </div>
                         </div>
@@ -537,52 +557,66 @@ export function Reports() {
             Mostrando <span className="font-bold text-slate-800 dark:text-slate-200">{totalItems > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0}-{Math.min(currentPage * itemsPerPage, totalItems)}</span> de <span className="font-bold text-slate-800 dark:text-slate-200">{totalItems.toLocaleString('pt-BR')}</span> resultados
           </div>
 
-          <div className="flex items-center gap-1.5 self-end sm:self-center">
+          <div className="flex items-center border border-gray-300 dark:border-slate-750 rounded-lg bg-white dark:bg-slate-900 overflow-hidden shadow-sm self-end sm:self-center">
             <button
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
+              type="button"
+              onClick={() => setCurrentPage(1)}
+              disabled={isFetching || currentPage <= 1}
+              aria-label="Primeira página"
+              className="p-2 hover:bg-gray-50 dark:hover:bg-slate-850 text-gray-500 dark:text-slate-400 border-r border-gray-300 dark:border-slate-750 transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <ChevronsLeft className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+              disabled={isFetching || currentPage <= 1}
               aria-label="Página anterior"
-              className="p-1.5 rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-gray-500 hover:bg-gray-50 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+              className="p-2 hover:bg-gray-50 dark:hover:bg-slate-850 text-gray-500 dark:text-slate-400 border-r border-gray-300 dark:border-slate-750 transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
-
-            {paginationRange.map((page, index) => {
-              if (page === '...') {
-                return (
-                  <span key={`ellipsis-${index}`} className="px-2.5 py-1 text-slate-400 font-bold">
-                    ...
-                  </span>
-                );
-              }
-              return (
-                <button
-                  key={`page-${page}`}
-                  onClick={() => setCurrentPage(Number(page))}
-                  className={`px-3 py-1 rounded-lg font-bold text-xs transition-all cursor-pointer border ${
-                    currentPage === page
-                      ? 'bg-[#005f5f] border-[#005f5f] text-white'
-                      : 'bg-white dark:bg-slate-900 border-gray-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800'
-                  }`}
-                >
-                  {page}
-                </button>
-              );
-            })}
-
+            {paginationRange.map((page, index) => page === '...' ? (
+              <span key={`ellipsis-${index}`} className="px-2.5 py-1 text-slate-400 font-bold">...</span>
+            ) : (
+              <button
+                key={`page-${page}`}
+                type="button"
+                onClick={() => setCurrentPage(Number(page))}
+                disabled={isFetching || page === currentPage}
+                aria-current={page === currentPage ? 'page' : undefined}
+                aria-label={`Página ${page}`}
+                className={`px-3 py-2 border-r border-gray-300 dark:border-slate-750 transition-colors cursor-pointer disabled:cursor-default disabled:opacity-100 ${page === currentPage ? 'bg-[#005f5f]/10 dark:bg-teal-950/30 text-[#005f5f] dark:text-teal-400 font-bold' : 'hover:bg-gray-50 dark:hover:bg-slate-850 text-gray-500 dark:text-slate-400'}`}
+              >
+                {page}
+              </button>
+            ))}
             <button
-              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages}
+              type="button"
+              onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+              disabled={isFetching || currentPage >= totalPages}
               aria-label="Próxima página"
-              className="p-1.5 rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-gray-500 hover:bg-gray-50 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+              className="p-2 hover:bg-gray-50 dark:hover:bg-slate-850 text-gray-500 dark:text-slate-400 border-r border-gray-300 dark:border-slate-750 transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
             >
               <ChevronRight className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setCurrentPage(totalPages)}
+              disabled={isFetching || currentPage >= totalPages}
+              aria-label="Última página"
+              className="p-2 hover:bg-gray-50 dark:hover:bg-slate-850 text-gray-500 dark:text-slate-400 transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <ChevronsRight className="w-4 h-4" />
             </button>
           </div>
         </div>
       </div>
 
       {/* 4. Bottom Cards Row — indicadores reais de acesso documental */}
+      <div className="text-xs text-gray-500 dark:text-slate-400 font-medium" role="status">
+        KPIs do mês de {kpiPeriodLabel}
+      </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
         <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 p-5 rounded-xl flex items-center justify-between shadow-sm">
           <div className="space-y-1.5">
