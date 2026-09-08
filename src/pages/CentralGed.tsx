@@ -30,7 +30,8 @@ import {
   SlidersHorizontal,
   Award,
   History,
-  Maximize2
+  Maximize2,
+  Upload
 } from 'lucide-react';
 import { useDocuments } from '../hooks/useDocuments';
 import { useUsers } from '../hooks/useUsers';
@@ -960,59 +961,81 @@ export function CentralGed() {
                       const error = isRejected && rejectedDocumentId ? replacementErrors[rejectedDocumentId] : missingErrors[inputKey];
                       return (
                         <div key={documentType} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                          <div className="flex flex-wrap items-start justify-between gap-3">
-                            <div className="min-w-0">
+                          <div className="flex items-start gap-3">
+                            <div className={`mt-1 h-3 w-3 shrink-0 rounded-full ${currentDocument ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-slate-600'}`} />
+                            <div className="min-w-0 flex-1">
                               <p className="font-bold text-sm text-slate-900 dark:text-white">{documentType}</p>
                               {currentDocument ? (
-                                <p className="mt-1 text-[10px] text-slate-500">
+                                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                                   {currentDocument.arquivo_nome} · {currentDocument.status} · versão {currentDocument.versao ?? 1}
                                 </p>
                               ) : (
-                                <p className="mt-1 text-[10px] font-semibold text-amber-700">Ausente · nenhuma versão enviada</p>
+                                <p className="mt-1 text-xs font-semibold text-amber-700 dark:text-amber-400">Ausente · nenhuma versão enviada</p>
                               )}
+                              {(isMissing || isRejected) && (
+                                <div className="mt-3 flex flex-wrap items-center gap-2">
+                                  <input
+                                    ref={(input) => {
+                                      if (isRejected && currentDocument) replacementInputRefs.current[currentDocument.id] = input;
+                                      if (isMissing) missingInputRefs.current[inputKey] = input;
+                                    }}
+                                    id={`review-file-${inputKey}`}
+                                    type="file"
+                                    aria-label={`${isRejected ? 'Substituir' : 'Anexar'} arquivo de ${documentType}`}
+                                    accept="application/pdf,image/jpeg,image/png,image/webp,.pdf,.jpg,.jpeg,.png,.webp"
+                                    onChange={(event) => {
+                                      const selectedFile = event.target.files?.[0] ?? null;
+                                      if (isRejected && currentDocument) {
+                                        setReplacementFiles((current) => ({ ...current, [currentDocument.id]: selectedFile }));
+                                        setReplacementErrors((current) => ({ ...current, [currentDocument.id]: '' }));
+                                      } else {
+                                        setMissingFiles((current) => ({ ...current, [inputKey]: selectedFile }));
+                                        setMissingErrors((current) => ({ ...current, [inputKey]: '' }));
+                                      }
+                                    }}
+                                    disabled={loading || replacementLoadingId !== null || missingLoadingId !== null}
+                                    className="sr-only"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => document.getElementById(`review-file-${inputKey}`)?.click()}
+                                    disabled={loading || replacementLoadingId !== null || missingLoadingId !== null}
+                                    className="inline-flex max-w-[11rem] items-center gap-2 truncate rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                                  >
+                                    Escolher arquivo
+                                  </button>
+                                  <span className="min-w-0 max-w-[14rem] truncate text-[10px] text-slate-600 dark:text-slate-300" title={file?.name || 'Nenhum arquivo escolhido'}>
+                                    {file?.name || 'Nenhum arquivo escolhido'}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (!file) {
+                                        document.getElementById(`review-file-${inputKey}`)?.click();
+                                        return;
+                                      }
+                                      if (isRejected && currentDocument) {
+                                        void handleReplacementUpload(activeReviewItem, currentDocument);
+                                      } else {
+                                        void handleMissingUpload(activeReviewItem, documentType);
+                                      }
+                                    }}
+                                    disabled={loading || replacementLoadingId !== null || missingLoadingId !== null}
+                                    className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${isRejected ? 'border-amber-300 bg-[#e4a278] text-white hover:bg-[#d99368]' : 'border-teal-200 bg-[#7db3b4] text-white hover:bg-[#6ca5a6]'}`}
+                                  >
+                                    <Upload className="h-3.5 w-3.5" />
+                                    {loading ? 'Enviando...' : isRejected ? (file ? 'Confirmar substituição' : 'Substituir arquivo') : (file ? 'Confirmar anexo' : 'Anexar arquivo')}
+                                  </button>
+                                </div>
+                              )}
+                              {error && <p role="alert" className="mt-2 text-xs font-semibold text-red-700 dark:text-red-300">{error}</p>}
                             </div>
                             {currentDocument && !isRejected && (
-                              <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${currentDocument.status === DocumentStatus.APROVADO ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                              <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-bold ${currentDocument.status === DocumentStatus.APROVADO ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
                                 {currentDocument.status}
                               </span>
                             )}
                           </div>
-                          {(isMissing || isRejected) && (
-                            <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
-                              <input
-                                ref={(input) => {
-                                  if (isRejected && currentDocument) replacementInputRefs.current[currentDocument.id] = input;
-                                  if (isMissing) missingInputRefs.current[inputKey] = input;
-                                }}
-                                type="file"
-                                aria-label={`${isRejected ? 'Substituir' : 'Anexar'} arquivo de ${documentType}`}
-                                accept="application/pdf,image/jpeg,image/png,image/webp,.pdf,.jpg,.jpeg,.png,.webp"
-                                onChange={(event) => {
-                                  const selectedFile = event.target.files?.[0] ?? null;
-                                  if (isRejected && currentDocument) {
-                                    setReplacementFiles((current) => ({ ...current, [currentDocument.id]: selectedFile }));
-                                    setReplacementErrors((current) => ({ ...current, [currentDocument.id]: '' }));
-                                  } else {
-                                    setMissingFiles((current) => ({ ...current, [inputKey]: selectedFile }));
-                                    setMissingErrors((current) => ({ ...current, [inputKey]: '' }));
-                                  }
-                                }}
-                                disabled={loading || replacementLoadingId !== null || missingLoadingId !== null}
-                                className="min-w-0 flex-1 text-[10px] text-slate-700 file:mr-2 file:rounded file:border-0 file:bg-slate-100 file:px-2 file:py-1 file:text-[10px] file:font-bold dark:text-slate-300 dark:file:bg-slate-800"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => isRejected && currentDocument
-                                  ? void handleReplacementUpload(activeReviewItem, currentDocument)
-                                  : void handleMissingUpload(activeReviewItem, documentType)}
-                                disabled={!file || loading || replacementLoadingId !== null || missingLoadingId !== null}
-                                className={`shrink-0 rounded-lg px-3 py-2 text-[10px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-50 ${isRejected ? 'bg-amber-700 hover:bg-amber-800' : 'bg-[#005f5f] hover:bg-[#004d4d]'}`}
-                              >
-                                {loading ? 'Enviando...' : isRejected ? 'Substituir arquivo' : 'Anexar arquivo'}
-                              </button>
-                            </div>
-                          )}
-                          {error && <p role="alert" className="mt-2 text-[10px] font-semibold text-red-700 dark:text-red-300">{error}</p>}
                         </div>
                       );
                     })}
