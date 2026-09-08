@@ -44,6 +44,7 @@ async function registerAudit(reviewerId: string, action: string, userId: string,
     registro_id: userId,
     ip_address: null,
     documento_id: document?.id,
+    documento_tipo: document?.tipo_documento,
     documento_hash: document?.hash_sha256,
     motivo: reason,
     versao: document?.versao

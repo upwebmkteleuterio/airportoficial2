@@ -113,7 +113,9 @@ export function CentralGed() {
   // Drawer / details review state
   const [activeReviewItem, setActiveReviewItem] = useState<QueueItem | null>(null);
   const [justificativaText, setJustificativaText] = useState('');
-  const [rejectionReason, setRejectionReason] = useState('Documento ilegível / Resolução baixa');
+  const [activeRejectDocumentId, setActiveRejectDocumentId] = useState<string | null>(null);
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [rejectionJustification, setRejectionJustification] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [actionError, setActionError] = useState('');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -123,6 +125,12 @@ export function CentralGed() {
   const [replacementLoadingId, setReplacementLoadingId] = useState<string | null>(null);
   const [replacementErrors, setReplacementErrors] = useState<Record<string, string>>({});
   const replacementInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  const clearRejectionState = () => {
+    setActiveRejectDocumentId(null);
+    setRejectionReason('');
+    setRejectionJustification('');
+  };
 
   const currentReviewDocuments = useMemo(() => {
     if (!activeReviewItem) return [];
@@ -137,6 +145,7 @@ export function CentralGed() {
   useEffect(() => {
     setActiveDocumentId(activeReviewItem?.documents.find((document) => document.esta_atual !== false)?.id ?? null);
     setReviewTab('documents');
+    clearRejectionState();
   }, [activeReviewItem]);
 
   useEffect(() => {
@@ -219,6 +228,7 @@ export function CentralGed() {
           ? { ...candidate, status: DocumentStatus.RECUSADO, observacoes_revisor: reason.trim() }
           : candidate)
       } : current);
+      clearRejectionState();
     } catch (error) {
       setActionError(error instanceof Error ? error.message : 'Não foi possível recusar o documento.');
     } finally {
@@ -669,7 +679,7 @@ export function CentralGed() {
       </Modal>
 
       {/* --- SIDE SLIDING DRAWER / DIALOG FOR MANUAL REVIEW (REVISAR) --- */}
-      <SlidePanel isOpen={!!activeReviewItem} onClose={() => setActiveReviewItem(null)}>
+      <SlidePanel isOpen={!!activeReviewItem} onClose={() => { clearRejectionState(); setActiveReviewItem(null); }}>
         {activeReviewItem && (
           <div className="flex flex-col h-full font-sans">
             {/* Drawer Header */}
@@ -689,7 +699,8 @@ export function CentralGed() {
                 </p>
               </div>
               <button
-                onClick={() => setActiveReviewItem(null)}
+                onClick={() => { clearRejectionState(); setActiveReviewItem(null); }}
+                aria-label="Fechar revisão documental"
                 className="p-1 rounded-full text-gray-400 hover:text-gray-600 dark:hover:text-white transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
@@ -727,7 +738,7 @@ export function CentralGed() {
                   {activeReviewItem.documents.length === 0 ? (
                     <p className="rounded-lg bg-white p-3 text-xs text-slate-500">Nenhum documento foi enviado.</p>
                   ) : currentReviewDocuments.map((document) => (
-                    <div key={document.id} onClick={() => setActiveDocumentId(document.id)} className={`flex cursor-pointer items-center justify-between gap-3 rounded-lg p-3 text-xs shadow-sm dark:bg-slate-900 ${selectedReviewDocument?.id === document.id ? 'border border-teal-400 bg-teal-50/50 dark:bg-teal-950/20' : 'bg-white'}`}>
+                    <div key={document.id} onClick={() => { if (activeRejectDocumentId !== document.id) clearRejectionState(); setActiveDocumentId(document.id); }} className={`flex cursor-pointer items-center justify-between gap-3 rounded-lg p-3 text-xs shadow-sm dark:bg-slate-900 ${selectedReviewDocument?.id === document.id ? 'border border-teal-400 bg-teal-50/50 dark:bg-teal-950/20' : 'bg-white'}`}>
                       <div className="min-w-0 flex-1">
                         <p className="truncate font-bold text-slate-900 dark:text-white">{document.arquivo_nome}</p>
                         <p className="mt-1 text-[10px] text-slate-500">{document.tipo_documento} · {document.status} · versão {document.versao ?? 1} · SHA-256: {document.hash_sha256.slice(0, 12)}…</p>
@@ -779,12 +790,75 @@ export function CentralGed() {
                           </div>
                         )}
                       </div>
-                      <div className="flex shrink-0 items-center gap-2">
-                        <button type="button" onClick={(event) => { event.stopPropagation(); setActiveDocumentId(document.id); }} className="rounded border border-teal-200 px-2 py-1 font-bold text-teal-700 hover:bg-teal-50" aria-label={`Selecionar ${document.tipo_documento}`}>
+                      <div className="flex shrink-0 items-start gap-2">
+                        <button type="button" onClick={(event) => { event.stopPropagation(); if (activeRejectDocumentId !== document.id) clearRejectionState(); setActiveDocumentId(document.id); }} className="rounded border border-teal-200 px-2 py-1 font-bold text-teal-700 hover:bg-teal-50" aria-label={`Selecionar ${document.tipo_documento}`}>
                           <Maximize2 className="h-3.5 w-3.5" />
                         </button>
                         <button type="button" onClick={(event) => { event.stopPropagation(); void handleDocumentApprove(activeReviewItem, document, justificativaText); }} disabled={isProcessing || document.status !== DocumentStatus.PENDENTE} className="rounded bg-emerald-600 px-2 py-1 font-bold text-white disabled:opacity-50">Aprovar</button>
-                        <button type="button" onClick={(event) => { event.stopPropagation(); void handleRejectAction(activeReviewItem, document, `${rejectionReason}${justificativaText.trim() ? ` — ${justificativaText.trim()}` : ''}`); }} disabled={isProcessing || document.status === DocumentStatus.RECUSADO} className="rounded bg-red-600 px-2 py-1 font-bold text-white disabled:opacity-50">Rejeitar</button>
+                        <div className="flex flex-col items-stretch gap-2" onClick={(event) => event.stopPropagation()}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (activeRejectDocumentId === document.id) {
+                                clearRejectionState();
+                                return;
+                              }
+                              setActiveRejectDocumentId(document.id);
+                              setRejectionReason('');
+                              setRejectionJustification('');
+                              setActionError('');
+                            }}
+                            disabled={isProcessing || document.status === DocumentStatus.RECUSADO}
+                            aria-expanded={activeRejectDocumentId === document.id}
+                            aria-controls={`rejection-panel-${document.id}`}
+                            className="rounded bg-red-600 px-2 py-1 font-bold text-white focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-50"
+                          >
+                            Rejeitar
+                          </button>
+                          {activeRejectDocumentId === document.id && (
+                            <div id={`rejection-panel-${document.id}`} className="w-64 rounded-lg border border-red-200 bg-red-50 p-3 text-left dark:border-red-900/50 dark:bg-red-950/20">
+                              <label htmlFor={`rejection-category-${document.id}`} className="block text-[10px] font-bold text-red-900 dark:text-red-200">
+                                Categoria da rejeição
+                              </label>
+                              <select
+                                id={`rejection-category-${document.id}`}
+                                value={rejectionReason}
+                                onChange={(event) => setRejectionReason(event.target.value)}
+                                className="mt-1 w-full rounded border border-red-200 bg-white p-2 text-[10px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500 dark:border-red-900 dark:bg-slate-900 dark:text-white"
+                              >
+                                <option value="">Selecione uma categoria</option>
+                                <option value="Documento ilegível / Resolução baixa">Documento ilegível / Resolução baixa</option>
+                                <option value="Data de validade expirada / Vencido">Data de validade expirada / Vencido</option>
+                                <option value="Falta de assinatura oficial regulamentar">Falta de assinatura oficial regulamentar</option>
+                                <option value="Nome incompatível com a ficha de matrícula">Nome incompatível com a ficha de matrícula</option>
+                              </select>
+                              <label htmlFor={`rejection-justification-${document.id}`} className="mt-2 block text-[10px] font-bold text-red-900 dark:text-red-200">
+                                Justificativa
+                              </label>
+                              <textarea
+                                id={`rejection-justification-${document.id}`}
+                                value={rejectionJustification}
+                                onChange={(event) => setRejectionJustification(event.target.value)}
+                                rows={3}
+                                placeholder="Explique o motivo da rejeição"
+                                className="mt-1 w-full resize-y rounded border border-red-200 bg-white p-2 text-[10px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500 dark:border-red-900 dark:bg-slate-900 dark:text-white"
+                              />
+                              <div className="mt-2 flex justify-end gap-2">
+                                <button type="button" onClick={clearRejectionState} className="rounded border border-red-200 bg-white px-2 py-1 text-[10px] font-bold text-slate-700 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-500 dark:border-red-900 dark:bg-slate-900 dark:text-slate-200">
+                                  Cancelar
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void handleRejectAction(activeReviewItem, document, `${rejectionReason.trim()} — ${rejectionJustification.trim()}`)}
+                                  disabled={isProcessing || !rejectionReason.trim() || !rejectionJustification.trim()}
+                                  className="rounded bg-red-700 px-2 py-1 text-[10px] font-bold text-white hover:bg-red-800 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  Confirmar rejeição
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -829,22 +903,6 @@ export function CentralGed() {
                 />
               </div>
 
-              {/* Rejection Select Menu */}
-              <div className="flex flex-col gap-1.5 border-t border-dashed border-gray-200 dark:border-slate-800 pt-4">
-                <label className="text-xs font-bold text-gray-750 dark:text-slate-300">
-                  Motivo da Recusa (Caso Rejeitado)
-                </label>
-                <select
-                  value={rejectionReason}
-                  onChange={(e) => setRejectionReason(e.target.value)}
-                  className="w-full border border-gray-300 dark:border-slate-750 rounded-lg p-2.5 bg-white dark:bg-slate-850 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-[#005f5f]"
-                >
-                  <option value="Documento ilegível / Resolução baixa">Documento ilegível / Resolução baixa</option>
-                  <option value="Data de validade expirada / Vencido">Data de validade expirada / Vencido</option>
-                  <option value="Falta de assinatura oficial regulamentar">Falta de assinatura oficial regulamentar</option>
-                  <option value="Nome incompatível com a ficha de matrícula">Nome incompatível com a ficha de matrícula</option>
-                </select>
-              </div>
               </>}
 
               {reviewTab === 'data' && (

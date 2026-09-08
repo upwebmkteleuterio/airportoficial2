@@ -81,12 +81,13 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json() as Record<string, unknown>;
-    const action = textValue(body.acao, true);
-    const table = textValue(body.tabela_afetada, true);
-    const recordId = textValue(body.registro_id, true);
-    const documentId = textValue(body.documento_id);
-    const documentHash = textValue(body.documento_hash);
-    const reason = textValue(body.motivo);
+    const action = textValue(body.acao ?? body.action, true);
+    const table = textValue(body.tabela_afetada ?? body.table, true);
+    const recordId = textValue(body.registro_id ?? body.recordId, true);
+    const documentId = textValue(body.documento_id ?? body.documentId);
+    const documentType = textValue(body.documento_tipo ?? body.documentType);
+    const documentHash = textValue(body.documento_hash ?? body.documentHash);
+    const reason = textValue(body.motivo ?? body.reason);
     const version = typeof body.versao === "number" && Number.isInteger(body.versao) && body.versao > 0
       ? body.versao
       : undefined;
@@ -97,6 +98,7 @@ Deno.serve(async (req) => {
       table,
       recordId,
       documentId,
+      documentType,
       documentHash,
       reason,
       version,
@@ -114,6 +116,7 @@ Deno.serve(async (req) => {
     const { data: log, error: insertError } = await adminClient
       .from("auditoria_logs")
       .insert({
+        id: `audit-${crypto.randomUUID()}`,
         usuario_id: callerProfile.legacy_id,
         acao: actionDetails,
         tabela_afetada: table,
@@ -121,6 +124,10 @@ Deno.serve(async (req) => {
         ip_address: auditPayload.ip,
         data_hora: auditPayload.timestamp,
         hash_sha256: hash,
+        documento_id: documentId,
+        documento_tipo: documentType,
+        documento_hash: documentHash,
+        versao: version,
       })
       .select()
       .single();
@@ -128,6 +135,7 @@ Deno.serve(async (req) => {
 
     console.info(`[${functionName}] log registrado`, { recordId, table });
     return new Response(JSON.stringify({ log }), {
+      status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
