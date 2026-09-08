@@ -7,12 +7,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { documentService } from '../services/documentService';
 import { Documento } from '../types';
 
-export function useDocuments() {
+export function useDocuments(userIds?: string[]) {
   const queryClient = useQueryClient();
+  const isScoped = userIds !== undefined;
 
   const documentsQuery = useQuery({
-    queryKey: ['documents'],
-    queryFn: () => documentService.getAll(),
+    queryKey: isScoped ? ['documents', 'users', userIds] : ['documents'],
+    queryFn: () => isScoped ? documentService.getByUserIds(userIds) : documentService.getAll(),
   });
 
   const createDocumentMutation = useMutation({
@@ -39,6 +40,7 @@ export function useDocuments() {
   return {
     documents: documentsQuery.data || [],
     isLoading: documentsQuery.isLoading,
+    isFetching: documentsQuery.isFetching,
     createDocument: createDocumentMutation.mutateAsync,
     updateDocument: updateDocumentMutation.mutateAsync,
     deleteDocument: deleteDocumentMutation.mutateAsync,

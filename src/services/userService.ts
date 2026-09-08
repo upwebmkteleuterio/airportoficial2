@@ -8,6 +8,8 @@ export interface UserPageOptions {
   role?: UserRole;
   status?: Usuario['status'];
   search?: string;
+  empresaId?: string;
+  turmaId?: string;
 }
 
 export interface UserPage {
@@ -15,7 +17,7 @@ export interface UserPage {
   total: number;
 }
 
-type UserFilters = Pick<UserPageOptions, 'role' | 'status' | 'search'>;
+type UserFilters = Pick<UserPageOptions, 'role' | 'status' | 'search' | 'empresaId' | 'turmaId'>;
 type ProfileRow = Omit<Usuario, 'id'> & { id?: string; legacy_id: string };
 export type CreateUserInput = Omit<Usuario, 'id'> & { id?: string; password?: string };
 
@@ -34,7 +36,7 @@ function unwrapCreatedUser(data: unknown): Usuario | undefined {
 }
 
 export const userService = {
-  getAll: async ({ role, status, search }: UserFilters = {}): Promise<Usuario[]> => {
+  getAll: async ({ role, status, search, empresaId, turmaId }: UserFilters = {}): Promise<Usuario[]> => {
     let query = supabase
       .from('profiles')
       .select('*')
@@ -42,6 +44,8 @@ export const userService = {
 
     if (role) query = query.eq('role', role);
     if (status) query = query.eq('status', status);
+    if (empresaId && empresaId !== 'todas') query = query.eq('empresa_id', empresaId);
+    if (turmaId && turmaId !== 'todas') query = query.eq('turma_id_pendente', turmaId);
     const term = search?.trim();
     if (term) {
       const escapedTerm = term.replace(/[^0-9A-Za-zÀ-ÿ@. -]/g, ' ').slice(0, 100);
@@ -55,7 +59,7 @@ export const userService = {
     return (data ?? []).map((row) => toUsuario(row as ProfileRow));
   },
 
-  getPage: async ({ page, pageSize, role, status, search }: UserPageOptions): Promise<UserPage> => {
+  getPage: async ({ page, pageSize, role, status, search, empresaId, turmaId }: UserPageOptions): Promise<UserPage> => {
     const from = Math.max(0, page - 1) * pageSize;
     const to = from + pageSize - 1;
     let query = supabase
@@ -66,6 +70,8 @@ export const userService = {
 
     if (role) query = query.eq('role', role);
     if (status) query = query.eq('status', status);
+    if (empresaId && empresaId !== 'todas') query = query.eq('empresa_id', empresaId);
+    if (turmaId && turmaId !== 'todas') query = query.eq('turma_id_pendente', turmaId);
     const term = search?.trim();
     if (term) {
       const escapedTerm = term.replace(/[^0-9A-Za-zÀ-ÿ@. -]/g, ' ').slice(0, 100);

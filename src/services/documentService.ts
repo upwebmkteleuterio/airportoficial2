@@ -77,6 +77,16 @@ export const documentService = {
     return (data ?? []) as Documento[];
   },
 
+  getByUserIds: async (userIds: string[]): Promise<Documento[]> => {
+    if (userIds.length === 0) return [];
+    const { data, error } = await supabase
+      .from('documentos')
+      .select('*')
+      .in('usuario_id', userIds);
+    if (error) throw serviceError('Não foi possível carregar os documentos da fila', error);
+    return (data ?? []) as Documento[];
+  },
+
   getById: async (id: string): Promise<Documento | undefined> => {
     const { data, error } = await supabase
       .from('documentos')

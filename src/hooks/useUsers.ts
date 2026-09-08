@@ -13,6 +13,8 @@ interface UsersOptions {
   role?: UserRole;
   status?: Usuario['status'];
   search?: string;
+  empresaId?: string;
+  turmaId?: string;
 }
 
 interface UsersQueryData {
@@ -28,17 +30,19 @@ export function useUsers(options: UsersOptions = {}) {
   const role = options.role;
   const status = options.status;
   const search = options.search ?? '';
+  const empresaId = options.empresaId;
+  const turmaId = options.turmaId;
 
   const usersQuery = useQuery<UsersQueryData>({
     queryKey: isPaginated
-      ? ['users', 'page', page, pageSize, { role, status, search }]
-      : ['users', 'all', { role, status, search }],
+      ? ['users', 'page', page, pageSize, { role, status, search, empresaId, turmaId }]
+      : ['users', 'all', { role, status, search, empresaId, turmaId }],
     queryFn: async () => {
       if (!isPaginated) {
-        const data = await userService.getAll({ role, status, search });
+        const data = await userService.getAll({ role, status, search, empresaId, turmaId });
         return { data, total: data.length };
       }
-      return userService.getPage({ page, pageSize, role, status, search });
+      return userService.getPage({ page, pageSize, role, status, search, empresaId, turmaId });
     },
   });
 
@@ -67,6 +71,7 @@ export function useUsers(options: UsersOptions = {}) {
     users: usersQuery.data?.data || [],
     total: usersQuery.data?.total || 0,
     isLoading: usersQuery.isLoading,
+    isFetching: usersQuery.isFetching,
     refetch: usersQuery.refetch,
     createUser: createUserMutation.mutateAsync,
     updateUser: updateUserMutation.mutateAsync,

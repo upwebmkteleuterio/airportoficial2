@@ -14,6 +14,8 @@ import {
   CheckCircle2,
   ChevronRight,
   ChevronLeft,
+  ChevronsLeft,
+  ChevronsRight,
   Download,
   RefreshCw,
   Sparkles,
@@ -62,7 +64,8 @@ interface QueueItem {
 
 export function CentralGed() {
   const queryClient = useQueryClient();
-  const { documents, isLoading: isLoadingDocuments } = useDocuments();
+  const pageSize = 10;
+  const [page, setPage] = useState(1);
 
   // Search and general filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -77,12 +80,18 @@ export function CentralGed() {
   const { classes } = useClasses();
 
   // Queue of pending students loaded from the database
-  const { users, isLoading: isLoadingUsers } = useUsers({
+  const { users, total, isFetching: isFetchingUsers } = useUsers({
+    page,
+    pageSize,
     role: UserRole.ALUNO,
-    status: 'pendente'
+    status: 'pendente',
+    search: searchQuery,
+    empresaId: selectedEmpresa,
+    turmaId: selectedTurma
   });
-  const isLoading = isLoadingUsers || isLoadingDocuments;
-  
+  const pageUserIds = useMemo(() => users.map((user) => user.id), [users]);
+  const { documents, isFetching: isFetchingDocuments } = useDocuments(pageUserIds);
+
   const [queueItems, setQueueItems] = useState<QueueItem[]>([]);
   
   // Convert pending users to queue items
@@ -169,24 +178,26 @@ export function CentralGed() {
     return () => { cancelled = true; };
   }, [activeReviewItem, selectedReviewDocument]);
 
-  // Sync with main useDocuments list if needed
-  const listToRender = useMemo(() => {
-    return queueItems.filter((item) => {
-      const matchQuery = item.alunoNome.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          item.documentoTipo.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          item.alunoIdAnac.toLowerCase().includes(searchQuery.toLowerCase());
-      
-      let passes = matchQuery;
-      if (selectedIaFilter !== 'todos') passes = passes && item.analiseIa === selectedIaFilter;
-      if (selectedEmpresa !== 'todas') passes = passes && item.empresa_id === selectedEmpresa;
-      if (selectedTurma !== 'todas') passes = passes && item.profile.turma_id_pendente === selectedTurma;
-      return passes;
-      
-    });
-  }, [queueItems, searchQuery, selectedIaFilter, selectedEmpresa, selectedTurma]);
+  // Search and company/class filters are applied by Supabase before this page is returned.
+  // IA analysis is currently manual for this queue, so non-manual IA filters have no results.
+  const listToRender = selectedIaFilter === 'todos' || selectedIaFilter === 'nao_aplicavel' ? queueItems : [];
+  const filteredTotal = selectedIaFilter === 'todos' || selectedIaFilter === 'nao_aplicavel' ? total : 0;
+  const totalPages = Math.max(1, Math.ceil(filteredTotal / pageSize));
+  const displayPage = Math.min(page, totalPages);
+  const isLoading = isFetchingUsers || isFetchingDocuments || page > totalPages;
+  const firstVisibleRecord = filteredTotal === 0 ? 0 : (displayPage - 1) * pageSize + 1;
+  const lastVisibleRecord = filteredTotal === 0 ? 0 : Math.min(displayPage * pageSize, filteredTotal);
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchQuery, selectedEmpresa, selectedTurma, selectedIaFilter]);
+
+  useEffect(() => {
+    if (!isFetchingUsers && page > totalPages) setPage(totalPages);
+  }, [isFetchingUsers, page, totalPages]);
 
   // Dynamic Summary Counters
-  const countPendente = useMemo(() => queueItems.filter(i => i.status === 'Pendente').length, [queueItems]);
+  const countPendente = filteredTotal;
   const countB2bPendente = useMemo(() => queueItems.filter(i => i.profile.origem_cadastro === 'b2b').length, [queueItems]);
   const countDocumentacaoCompleta = useMemo(() => queueItems.filter(i => i.missingDocuments.length === 0).length, [queueItems]);
 
@@ -326,6 +337,12 @@ export function CentralGed() {
       setIsProcessing(false);
     }
   };
+
+  const pageNumbers = useMemo(() => {
+    const visibleCount = Math.min(5, totalPages);
+    const start = Math.min(Math.max(1, displayPage - 2), totalPages - visibleCount + 1);
+    return Array.from({ length: visibleCount }, (_, index) => start + index);
+  }, [displayPage, totalPages]);
 
   // Helper to render Document Icons beautifully
   const getDocIcon = (type: string) => {
@@ -632,30 +649,58 @@ export function CentralGed() {
         {/* Footer Paginate Bar */}
         <div className="px-5 py-4 border-t border-gray-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4 font-sans text-xs bg-slate-50 dark:bg-slate-850">
           <span className="text-gray-500 font-medium">
-            Mostrando {listToRender.length > 0 ? 1 : 0} a {listToRender.length} de {queueItems.length} registros
+            Mostrando {firstVisibleRecord} a {lastVisibleRecord} de {filteredTotal} registros
           </span>
 
           <div className="flex items-center border border-gray-300 dark:border-slate-750 rounded-lg bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
-            <button className="p-2 hover:bg-gray-50 dark:hover:bg-slate-850 text-gray-500 dark:text-slate-400 border-r border-gray-300 dark:border-slate-750 transition-colors cursor-pointer">
+            <button
+              type="button"
+              onClick={() => setPage(1)}
+              disabled={isLoading || page <= 1}
+              aria-label="Primeira página"
+              className="p-2 hover:bg-gray-50 dark:hover:bg-slate-850 text-gray-500 dark:text-slate-400 border-r border-gray-300 dark:border-slate-750 transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <ChevronsLeft className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+              disabled={isLoading || page <= 1}
+              aria-label="Página anterior"
+              className="p-2 hover:bg-gray-50 dark:hover:bg-slate-850 text-gray-500 dark:text-slate-400 border-r border-gray-300 dark:border-slate-750 transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+            >
               <ChevronLeft className="w-4 h-4" />
             </button>
-            <button className="px-3 py-2 bg-[#005f5f]/10 dark:bg-teal-950/30 text-[#005f5f] dark:text-teal-400 font-bold border-r border-gray-300 dark:border-slate-750 transition-colors cursor-pointer">
-              1
-            </button>
-            <button className="px-3 py-2 hover:bg-gray-50 dark:hover:bg-slate-850 text-gray-500 dark:text-slate-400 border-r border-gray-300 dark:border-slate-750 transition-colors cursor-pointer">
-              2
-            </button>
-            <button className="px-3 py-2 hover:bg-gray-50 dark:hover:bg-slate-850 text-gray-500 dark:text-slate-400 border-r border-gray-300 dark:border-slate-750 transition-colors cursor-pointer">
-              3
-            </button>
-            <span className="px-3 py-2 text-gray-450 border-r border-gray-300 dark:border-slate-750 select-none">
-              ...
-            </span>
-            <button className="px-3 py-2 hover:bg-gray-50 dark:hover:bg-slate-850 text-gray-500 dark:text-slate-400 border-r border-gray-300 dark:border-slate-750 transition-colors cursor-pointer">
-              36
-            </button>
-            <button className="p-2 hover:bg-gray-50 dark:hover:bg-slate-850 text-gray-500 dark:text-slate-400 transition-colors cursor-pointer">
+            {pageNumbers.map((pageNumber) => (
+              <button
+                key={pageNumber}
+                type="button"
+                onClick={() => setPage(pageNumber)}
+                disabled={isLoading || pageNumber === displayPage}
+                aria-current={pageNumber === displayPage ? 'page' : undefined}
+                aria-label={`Página ${pageNumber}`}
+                className={`px-3 py-2 border-r border-gray-300 dark:border-slate-750 transition-colors cursor-pointer disabled:cursor-default disabled:opacity-100 ${pageNumber === displayPage ? 'bg-[#005f5f]/10 dark:bg-teal-950/30 text-[#005f5f] dark:text-teal-400 font-bold' : 'hover:bg-gray-50 dark:hover:bg-slate-850 text-gray-500 dark:text-slate-400'}`}
+              >
+                {pageNumber}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+              disabled={isLoading || page >= totalPages}
+              aria-label="Próxima página"
+              className="p-2 hover:bg-gray-50 dark:hover:bg-slate-850 text-gray-500 dark:text-slate-400 border-r border-gray-300 dark:border-slate-750 transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+            >
               <ChevronRight className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setPage(totalPages)}
+              disabled={isLoading || page >= totalPages}
+              aria-label="Última página"
+              className="p-2 hover:bg-gray-50 dark:hover:bg-slate-850 text-gray-500 dark:text-slate-400 transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <ChevronsRight className="w-4 h-4" />
             </button>
           </div>
         </div>
