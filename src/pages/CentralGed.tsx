@@ -28,7 +28,9 @@ import {
   GraduationCap,
   Briefcase,
   SlidersHorizontal,
-  Award
+  Award,
+  History,
+  Maximize2
 } from 'lucide-react';
 import { useDocuments } from '../hooks/useDocuments';
 import { useUsers } from '../hooks/useUsers';
@@ -115,25 +117,39 @@ export function CentralGed() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [actionError, setActionError] = useState('');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [activeDocumentId, setActiveDocumentId] = useState<string | null>(null);
+  const [reviewTab, setReviewTab] = useState<'documents' | 'data'>('documents');
   const [replacementFiles, setReplacementFiles] = useState<Record<string, File | null>>({});
   const [replacementLoadingId, setReplacementLoadingId] = useState<string | null>(null);
   const [replacementErrors, setReplacementErrors] = useState<Record<string, string>>({});
   const replacementInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
+  const currentReviewDocuments = useMemo(() => {
+    if (!activeReviewItem) return [];
+    return activeReviewItem.documents
+      .filter((document) => document.esta_atual !== false && document.status !== DocumentStatus.SUBSTITUIDO)
+      .sort((a, b) => (b.versao ?? 1) - (a.versao ?? 1));
+  }, [activeReviewItem]);
+
+  const selectedReviewDocument = currentReviewDocuments.find((document) => document.id === activeDocumentId)
+    ?? currentReviewDocuments[0];
+
+  useEffect(() => {
+    setActiveDocumentId(activeReviewItem?.documents.find((document) => document.esta_atual !== false)?.id ?? null);
+    setReviewTab('documents');
+  }, [activeReviewItem]);
+
   useEffect(() => {
     let cancelled = false;
-    const firstDocument = activeReviewItem?.documents[0];
     setPreviewUrl(null);
-    if (!firstDocument) return;
-    void documentService.createSignedUrl(firstDocument).then((url) => {
+    if (!activeReviewItem || !selectedReviewDocument) return;
+    void documentService.createSignedUrl(selectedReviewDocument).then((url) => {
       if (!cancelled) setPreviewUrl(url);
     }).catch(() => {
       if (!cancelled) setPreviewUrl(null);
     });
-    return () => {
-      cancelled = true;
-    };
-  }, [activeReviewItem]);
+    return () => { cancelled = true; };
+  }, [activeReviewItem, selectedReviewDocument]);
 
   // Sync with main useDocuments list if needed
   const listToRender = useMemo(() => {
@@ -184,33 +200,59 @@ export function CentralGed() {
     }
   };
 
-  const handleRejectAction = async (item: QueueItem, reason: string) => {
+  const refreshReviewData = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['users'] }),
+      queryClient.invalidateQueries({ queryKey: ['documents'] })
+    ]);
+  };
+
+  const handleRejectAction = async (item: QueueItem, document: Documento, reason: string) => {
     setIsProcessing(true);
     setActionError('');
     try {
-      await approvalService.reject(item.profile, item.documents, reason);
-      await queryClient.invalidateQueries({ queryKey: ['users'] });
-      await queryClient.invalidateQueries({ queryKey: ['documents'] });
-      setActiveReviewItem(null);
-      setJustificativaText('');
+      await approvalService.rejectDocument(item.profile, document, reason);
+      await refreshReviewData();
+      setActiveReviewItem((current) => current ? {
+        ...current,
+        documents: current.documents.map((candidate) => candidate.id === document.id
+          ? { ...candidate, status: DocumentStatus.RECUSADO, observacoes_revisor: reason.trim() }
+          : candidate)
+      } : current);
     } catch (error) {
-      setActionError(error instanceof Error ? error.message : 'Não foi possível recusar o cadastro.');
+      setActionError(error instanceof Error ? error.message : 'Não foi possível recusar o documento.');
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const handleManualApprove = async (item: QueueItem, notes: string) => {
+  const handleDocumentApprove = async (item: QueueItem, document: Documento, notes: string) => {
     setIsProcessing(true);
     setActionError('');
     try {
-      await approvalService.approve(item.profile, item.documents, notes);
-      await queryClient.invalidateQueries({ queryKey: ['users'] });
-      await queryClient.invalidateQueries({ queryKey: ['documents'] });
-      setActiveReviewItem(null);
+      const approved = await approvalService.approveDocument(item.profile, document, notes);
+      await refreshReviewData();
+      setActiveReviewItem((current) => current ? {
+        ...current,
+        documents: current.documents.map((candidate) => candidate.id === document.id ? approved : candidate)
+      } : current);
       setJustificativaText('');
     } catch (error) {
-      setActionError(error instanceof Error ? error.message : 'Não foi possível aprovar o cadastro.');
+      setActionError(error instanceof Error ? error.message : 'Não foi possível aprovar o documento.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleFinalApproval = async (item: QueueItem) => {
+    setIsProcessing(true);
+    setActionError('');
+    try {
+      await approvalService.finalizeApproval(item.profile, item.documents);
+      await refreshReviewData();
+      setActiveReviewItem(null);
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Não foi possível concluir a ativação do aluno.');
     } finally {
       setIsProcessing(false);
     }
@@ -502,18 +544,6 @@ export function CentralGed() {
                         type="button"
                         onClick={() => {
                           setActionError('');
-                          setRejectionReason('Informações incoerentes com os dados cadastrados.');
-                          setActiveReviewItem(item);
-                        }}
-                        disabled={isProcessing}
-                        className="px-3 py-1.5 border border-red-200 hover:bg-red-50 text-red-600 rounded-lg font-bold text-xs cursor-pointer transition-colors disabled:opacity-50"
-                      >
-                        Rejeitar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActionError('');
                           setActiveReviewItem(item);
                           setJustificativaText('');
                         }}
@@ -666,8 +696,18 @@ export function CentralGed() {
               </button>
             </div>
 
+            <div className="flex border-b border-gray-200 dark:border-slate-800 px-6 shrink-0 bg-white dark:bg-slate-900">
+              <button type="button" onClick={() => setReviewTab('documents')} className={`px-4 py-3 text-xs font-bold border-b-2 ${reviewTab === 'documents' ? 'border-[#005f5f] text-[#005f5f]' : 'border-transparent text-gray-500'}`}>
+                <FileCheck className="mr-1 inline h-4 w-4" />Documentação
+              </button>
+              <button type="button" onClick={() => setReviewTab('data')} className={`px-4 py-3 text-xs font-bold border-b-2 ${reviewTab === 'data' ? 'border-[#005f5f] text-[#005f5f]' : 'border-transparent text-gray-500'}`}>
+                <UserCheck className="mr-1 inline h-4 w-4" />Dados do cadastro
+              </button>
+            </div>
+
             {/* Drawer Body (Scrolled) */}
             <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+              {reviewTab === 'documents' && <>
               {/* Document review summary */}
               <div className="bg-slate-50 dark:bg-slate-850/50 rounded-xl p-4 border border-gray-200 dark:border-slate-800 space-y-4">
                 <div className="flex items-center gap-2 text-[#005f5f] dark:text-teal-400 font-bold text-xs uppercase tracking-wider">
@@ -686,11 +726,23 @@ export function CentralGed() {
                 <div className="space-y-2">
                   {activeReviewItem.documents.length === 0 ? (
                     <p className="rounded-lg bg-white p-3 text-xs text-slate-500">Nenhum documento foi enviado.</p>
-                  ) : activeReviewItem.documents.map((document) => (
-                    <div key={document.id} className="flex items-center justify-between gap-3 rounded-lg bg-white p-3 text-xs shadow-sm dark:bg-slate-900">
+                  ) : currentReviewDocuments.map((document) => (
+                    <div key={document.id} onClick={() => setActiveDocumentId(document.id)} className={`flex cursor-pointer items-center justify-between gap-3 rounded-lg p-3 text-xs shadow-sm dark:bg-slate-900 ${selectedReviewDocument?.id === document.id ? 'border border-teal-400 bg-teal-50/50 dark:bg-teal-950/20' : 'bg-white'}`}>
                       <div className="min-w-0 flex-1">
                         <p className="truncate font-bold text-slate-900 dark:text-white">{document.arquivo_nome}</p>
-                        <p className="mt-1 text-[10px] text-slate-500">{document.tipo_documento} · {document.status} · SHA-256: {document.hash_sha256.slice(0, 12)}…</p>
+                        <p className="mt-1 text-[10px] text-slate-500">{document.tipo_documento} · {document.status} · versão {document.versao ?? 1} · SHA-256: {document.hash_sha256.slice(0, 12)}…</p>
+                        {document.observacoes_revisor && <p className="mt-2 rounded bg-rose-50 p-2 text-[10px] text-rose-800">Parecer: {document.observacoes_revisor}</p>}
+                        {activeReviewItem.documents.some((candidate) => candidate.substitui_documento_id === document.id) && <p className="mt-2 flex items-center gap-1 text-[10px] font-semibold text-amber-700"><History className="h-3 w-3" />Existe uma nova versão enviada.</p>}
+                        {activeReviewItem.documents.filter((candidate) => candidate.id !== document.id && candidate.esta_atual === false && (candidate.grupo_documento_id === document.grupo_documento_id || candidate.tipo_documento === document.tipo_documento)).length > 0 && (
+                          <details className="mt-2 rounded border border-gray-200 p-2 text-[10px]" onClick={(event) => event.stopPropagation()}>
+                            <summary className="cursor-pointer font-bold text-slate-600">Ver versões anteriores</summary>
+                            <div className="mt-2 space-y-2">
+                              {activeReviewItem.documents.filter((candidate) => candidate.id !== document.id && candidate.esta_atual === false && (candidate.grupo_documento_id === document.grupo_documento_id || candidate.tipo_documento === document.tipo_documento)).map((oldDocument) => (
+                                <div key={oldDocument.id} className="border-l-2 border-rose-300 pl-2 text-slate-600"><strong>v{oldDocument.versao ?? 1} · {oldDocument.status}</strong><br />{oldDocument.arquivo_nome}<br />{oldDocument.observacoes_revisor || 'Sem motivo informado'}</div>
+                              ))}
+                            </div>
+                          </details>
+                        )}
                         {document.status === DocumentStatus.RECUSADO && (
                           <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900/50 dark:bg-amber-950/20">
                             <label htmlFor={`replacement-${document.id}`} className="block text-[10px] font-bold text-amber-900 dark:text-amber-200">
@@ -727,9 +779,13 @@ export function CentralGed() {
                           </div>
                         )}
                       </div>
-                      {document.url_armazenamento && document.id === activeReviewItem.documents[0]?.id && previewUrl && (
-                        <a href={previewUrl} target="_blank" rel="noreferrer" className="shrink-0 rounded border border-teal-200 px-2 py-1 font-bold text-teal-700 hover:bg-teal-50">Abrir</a>
-                      )}
+                      <div className="flex shrink-0 items-center gap-2">
+                        <button type="button" onClick={(event) => { event.stopPropagation(); setActiveDocumentId(document.id); }} className="rounded border border-teal-200 px-2 py-1 font-bold text-teal-700 hover:bg-teal-50" aria-label={`Selecionar ${document.tipo_documento}`}>
+                          <Maximize2 className="h-3.5 w-3.5" />
+                        </button>
+                        <button type="button" onClick={(event) => { event.stopPropagation(); void handleDocumentApprove(activeReviewItem, document, justificativaText); }} disabled={isProcessing || document.status !== DocumentStatus.PENDENTE} className="rounded bg-emerald-600 px-2 py-1 font-bold text-white disabled:opacity-50">Aprovar</button>
+                        <button type="button" onClick={(event) => { event.stopPropagation(); void handleRejectAction(activeReviewItem, document, `${rejectionReason}${justificativaText.trim() ? ` — ${justificativaText.trim()}` : ''}`); }} disabled={isProcessing || document.status === DocumentStatus.RECUSADO} className="rounded bg-red-600 px-2 py-1 font-bold text-white disabled:opacity-50">Rejeitar</button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -741,8 +797,8 @@ export function CentralGed() {
                   Pré-visualização segura
                 </span>
                 <div className="overflow-hidden rounded-xl border border-gray-200 bg-slate-100 dark:border-slate-800 dark:bg-slate-950">
-                  {previewUrl && activeReviewItem.documents[0]?.arquivo_nome.match(/\.(jpg|jpeg|png|webp)$/i) ? (
-                    <img src={previewUrl} alt={`Pré-visualização de ${activeReviewItem.documents[0].arquivo_nome}`} className="max-h-64 w-full object-contain" />
+                  {previewUrl && selectedReviewDocument?.arquivo_nome.match(/\.(jpg|jpeg|png|webp)$/i) ? (
+                    <img src={previewUrl} alt={`Pré-visualização de ${selectedReviewDocument?.arquivo_nome}`} className="max-h-64 w-full object-contain" />
                   ) : previewUrl ? (
                     <a href={previewUrl} target="_blank" rel="noreferrer" className="flex h-32 items-center justify-center gap-2 text-xs font-bold text-teal-700 hover:bg-teal-50">
                       <FileCheck className="h-8 w-8" /> Abrir PDF em nova aba
@@ -789,29 +845,45 @@ export function CentralGed() {
                   <option value="Nome incompatível com a ficha de matrícula">Nome incompatível com a ficha de matrícula</option>
                 </select>
               </div>
+              </>}
+
+              {reviewTab === 'data' && (
+                <div className="space-y-6">
+                  <section>
+                    <h4 className="mb-3 text-sm font-bold text-slate-800 dark:text-slate-200">Dados pessoais e contato</h4>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      {[
+                        ['Nome completo', activeReviewItem.profile.nome_completo], ['CPF', activeReviewItem.profile.cpf], ['E-mail', activeReviewItem.profile.email], ['Telefone', activeReviewItem.profile.telefone],
+                        ['Data de nascimento', activeReviewItem.profile.data_nascimento], ['Nome da mãe', activeReviewItem.profile.nome_mae], ['Nome do pai', activeReviewItem.profile.nome_pai], ['Grau de ensino', activeReviewItem.profile.grau_ensino]
+                      ].map(([label, value]) => <div key={label}><span className="block text-[10px] font-semibold text-gray-500">{label}</span><span className="text-sm font-medium text-slate-900 dark:text-white">{value || '—'}</span></div>)}
+                    </div>
+                  </section>
+                  <section className="border-t border-gray-200 pt-5 dark:border-slate-800">
+                    <h4 className="mb-3 text-sm font-bold text-slate-800 dark:text-slate-200">Identificação e contexto</h4>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      {[
+                        ['RG', activeReviewItem.profile.rg], ['Órgão expedidor', activeReviewItem.profile.orgao_expedicao_rg], ['Identificação escolhida', getDocumentSelectorLabel(activeReviewItem.profile.tipo_documento_selecionado)],
+                        ['Trabalha na aviação civil?', activeReviewItem.profile.trabalha_aviacao_civil], ['Trabalha com segurança AVSEC?', activeReviewItem.profile.trabalha_seguranca_avsec], ['Origem', activeReviewItem.profile.origem_cadastro], ['Empresa', activeReviewItem.profile.empresa_id], ['Aceite LGPD', activeReviewItem.profile.termo_lgpd_aceite ? 'Aceito' : 'Não aceito']
+                      ].map(([label, value]) => <div key={label}><span className="block text-[10px] font-semibold text-gray-500">{label}</span><span className="text-sm font-medium text-slate-900 dark:text-white">{value || '—'}</span></div>)}
+                    </div>
+                  </section>
+                  <section className="border-t border-gray-200 pt-5 dark:border-slate-800">
+                    <h4 className="mb-3 text-sm font-bold text-slate-800 dark:text-slate-200">Endereço (etapa 2)</h4>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      {[['CEP', activeReviewItem.profile.cep], ['Logradouro', activeReviewItem.profile.endereco], ['Número', activeReviewItem.profile.numero], ['Bairro', activeReviewItem.profile.bairro], ['Cidade', activeReviewItem.profile.cidade], ['UF', activeReviewItem.profile.estado]].map(([label, value]) => <div key={label}><span className="block text-[10px] font-semibold text-gray-500">{label}</span><span className="text-sm font-medium text-slate-900 dark:text-white">{value || '—'}</span></div>)}
+                    </div>
+                  </section>
+                </div>
+              )}
             </div>
 
             {/* Action Buttons Footer */}
-            <div className="p-6 border-t border-gray-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 flex items-center justify-between gap-3">
-              <button
-                type="button"
-                onClick={() => void handleRejectAction(activeReviewItem, rejectionReason)}
-                disabled={isProcessing}
-                className="flex-1 bg-red-600 hover:bg-red-700 text-white py-3 rounded-lg font-bold text-xs text-center cursor-pointer transition-colors shadow-sm flex items-center justify-center gap-1.5 disabled:opacity-50"
-              >
-                <XCircle className="w-4.5 h-4.5" />
-                Rejeitar Documento
-              </button>
-
-              <button
-                type="button"
-                onClick={() => void handleManualApprove(activeReviewItem, justificativaText)}
-                disabled={isProcessing || activeReviewItem.missingDocuments.length > 0}
-                className="flex-1 bg-[#005f5f] hover:bg-[#004d4d] text-white py-3 rounded-lg font-bold text-xs text-center cursor-pointer transition-colors shadow-md flex items-center justify-center gap-1.5 disabled:opacity-50"
-              >
-                <Check className="w-4.5 h-4.5" />
-                Aprovar Manualmente
-              </button>
+            <div className="p-6 border-t border-gray-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 flex items-center justify-end gap-3">
+              {reviewTab === 'documents' && (
+                <button type="button" onClick={() => void handleFinalApproval(activeReviewItem)} disabled={isProcessing || activeReviewItem.missingDocuments.length > 0 || currentReviewDocuments.some((document) => document.status !== DocumentStatus.APROVADO)} className="w-full bg-[#005f5f] hover:bg-[#004d4d] text-white py-3 rounded-lg font-bold text-xs text-center cursor-pointer transition-colors shadow-md disabled:opacity-50">
+                  <Check className="mr-1 inline h-4 w-4" />Concluir aprovação e ativar aluno
+                </button>
+              )}
             </div>
           </div>
         )}

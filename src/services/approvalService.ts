@@ -70,6 +70,68 @@ export const approvalService = {
     return replacement;
   },
 
+  approveDocument: async (profile: Usuario, document: Documento, notes: string) => {
+    if (profile.status !== 'pendente') throw new Error('Este cadastro não está pendente de aprovação.');
+    if (document.esta_atual === false || document.status === DocumentStatus.SUBSTITUIDO || document.status === DocumentStatus.RECUSADO) {
+      throw new Error('Somente um documento atual pendente pode ser analisado.');
+    }
+    const reviewerId = await getReviewerId();
+    const approved = document.storage_area === 'temporarios'
+      ? await documentService.promoteToOfficial(document)
+      : await documentService.update(document.id, {
+        status: DocumentStatus.APROVADO,
+        observacoes_revisor: notes.trim() || undefined
+      });
+    if (document.storage_area === 'temporarios' && notes.trim()) {
+      await documentService.update(approved.id, { observacoes_revisor: notes.trim() });
+    }
+    await registerAudit(reviewerId, `Aprovou o documento ${document.arquivo_nome}`, profile.id, approved, notes.trim() || undefined);
+    return approved;
+  },
+
+  rejectDocument: async (profile: Usuario, document: Documento, reason: string) => {
+    const normalizedReason = reason.trim();
+    if (!normalizedReason) throw new Error('Informe o motivo da recusa.');
+    if (profile.status !== 'pendente') throw new Error('Este cadastro não está pendente de aprovação.');
+    if (document.esta_atual === false || document.status === DocumentStatus.SUBSTITUIDO) {
+      throw new Error('Somente o documento atual pode ser analisado.');
+    }
+    const reviewerId = await getReviewerId();
+    const rejected = await documentService.update(document.id, {
+      status: DocumentStatus.RECUSADO,
+      observacoes_revisor: normalizedReason
+    });
+    await registerAudit(reviewerId, `Recusou o documento ${document.arquivo_nome}`, profile.id, rejected, normalizedReason);
+    return rejected;
+  },
+
+  finalizeApproval: async (profile: Usuario, documents: Documento[]) => {
+    if (profile.status !== 'pendente') throw new Error('Este cadastro não está pendente de aprovação.');
+    const missing = missingDocuments(profile, documents);
+    if (missing.length > 0) throw new Error(`Não é possível concluir. Documentos faltantes ou não aprovados: ${missing.join(', ')}.`);
+    const current = currentDocuments(documents);
+    const required = getRequiredDocumentTypes(profile.tipo_documento_selecionado);
+    const notApproved = required.filter((type) => current.get(type)?.status !== DocumentStatus.APROVADO);
+    if (notApproved.length > 0) throw new Error(`Aprove todos os documentos antes de ativar: ${notApproved.join(', ')}.`);
+
+    await userService.update(profile.id, { status: 'ativo' });
+    if (profile.origem_cadastro === 'b2b' && profile.turma_id_pendente) {
+      const existing = await classService.getMatriculasByAluno(profile.id);
+      if (!existing.some((matricula) => matricula.turma_id === profile.turma_id_pendente)) {
+        await classService.createMatricula({
+          aluno_id: profile.id,
+          turma_id: profile.turma_id_pendente,
+          empresa_b2b_id: profile.empresa_id,
+          status_resultado_final: 'Pendente',
+          status_matricula: 'Ativo'
+        });
+      }
+    }
+    const reviewerId = await getReviewerId();
+    await registerAudit(reviewerId, `Concluiu aprovação e ativou o cadastro de ${profile.nome_completo}`, profile.id);
+    return true;
+  },
+
   approve: async (profile: Usuario, documents: Documento[], notes: string) => {
     if (profile.status !== 'pendente') throw new Error('Este cadastro não está pendente de aprovação.');
 
