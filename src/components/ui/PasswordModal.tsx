@@ -6,7 +6,7 @@ import { documentAccessService, DocumentAccessGrant } from '../../services/docum
 interface PasswordModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (grant: DocumentAccessGrant) => void;
+  onConfirm: (grant: DocumentAccessGrant) => void | Promise<void>;
   targetUserId: string;
   title?: string;
   description?: string;
@@ -40,7 +40,7 @@ export function PasswordModal({
 
     try {
       const grant = await documentAccessService.openAccess(targetUserId, password);
-      onConfirm(grant);
+      await onConfirm(grant);
       setPassword('');
       onClose();
     } catch (err) {

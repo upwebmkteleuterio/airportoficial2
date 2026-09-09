@@ -27,6 +27,7 @@ import { useUIStore } from '../store/uiStore';
 import { useAudit } from '../hooks/useAudit';
 import { useUsers } from '../hooks/useUsers';
 import { documentService } from '../services/documentService';
+import { AuditDetailPanel } from '../components/audit/AuditDetailPanel';
 import { AuditoriaLogView, UserRole } from '../types';
 
 interface DocumentOption {
@@ -82,6 +83,7 @@ export function Reports() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [copiedHashId, setCopiedHashId] = useState<string | null>(null);
+  const [selectedLog, setSelectedLog] = useState<AuditoriaLogView | null>(null);
   const itemsPerPage = 20;
 
   const { logs: apiLogs, total: auditTotal, isLoading, isFetching, eventCounts } = useAudit({
@@ -443,7 +445,22 @@ export function Reports() {
                     : null;
 
                   return (
-                    <tr key={log.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-850/50 transition-colors h-14">
+                    <tr
+                      key={log.id}
+                      tabIndex={0}
+                      role="button"
+                      aria-label={`Abrir detalhes do registro de auditoria ${log.id}`}
+                      aria-selected={selectedLog?.id === log.id}
+                      onClick={() => setSelectedLog(log)}
+                      onKeyDown={(event) => {
+                        if (event.target !== event.currentTarget) return;
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          setSelectedLog(log);
+                        }
+                      }}
+                      className="h-14 cursor-pointer transition-colors hover:bg-slate-50/70 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-teal-500 dark:hover:bg-slate-850/50"
+                    >
                       <td className="px-5 py-3 text-slate-500 font-mono text-[11px]">
                         {new Date(log.data_hora).toLocaleString('pt-BR')}
                       </td>
@@ -537,7 +554,11 @@ export function Reports() {
                       <td className="px-4 py-3 text-center">
                         <button
                           title={`Copiar Hash SHA-256: ${log.hash_sha256}`}
-                          onClick={() => copyHash(log.id, log.hash_sha256)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            copyHash(log.id, log.hash_sha256);
+                          }}
+                          onKeyDown={(event) => event.stopPropagation()}
                           aria-label="Copiar hash SHA-256 do registro"
                           className="p-1.5 text-gray-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
                         >
@@ -618,6 +639,11 @@ export function Reports() {
         </div>
       </div>
 
+      <AuditDetailPanel
+        isOpen={Boolean(selectedLog)}
+        log={selectedLog}
+        onClose={() => setSelectedLog(null)}
+      />
     </div>
   );
 }
