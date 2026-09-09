@@ -11,6 +11,7 @@ export interface AuditPageOptions {
   operadorId?: string;
   targetSearch?: string;
   documentoId?: string;
+  documentoTipo?: string;
   dateFrom?: string;
   dateTo?: string;
 }
@@ -104,7 +105,7 @@ export const auditService = {
     return (data ?? []) as AuditoriaLog[];
   },
 
-  getPage: async ({ page, pageSize, search, action, table, operadorId, targetSearch, documentoId, dateFrom, dateTo }: AuditPageOptions): Promise<AuditPage> => {
+  getPage: async ({ page, pageSize, search, action, table, operadorId, targetSearch, documentoId, documentoTipo, dateFrom, dateTo }: AuditPageOptions): Promise<AuditPage> => {
     const { data, error } = await supabase.rpc('get_auditoria_logs_page', {
       p_page: page,
       p_page_size: pageSize,
@@ -114,6 +115,7 @@ export const auditService = {
       p_operador_id: operadorId?.trim() || null,
       p_target_search: targetSearch?.trim() || null,
       p_documento_id: documentoId?.trim() || null,
+      p_documento_tipo: documentoTipo?.trim() || null,
       p_date_from: dateFrom || null,
       p_date_to: dateTo || null,
     });
@@ -126,7 +128,7 @@ export const auditService = {
     };
   },
 
-  getEventCounts: async ({ search, action, table, operadorId, targetSearch, documentoId, dateFrom, dateTo }: Omit<AuditPageOptions, 'page' | 'pageSize'> = {}): Promise<AuditEventCounts> => {
+  getEventCounts: async ({ search, action, table, operadorId, targetSearch, documentoId, documentoTipo, dateFrom, dateTo }: Omit<AuditPageOptions, 'page' | 'pageSize'> = {}): Promise<AuditEventCounts> => {
     const { data, error } = await supabase.rpc('get_auditoria_event_counts', {
       p_search: search?.trim() || null,
       p_action: normalizedAction(action) || null,
@@ -134,6 +136,7 @@ export const auditService = {
       p_operador_id: operadorId?.trim() || null,
       p_target_search: targetSearch?.trim() || null,
       p_documento_id: documentoId?.trim() || null,
+      p_documento_tipo: documentoTipo?.trim() || null,
       p_date_from: dateFrom || null,
       p_date_to: dateTo || null,
     });

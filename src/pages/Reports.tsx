@@ -30,8 +30,6 @@ import { documentService } from '../services/documentService';
 import { AuditoriaLogView, UserRole } from '../types';
 
 interface DocumentOption {
-  id: string;
-  arquivo_nome: string;
   tipo_documento: string;
 }
 
@@ -78,24 +76,22 @@ export function Reports() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [actionFilter, setActionFilter] = useState('');
-  const [tableFilter, setTableFilter] = useState('');
   const [operadorFilter, setOperadorFilter] = useState('');
   const [targetSearch, setTargetSearch] = useState('');
   const [documentoFilter, setDocumentoFilter] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [copiedHashId, setCopiedHashId] = useState<string | null>(null);
-  const itemsPerPage = 8;
+  const itemsPerPage = 20;
 
   const { logs: apiLogs, total: auditTotal, isLoading, isFetching, eventCounts } = useAudit({
     page: currentPage,
     pageSize: itemsPerPage,
     search: filters.gedSearchTerm,
     action: actionFilter,
-    table: tableFilter,
     operadorId: operadorFilter,
     targetSearch,
-    documentoId: documentoFilter,
+    documentoTipo: documentoFilter,
     dateFrom,
     dateTo,
   });
@@ -112,7 +108,7 @@ export function Reports() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [filters.gedSearchTerm, actionFilter, tableFilter, operadorFilter, targetSearch, documentoFilter, dateFrom, dateTo]);
+  }, [filters.gedSearchTerm, actionFilter, operadorFilter, targetSearch, documentoFilter, dateFrom, dateTo]);
 
   const totalItems = auditTotal;
   const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
@@ -126,7 +122,6 @@ export function Reports() {
   const handleClearFilters = () => {
     setFilter('gedSearchTerm', '');
     setActionFilter('');
-    setTableFilter('');
     setOperadorFilter('');
     setTargetSearch('');
     setDocumentoFilter('');
@@ -283,7 +278,7 @@ export function Reports() {
                 <option value="">Todos os Operadores</option>
                 {operators.map((operator) => (
                   <option key={operator.id} value={operator.id}>
-                    {operator.nome_completo}
+                    {operator.nome_completo || operator.email || operator.id}
                   </option>
                 ))}
               </select>
@@ -308,68 +303,53 @@ export function Reports() {
             </div>
           </div>
 
-          {/* DOCUMENTO FILTER */}
-          <div className="flex flex-col gap-1">
-            <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Documento</span>
-            <div className="relative">
-              <select
-                value={documentoFilter}
-                onChange={(e) => setDocumentoFilter(e.target.value)}
-                aria-label="Filtrar por documento"
-                className={selectClassName + ' w-60'}
-              >
-                <option value="">Todos os Documentos</option>
-                {documentOptions.map((doc) => (
-                  <option key={doc.id} value={doc.id}>
-                    {documentTypeLabels[doc.tipo_documento.toLowerCase()] ?? doc.tipo_documento} — {doc.arquivo_nome}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none w-4 h-4" />
+          {/* DOCUMENT AND DATE FILTERS */}
+          <div className="flex flex-wrap items-end gap-4 w-full lg:w-auto">
+            <div className="flex flex-col gap-1">
+              <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Documento</span>
+              <div className="relative">
+                <select
+                  value={documentoFilter}
+                  onChange={(e) => setDocumentoFilter(e.target.value)}
+                  aria-label="Filtrar por tipo de documento"
+                  className={selectClassName + ' w-44'}
+                >
+                  <option value="">Todos os Documentos</option>
+                  {documentOptions.map((doc) => (
+                    <option key={doc.tipo_documento} value={doc.tipo_documento}>
+                      {documentTypeLabels[doc.tipo_documento.trim().toLowerCase()] ?? doc.tipo_documento}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none w-4 h-4" />
+              </div>
+            </div>
+
+            {/* DATE FILTERS */}
+            <div className="flex flex-col gap-1">
+              <label htmlFor="reports-date-from" className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">De</label>
+              <input
+                id="reports-date-from"
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                aria-label="Filtrar auditoria a partir de"
+                className="px-3 py-1.5 w-32 bg-gray-50 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200 focus:outline-none focus:border-teal-500 font-sans text-xs"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label htmlFor="reports-date-to" className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Até</label>
+              <input
+                id="reports-date-to"
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                aria-label="Filtrar auditoria até"
+                className="px-3 py-1.5 w-32 bg-gray-50 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200 focus:outline-none focus:border-teal-500 font-sans text-xs"
+              />
             </div>
           </div>
 
-          {/* MÓDULO/TABELA FILTER */}
-          <div className="flex flex-col gap-1">
-            <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Módulo</span>
-            <div className="relative">
-              <select
-                value={tableFilter}
-                onChange={(e) => setTableFilter(e.target.value)}
-                aria-label="Filtrar por módulo"
-                className={selectClassName + ' w-40'}
-              >
-                <option value="">Todos os Módulos</option>
-                <option value="documentos">Documentos</option>
-                <option value="profiles">Perfis</option>
-              </select>
-              <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none w-4 h-4" />
-            </div>
-          </div>
-
-          {/* DATE FILTERS */}
-          <div className="flex flex-col gap-1">
-            <label htmlFor="reports-date-from" className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">De</label>
-            <input
-              id="reports-date-from"
-              type="date"
-              value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
-              aria-label="Filtrar auditoria a partir de"
-              className="px-3 py-1.5 w-36 bg-gray-50 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200 focus:outline-none focus:border-teal-500 font-sans text-xs"
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="reports-date-to" className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Até</label>
-            <input
-              id="reports-date-to"
-              type="date"
-              value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
-              aria-label="Filtrar auditoria até"
-              className="px-3 py-1.5 w-36 bg-gray-50 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200 focus:outline-none focus:border-teal-500 font-sans text-xs"
-            />
-          </div>
 
           {/* Limpar Filtros */}
           <div className="flex items-end">
@@ -390,8 +370,33 @@ export function Reports() {
         </div>
       </div>
 
-      {/* 3. Main Data Table Card */}
-      <div className="bg-white dark:bg-slate-900 border border-gray-250 dark:border-slate-800 rounded-2xl shadow-sm flex flex-col overflow-hidden">
+      {/* 3. KPI Summary */}
+      <div className="text-xs text-gray-500 dark:text-slate-400 font-medium" role="status">
+        KPIs do mês de {kpiPeriodLabel}
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
+        {[
+          { label: 'Pastas Abertas', value: eventCounts?.pastasAbertas ?? 0, icon: FolderOpen, color: 'text-[#005f5f] dark:text-teal-400' },
+          { label: 'Fotos Visualizadas', value: eventCounts?.fotosVisualizadas ?? 0, icon: ImageIcon, color: 'text-sky-500' },
+          { label: 'Documentos Visualizados', value: eventCounts?.documentosVisualizados ?? 0, icon: FileText, color: 'text-indigo-500' },
+          { label: 'Downloads / Aberturas', value: eventCounts?.downloads ?? 0, icon: Download, color: 'text-amber-500' },
+        ].map(({ label, value, icon: Icon, color }) => (
+          <div key={label} className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 p-5 rounded-xl flex items-center justify-between shadow-sm">
+            <div className="space-y-1.5">
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">{label}</span>
+              <span className="text-2xl font-black text-slate-900 dark:text-white font-sans block">
+                {value.toLocaleString('pt-BR')}
+              </span>
+            </div>
+            <div className={`p-2 bg-slate-50 dark:bg-slate-800 rounded-lg border border-gray-150 dark:border-slate-700 ${color} shadow-inner`}>
+              <Icon className="w-5 h-5" />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* 4. Main Data Table Card */}
+      <div className="bg-white dark:bg-slate-900 border border-gray-250 dark:border-slate-800 rounded-2xl shadow-sm flex flex-col overflow-hidden min-h-[680px]">
         <div className="overflow-x-auto custom-scrollbar flex-1">
           <table className="w-full text-left border-collapse whitespace-nowrap text-xs">
             <thead>
@@ -613,59 +618,6 @@ export function Reports() {
         </div>
       </div>
 
-      {/* 4. Bottom Cards Row — indicadores reais de acesso documental */}
-      <div className="text-xs text-gray-500 dark:text-slate-400 font-medium" role="status">
-        KPIs do mês de {kpiPeriodLabel}
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
-        <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 p-5 rounded-xl flex items-center justify-between shadow-sm">
-          <div className="space-y-1.5">
-            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Pastas Abertas</span>
-            <span className="text-2xl font-black text-slate-900 dark:text-white font-sans block">
-              {(eventCounts?.pastasAbertas ?? 0).toLocaleString('pt-BR')}
-            </span>
-          </div>
-          <div className="p-2 bg-slate-50 dark:bg-slate-800 rounded-lg border border-gray-150 dark:border-slate-700 text-[#005f5f] dark:text-teal-400 shadow-inner">
-            <FolderOpen className="w-5 h-5" />
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 p-5 rounded-xl flex items-center justify-between shadow-sm">
-          <div className="space-y-1.5">
-            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Fotos Visualizadas</span>
-            <span className="text-2xl font-black text-slate-900 dark:text-white font-sans block">
-              {(eventCounts?.fotosVisualizadas ?? 0).toLocaleString('pt-BR')}
-            </span>
-          </div>
-          <div className="p-2 bg-slate-50 dark:bg-slate-800 rounded-lg border border-gray-150 dark:border-slate-700 text-sky-500 shadow-inner">
-            <ImageIcon className="w-5 h-5" />
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 p-5 rounded-xl flex items-center justify-between shadow-sm">
-          <div className="space-y-1.5">
-            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Documentos Visualizados</span>
-            <span className="text-2xl font-black text-slate-900 dark:text-white font-sans block">
-              {(eventCounts?.documentosVisualizados ?? 0).toLocaleString('pt-BR')}
-            </span>
-          </div>
-          <div className="p-2 bg-slate-50 dark:bg-slate-800 rounded-lg border border-gray-150 dark:border-slate-700 text-indigo-500 shadow-inner">
-            <FileText className="w-5 h-5" />
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 p-5 rounded-xl flex items-center justify-between shadow-sm">
-          <div className="space-y-1.5">
-            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Downloads / Aberturas</span>
-            <span className="text-2xl font-black text-slate-900 dark:text-white font-sans block">
-              {(eventCounts?.downloads ?? 0).toLocaleString('pt-BR')}
-            </span>
-          </div>
-          <div className="p-2 bg-slate-50 dark:bg-slate-800 rounded-lg border border-gray-150 dark:border-slate-700 text-amber-500 shadow-inner">
-            <Download className="w-5 h-5" />
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

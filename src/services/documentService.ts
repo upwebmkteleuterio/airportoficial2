@@ -98,14 +98,21 @@ export const documentService = {
     return (data ?? undefined) as Documento | undefined;
   },
 
-  getFilterOptions: async (limit = 200): Promise<Pick<Documento, 'id' | 'arquivo_nome' | 'tipo_documento'>[]> => {
+  getFilterOptions: async (limit = 200): Promise<Pick<Documento, 'tipo_documento'>[]> => {
     const { data, error } = await supabase
       .from('documentos')
-      .select('id, arquivo_nome, tipo_documento')
+      .select('tipo_documento')
       .order('data_criacao', { ascending: false })
       .limit(limit);
     if (error) throw serviceError('Não foi possível carregar os documentos', error);
-    return (data ?? []) as Pick<Documento, 'id' | 'arquivo_nome' | 'tipo_documento'>[];
+
+    const uniqueTypes = new Map<string, string>();
+    for (const row of data ?? []) {
+      const tipo = row.tipo_documento;
+      const normalizedType = tipo?.trim().toLowerCase();
+      if (tipo && normalizedType && !uniqueTypes.has(normalizedType)) uniqueTypes.set(normalizedType, tipo);
+    }
+    return Array.from(uniqueTypes.values()).map((tipo_documento) => ({ tipo_documento }));
   },
 
   createSignedUrl: async (document: Documento, expiresIn = 300): Promise<string | null> => {
