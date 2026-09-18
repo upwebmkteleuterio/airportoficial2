@@ -14,6 +14,11 @@ import {
 
 const MAX_BATCH_SIZE = 1000;
 
+function formatBrazilianDate(date: string): string {
+  const [year, month, day] = date.split('-');
+  return `${day}/${month}/${year}`;
+}
+
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -35,6 +40,7 @@ export default function Migration() {
   const [clipboardMessage, setClipboardMessage] = useState('');
 
   const selectedRows = useMemo(() => parsed?.rows.slice(0, Math.min(batchSize, MAX_BATCH_SIZE, parsed.rows.length)) ?? [], [batchSize, parsed]);
+  const numericDeadlineRows = parsed?.rows.filter((row) => row.prazoNumericDays !== undefined && row.prazoCalculatedDate) ?? [];
   const allProblems = parsed?.rows.reduce((total, row) => total + row.problems.length, 0) ?? 0;
   const allWarnings = parsed?.rows.reduce((total, row) => total + row.warnings.length, 0) ?? 0;
   const resultWarnings = runResult?.results.flatMap((result) => (result.warnings ?? []).map((warning) => `Linha ${result.line} · TURMA ${result.turma || '—'} · ANAC ${result.anac || '—'}: ${warning}`)) ?? [];
@@ -137,6 +143,17 @@ export default function Migration() {
                 <MappingList title="Ausentes" values={parsed.missing} tone="warning" />
                 <MappingList title="Desconhecidas" values={parsed.unknown} tone="danger" />
               </div>
+              {numericDeadlineRows.length > 0 && <section aria-labelledby="numeric-deadline-preview" className="mt-4 rounded-lg border border-sky-200 bg-sky-50 p-4 dark:border-sky-900 dark:bg-sky-950/30">
+                <h3 id="numeric-deadline-preview" className="font-bold text-sky-900 dark:text-sky-200">Prévia dos prazos numéricos</h3>
+                <p className="mt-1 text-sm text-sky-800 dark:text-sky-300">Valores numéricos em Prazo são interpretados como dias restantes a partir da data local desta leitura. Esta prévia é informativa e não altera a contagem de avisos de localização.</p>
+                <div className="mt-3 overflow-x-auto rounded-md border border-sky-200 dark:border-sky-800">
+                  <table className="min-w-full text-left text-xs">
+                    <caption className="sr-only">Interpretação dos prazos numéricos antes da importação</caption>
+                    <thead className="bg-sky-100 text-sky-900 dark:bg-sky-900/50 dark:text-sky-100"><tr><th className="px-3 py-2">Linha</th><th className="px-3 py-2">TURMA</th><th className="px-3 py-2">ANAC</th><th className="px-3 py-2">Dias originais</th><th className="px-3 py-2">Data de lançamento das notas</th></tr></thead>
+                    <tbody>{numericDeadlineRows.map((row) => row.prazoNumericDays !== undefined && row.prazoCalculatedDate ? <tr key={row.line} className="border-t border-sky-200 text-sky-950 dark:border-sky-800 dark:text-sky-100"><td className="px-3 py-2 font-semibold">{row.line}</td><td className="px-3 py-2">{row.values.TURMA || '—'}</td><td className="px-3 py-2">{row.values.ANAC || '—'}</td><td className="px-3 py-2">{row.prazoNumericDays}</td><td className="px-3 py-2 font-semibold">{formatBrazilianDate(row.prazoCalculatedDate)}</td></tr> : null)}</tbody>
+                  </table>
+                </div>
+              </section>}
               <p className="mt-4 rounded-md bg-slate-100 p-3 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">PASTA, CÓPIA TURMA e referência são explicitamente ignoradas e não serão gravadas, estejam ou não presentes no arquivo.</p>
               <p className="mt-3 rounded-md border border-teal-200 bg-teal-50 p-3 text-sm text-teal-800 dark:border-teal-900 dark:bg-teal-950/30 dark:text-teal-200"><strong>Conciliação automática na confirmação:</strong> cada linha válida procura curso por nome normalizado (acentos, caixa e espaços). Se o curso não existir, ele será criado com a carga de H/a e reutilizado nas linhas seguintes do lote. Endereços e pessoas também são localizados ou criados uma vez; correspondências ambíguas permanecem pendentes. A decisão efetiva aparece no acompanhamento e no log.</p>
               {allWarnings > 0 && <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200"><strong>Avisos não bloqueantes:</strong> campos de localização ausentes receberam valores padrão e permanecem destacados por linha para revisão manual antes ou depois da gravação.</p>}

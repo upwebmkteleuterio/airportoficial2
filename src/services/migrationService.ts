@@ -35,6 +35,8 @@ export type MigrationParsedRow = {
   values: Record<MigrationColumn, string>;
   problems: string[];
   warnings: string[];
+  prazoNumericDays?: number;
+  prazoCalculatedDate?: string;
 };
 
 export type MigrationParseResult = {
@@ -165,7 +167,18 @@ export async function parseMigrationFile(file: File): Promise<MigrationParseResu
     });
     const hasSourceValue = Object.values(values).some(Boolean);
     const warnings = applyLocationDefaults(values);
-    return { line: rowIndex + 2, values, problems: validateMigrationRow(values), warnings, hasSourceValue };
+    const numericPrazo = parseNumericPrazo(values.Prazo);
+    return {
+      line: rowIndex + 2,
+      values,
+      problems: validateMigrationRow(values),
+      warnings,
+      hasSourceValue,
+      ...(numericPrazo && !('invalid' in numericPrazo) ? {
+        prazoNumericDays: numericPrazo.days,
+        prazoCalculatedDate: numericPrazo.calculatedDate,
+      } : {}),
+    };
   }).filter((row) => row.hasSourceValue).map(({ hasSourceValue: _hasSourceValue, ...row }) => row);
 
   const keyLines = new Map<string, number>();
@@ -217,6 +230,29 @@ function parseNumber(value: string): number | null {
   return Number.isFinite(number) ? number : null;
 }
 
+type NumericPrazo = { days: number; calculatedDate: string } | { invalid: true };
+
+function localDateWithDays(days: number): string | null {
+  const date = new Date();
+  date.setHours(12, 0, 0, 0);
+  date.setDate(date.getDate() + days);
+  if (Number.isNaN(date.getTime())) return null;
+  return [date.getFullYear(), date.getMonth() + 1, date.getDate()]
+    .map((part, index) => index === 0 ? String(part).padStart(4, '0') : String(part).padStart(2, '0'))
+    .join('-');
+}
+
+function parseNumericPrazo(value: string): NumericPrazo | null {
+  const text = normalizeMigrationValue(value);
+  if (!text) return null;
+  const looksNumeric = /^[+-]?(?:[0-9]|[.,])/.test(text);
+  if (!looksNumeric) return null;
+  const number = Number(text.replace(',', '.'));
+  if (!Number.isSafeInteger(number) || number < 0) return { invalid: true };
+  const calculatedDate = localDateWithDays(number);
+  return calculatedDate ? { days: number, calculatedDate } : { invalid: true };
+}
+
 function statusHistory(value: string): 'No prazo' | 'Cancelado' | 'Encerrado' | null {
   const normalized = normalizeComparison(value);
   if (normalized === 'NO PRAZO') return 'No prazo';
@@ -247,7 +283,9 @@ function validateMigrationRow(values: Record<MigrationColumn, string>): string[]
   const status = normalizeMigrationValue(values.Status);
   if (status && !statusHistory(status)) problems.push('Status deve ser No prazo, Cancelado ou Encerrado.');
   const prazo = normalizeMigrationValue(values.Prazo);
-  if (prazo && !prazoStatus(prazo)) problems.push('Prazo não reconhecido; será necessário revisar a linha.');
+  const numericPrazo = parseNumericPrazo(prazo);
+  if (numericPrazo && 'invalid' in numericPrazo) problems.push('Prazo numérico deve ser um número inteiro não negativo de dias.');
+  else if (prazo && !numericPrazo && !prazoStatus(prazo)) problems.push('Prazo não reconhecido; será necessário revisar a linha.');
   const sn = normalizeComparison(values['S/N']);
   if (sn && !['S', 'SIM', 'N', 'NAO', '1', '0'].includes(sn)) problems.push('S/N deve ser S, N, Sim ou Não.');
   const vt = normalizeMigrationValue(values['v.t']);
@@ -366,7 +404,10 @@ function migrationReviewNote(row: MigrationParsedRow): string {
 
 function toClassPayload(row: MigrationParsedRow, course: ExistingCourse, addressId: string | null) {
   const historicalStatus = statusHistory(row.values.Status);
-  const prazo = prazoStatus(row.values.Prazo);
+  const numericPrazo = row.prazoNumericDays !== undefined && row.prazoCalculatedDate
+    ? { days: row.prazoNumericDays, calculatedDate: row.prazoCalculatedDate }
+    : null;
+  const prazo = numericPrazo ? ClassStatusPrazo.NO_PRAZO : prazoStatus(row.values.Prazo);
   const interno = Number(normalizeMigrationValue(row.values.TURMA));
   const carga = parseNumber(row.values['H/a']);
   const vt = parseNumber(row.values['v.t']);
@@ -380,10 +421,11 @@ function toClassPayload(row: MigrationParsedRow, course: ExistingCourse, address
     qt_alunos_matriculados: 0, horario_prova_1_chamada: normalizeMigrationValue(row.values['1ª CH']) || null,
     horario_prova_2_chamada: normalizeMigrationValue(row.values['2ª CH']) || null, data_prova_1_chamada: null, data_prova_2_chamada: null,
     vigilante_sem_deslocamento: false, anotacoes_turma: [normalizeMigrationValue(row.values['obs.:']), migrationReviewNote(row)].filter(Boolean).join(' | '), status_prazo_notas: prazo,
+    dias_para_vencimento: numericPrazo?.days,
     status_operacional_sn: booleanValue(row.values['S/N']), status_turma: historicalStatus === 'Cancelado' ? 'Cancelada' : 'Ativa',
     status_historico: historicalStatus, numero_vt: vt === null ? null : Math.trunc(vt), carga_horaria: carga,
     software_utilizado: normalizeMigrationValue(row.values.SOFTWARE) || null, nota_lancada: prazo === 'Nota Lançada',
-    data_lancamento_notas: null, data_lancada_real: null,
+    data_lancamento_notas: numericPrazo?.calculatedDate ?? null, data_lancada_real: null,
   };
 }
 
@@ -422,6 +464,9 @@ export async function runMigrationBatch(rows: MigrationParsedRow[], onProgress?:
     row.warnings = [...new Set([...row.warnings, ...locationWarnings])];
     const subject = `Turma ${row.values.TURMA || '—'} · ANAC ${row.values.ANAC || '—'} · início ${row.values['INÍCIO'] || '—'}`;
     let entityActions: string[] = row.warnings.length > 0 ? [`Avisos de revisão: ${row.warnings.join(' ')}`] : [];
+    if (row.prazoNumericDays !== undefined && row.prazoCalculatedDate) {
+      entityActions.push(`Prazo numérico: ${row.prazoNumericDays} dia(s); data de lançamento das notas: ${row.prazoCalculatedDate}`);
+    }
     try {
       progress('validação', current, `Validando ${subject} (linha ${row.line}).`);
       const problems = validateMigrationRow(row.values);
