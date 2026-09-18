@@ -171,6 +171,8 @@ export interface Turma {
   dias_para_vencimento?: number;
   status_operacional_sn: boolean; // S/N Vermelho/Verde do Excel
   status_turma: 'Ativa' | 'Cancelada';
+  status_historico?: 'No prazo' | 'Cancelado' | 'Encerrado' | null;
+  numero_vt?: number | null;
   carga_horaria?: number | null;
   software_utilizado?: string | null;
   data_lancamento_notas?: string | null;

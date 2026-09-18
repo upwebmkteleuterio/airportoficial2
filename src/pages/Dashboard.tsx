@@ -97,6 +97,7 @@ type ClassDraft = {
     formIscr: string;
     formIcar: string;
     formAplicador: string;
+    formStatusHistorico: "" | "No prazo" | "Cancelado" | "Encerrado";
     formVigilante: boolean;
     formNotes: string;
 };
@@ -138,6 +139,7 @@ const getClassDraft = (): ClassDraft | null => {
             formIscr: typeof parsed.formIscr === "string" ? parsed.formIscr : "",
             formIcar: typeof parsed.formIcar === "string" ? parsed.formIcar : "",
             formAplicador: typeof parsed.formAplicador === "string" ? parsed.formAplicador : "",
+            formStatusHistorico: parsed.formStatusHistorico === "No prazo" || parsed.formStatusHistorico === "Cancelado" || parsed.formStatusHistorico === "Encerrado" ? parsed.formStatusHistorico : "",
             formVigilante: parsed.formVigilante === true,
             formNotes: typeof parsed.formNotes === "string" ? parsed.formNotes : ""
         };
@@ -147,7 +149,7 @@ const getClassDraft = (): ClassDraft | null => {
 };
 
 const hasClassDraftContent = (draft: ClassDraft) => (Object.entries(draft).some(
-    ([key, value]) => key === "formVigilante" ? value : Array.isArray(value) ? value.length > 0 : value && typeof value === "object" ? Object.keys(value).length > 0 : Boolean(value)
+    ([key, value]) => key === "formVigilante" ? value : key === "formStatusHistorico" ? Boolean(value) : Array.isArray(value) ? value.length > 0 : value && typeof value === "object" ? Object.keys(value).length > 0 : Boolean(value)
 ));
 
 const normalizeForeignKeyValue = (value?: string | null) => value && value !== "Não aplicável" ? value : "";
@@ -277,6 +279,7 @@ export function Dashboard() {
     const [formIscr, setFormIscr] = useState("");
     const [formIcar, setFormIcar] = useState("");
     const [formAplicador, setFormAplicador] = useState("");
+    const [formStatusHistorico, setFormStatusHistorico] = useState<"" | "No prazo" | "Cancelado" | "Encerrado">("No prazo");
 
     const applicatorPeople = directoryPeople;
 
@@ -333,6 +336,7 @@ export function Dashboard() {
         formIscr,
         formIcar,
         formAplicador,
+        formStatusHistorico,
         formVigilante,
         formNotes
     }), [
@@ -360,6 +364,7 @@ export function Dashboard() {
         formIscr,
         formIcar,
         formAplicador,
+        formStatusHistorico,
         formVigilante,
         formNotes
     ]);
@@ -488,6 +493,7 @@ export function Dashboard() {
         setFormIscr("");
         setFormIcar("");
         setFormAplicador("");
+        setFormStatusHistorico("No prazo");
         setFormNotes("");
         setFormVigilante(false);
         setEditingClassId(null);
@@ -526,6 +532,7 @@ export function Dashboard() {
         setFormIscr(resolveProfileId(draft.formIscr, instructorUsers));
         setFormIcar(resolveProfileId(draft.formIcar, instructorUsers));
         setFormAplicador(resolveDirectoryId(draft.formAplicador));
+        setFormStatusHistorico(draft.formStatusHistorico);
         setFormVigilante(draft.formVigilante);
         setFormNotes(draft.formNotes);
         setClassDraftToResume(null);
@@ -544,6 +551,7 @@ export function Dashboard() {
         status_notas: true,
         prazo: true,
         status_turma: true,
+        status_historico: true,
         carga_horaria: true,
         turno: true,
         horario: true,
@@ -574,6 +582,7 @@ export function Dashboard() {
         status_notas: "Nota Lançada?",
         prazo: "Prazo",
         status_turma: "Situação",
+        status_historico: "Status histórico",
         carga_horaria: "Carga horária",
         turno: "Turno",
         horario: "Horário",
@@ -794,6 +803,7 @@ export function Dashboard() {
                         data_prova_2_chamada: formDataProva2,
                         vigilante_sem_deslocamento: formVigilante,
                         anotacoes_turma: formNotes,
+                        status_historico: formStatusHistorico || null,
                         coordenador_ioad_id: normalizeForeignKeyValue(formIoad) || undefined,
                         coordenador_iscr_id: normalizeForeignKeyValue(formIscr) || undefined,
                         coordenador_icar_id: normalizeForeignKeyValue(formIcar) || undefined,
@@ -822,6 +832,7 @@ export function Dashboard() {
                     data_prova_2_chamada: formDataProva2,
                     vigilante_sem_deslocamento: formVigilante,
                     anotacoes_turma: formNotes,
+                    status_historico: formStatusHistorico || null,
                     coordenador_ioad_id: normalizeForeignKeyValue(formIoad) || undefined,
                     coordenador_iscr_id: normalizeForeignKeyValue(formIscr) || undefined,
                     coordenador_icar_id: normalizeForeignKeyValue(formIcar) || undefined,
@@ -973,6 +984,7 @@ export function Dashboard() {
                                                 status_notas: true,
                                                 prazo: true,
                                                 status_turma: true,
+                                                status_historico: true,
                                                 carga_horaria: true,
                                                 turno: true,
                                                 horario: true,
@@ -1048,6 +1060,8 @@ export function Dashboard() {
                                     className="px-4 py-3 border-r border-gray-200/50 dark:border-slate-800/50 text-right">Prazo</th>}
                                 {visibleColumns.status_turma && <th
                                     className="px-4 py-3 border-r border-gray-200/50 dark:border-slate-800/50">Situação</th>}
+                                {visibleColumns.status_historico && <th
+                                    className="px-4 py-3 border-r border-gray-200/50 dark:border-slate-800/50">Status histórico</th>}
                                 {visibleColumns.carga_horaria && <th
                                     className="px-4 py-3 border-r border-gray-200/50 dark:border-slate-800/50">Carga horária</th>}
                                 {visibleColumns.turno && <th
@@ -1175,6 +1189,7 @@ export function Dashboard() {
                                                                 setFormDataLancamentoNotas(item.data_lancamento_notas || "");
                                                                 setFormCargaHoraria(item.carga_horaria == null ? "" : String(item.carga_horaria));
                                                                 setFormSoftwareTurma(item.software_utilizado || "");
+                                                                setFormStatusHistorico(item.status_historico || "");
 
                                                                 setFormHora1(
                                                                     item.horario_prova_1_chamada !== "Sem prova" ? formatShiftTime(item.horario_prova_1_chamada) : ""
@@ -1287,6 +1302,10 @@ export function Dashboard() {
                                         {visibleColumns.status_turma && (<td
                                             className={`px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 font-sans font-semibold ${item.status_turma === 'Cancelada' ? 'text-gray-500 dark:text-slate-400' : 'text-teal-600 dark:text-teal-400'}`}>
                                             {item.status_turma}
+                                        </td>)}
+                                        {visibleColumns.status_historico && (<td
+                                            className="px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 font-sans">
+                                            {item.status_historico ?? '—'}
                                         </td>)}
                                         {visibleColumns.carga_horaria && (<td
                                             className="px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 font-sans">
@@ -1619,6 +1638,20 @@ export function Dashboard() {
                                 className="w-full border border-gray-300 dark:border-slate-700 rounded px-3 py-2 bg-white dark:bg-slate-850 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 font-mono" />
                         </div>
                         {}
+                        <div className="flex flex-col gap-1.5">
+                            <label htmlFor="form-status-historico" className="text-xs font-bold text-gray-700 dark:text-slate-300 uppercase tracking-wide">Status histórico</label>
+                            <select
+                                id="form-status-historico"
+                                value={formStatusHistorico}
+                                onChange={e => setFormStatusHistorico(e.target.value as "" | "No prazo" | "Cancelado" | "Encerrado")}
+                                className="w-full border border-gray-300 dark:border-slate-700 rounded px-3 py-2.5 bg-white dark:bg-slate-850 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
+                            >
+                                <option value="">Não informado</option>
+                                <option value="No prazo">No prazo</option>
+                                <option value="Cancelado">Cancelado</option>
+                                <option value="Encerrado">Encerrado</option>
+                            </select>
+                        </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="flex flex-col gap-1.5">
                                 <label htmlFor="form-carga-horaria" className="text-xs font-bold text-gray-700 dark:text-slate-300 uppercase tracking-wide">Carga horária</label>
