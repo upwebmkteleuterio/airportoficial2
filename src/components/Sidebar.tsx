@@ -6,7 +6,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { LayoutDashboard, FileArchive, Building2, ShieldAlert, LogOut, LoaderCircle, Users, PanelLeftClose, PanelLeftOpen, User, BookOpen, GraduationCap, UserCog, MapPin, Clock, type LucideIcon } from 'lucide-react';
+import { LayoutDashboard, FileArchive, Building2, ShieldAlert, LogOut, LoaderCircle, Users, PanelLeftClose, PanelLeftOpen, User, BookOpen, GraduationCap, UserCog, MapPin, Clock, ArrowLeftRight, type LucideIcon } from 'lucide-react';
 import { supabase } from '../integrations/supabase/client';
 import { useSessionContext } from '../contexts/SessionContext';
 import { Tooltip } from './ui/Tooltip';
@@ -92,6 +92,10 @@ export function Sidebar() {
         { id: 'cursos', icon: BookOpen, label: 'Cursos' },
       ],
     },
+    ...(userLogged?.role === 'GESTOR' || userLogged?.role === 'EQUIPE' ? [{
+      title: 'Operações',
+      items: [{ id: 'migracao', icon: ArrowLeftRight, label: 'Migração' }],
+    }] : []),
     {
       title: 'Cadastro de Usuários',
       items: [

@@ -20,6 +20,7 @@ import Instructors from '../pages/Instructors';
 import Coordinators from '../pages/Coordinators';
 import PublicEnrollment from '../pages/PublicEnrollment';
 import Shifts from '../pages/Shifts';
+import Migration from '../pages/Migration';
 import NotFound from '../pages/NotFound';
 
 function SessionLoading() {
@@ -103,6 +104,12 @@ function StudentOnlyRoute() {
   return userLogged?.role === 'ALUNO' ? <StudentDashboard /> : <Navigate to="/dashboard" replace />;
 }
 
+function MigrationAccessRoute() {
+  const userLogged = useUIStore((state) => state.userLogged);
+  if (userLogged?.role !== 'GESTOR' && userLogged?.role !== 'EQUIPE') return <Navigate to="/dashboard" replace />;
+  return <Migration />;
+}
+
 function AccountRoute() {
   const userLogged = useUIStore((state) => state.userLogged);
   if (userLogged?.role === 'ALUNO') return <MyAccount />;
@@ -140,6 +147,7 @@ export function AppRoutes() {
             <Route path="enderecos" element={<AdminPage><Addresses /></AdminPage>} />
             <Route path="instrutores" element={<AdminPage><Instructors /></AdminPage>} />
             <Route path="coordenadores" element={<AdminPage><Coordinators /></AdminPage>} />
+            <Route path="migracao" element={<AdminPage><MigrationAccessRoute /></AdminPage>} />
             <Route path="meu-cadastro" element={<AdminPage><Dashboard /></AdminPage>} />
             <Route path="*" element={<NotFound />} />
           </Route>

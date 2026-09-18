@@ -214,7 +214,7 @@ export const classService = {
     let query = supabase
       .from('turmas')
       .select('*', { count: 'exact' })
-      .order('id_interno_escola', { ascending: true })
+      .order('id_interno_escola', { ascending: false })
       .range(from, to);
 
     if (context.role === UserRole.INSTRUTOR) {
