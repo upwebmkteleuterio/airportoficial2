@@ -50,6 +50,7 @@ import {
     AlertCircle,
     Edit,
     Trash2,
+    Ban,
     MoreVertical,
     Search,
     Filter,
@@ -68,6 +69,7 @@ import { getStatusPrazoNotas } from "../utils/statusPrazoNotas";
 import { Modal } from "../components/ui/Modal";
 import { HelpModal } from "../components/ui/HelpModal";
 import { SlidePanel } from "../components/ui/SlidePanel";
+import { ConfirmDeleteModal } from "../components/ui/ConfirmDeleteModal";
 
 type ClassDraft = {
     formIdAnac: string;
@@ -85,6 +87,8 @@ type ClassDraft = {
     formDataLancamentoNotas: string;
     formDataProva1: string;
     formDataProva2: string;
+    formCargaHoraria: string;
+    formSoftwareTurma: string;
     selectedInstructors: string[];
     instructorInput: string;
     formIoad: string;
@@ -123,6 +127,8 @@ const getClassDraft = (): ClassDraft | null => {
             formDataLancamentoNotas: typeof parsed.formDataLancamentoNotas === "string" ? parsed.formDataLancamentoNotas : "",
             formDataProva1: typeof parsed.formDataProva1 === "string" ? parsed.formDataProva1 : "",
             formDataProva2: typeof parsed.formDataProva2 === "string" ? parsed.formDataProva2 : "",
+            formCargaHoraria: typeof parsed.formCargaHoraria === "string" ? parsed.formCargaHoraria : "",
+            formSoftwareTurma: typeof parsed.formSoftwareTurma === "string" ? parsed.formSoftwareTurma : "",
             selectedInstructors: Array.isArray(parsed.selectedInstructors) ? parsed.selectedInstructors.filter((value: unknown): value is string => typeof value === "string") : [],
             instructorInput: typeof parsed.instructorInput === "string" ? parsed.instructorInput : "",
             formIoad: typeof parsed.formIoad === "string" ? parsed.formIoad : "",
@@ -142,7 +148,8 @@ const hasClassDraftContent = (draft: ClassDraft) => (Object.entries(draft).some(
 ));
 
 const normalizeForeignKeyValue = (value?: string | null) => value && value !== "Não aplicável" ? value : "";
-const formatShiftTime = (value: string) => value.slice(0, 5);
+const formatShiftTime = (value: string | null | undefined) => value ? value.slice(0, 5) : "";
+const getExamTimeLabel = (value: string | null | undefined) => value === null || value === undefined ? "Não informado" : value === "Sem prova" || value === "" ? "Sem prova" : value;
 
 export function Dashboard() {
     const {
@@ -171,6 +178,8 @@ export function Dashboard() {
         updateClass,
         deleteClass,
         isDeleting,
+        cancelClass,
+        isCancelling,
         getInstrutoresByTurma,
         getClassEditability,
         saveInstrutoresForTurma,
@@ -187,6 +196,7 @@ export function Dashboard() {
     const [editingClassId, setEditingClassId] = useState<string | null>(null);
     const [lockedClassFields, setLockedClassFields] = useState<string[]>([]);
     const [classToDelete, setClassToDelete] = useState<Turma | null>(null);
+    const [classToCancel, setClassToCancel] = useState<Turma | null>(null);
     const [isHelpOpen, setIsHelpOpen] = useState(false);
 
     const {
@@ -249,6 +259,8 @@ export function Dashboard() {
     const [formHora2, setFormHora2] = useState("");
     const [formDataProva1, setFormDataProva1] = useState("");
     const [formDataProva2, setFormDataProva2] = useState("");
+    const [formCargaHoraria, setFormCargaHoraria] = useState("");
+    const [formSoftwareTurma, setFormSoftwareTurma] = useState("");
     const [selectedInstructors, setSelectedInstructors] = useState<string[]>([]);
     const [instructorInput, setInstructorInput] = useState("");
     const [formIoad, setFormIoad] = useState("");
@@ -284,6 +296,7 @@ export function Dashboard() {
     const [showClassDiscardConfirm, setShowClassDiscardConfirm] = useState(false);
     const classDraftOpeningRef = useRef(false);
     const classSubmitRef = useRef(false);
+    const cancelClassSubmitRef = useRef(false);
     const deleteClassSubmitRef = useRef(false);
 
     const currentClassDraft = useMemo<ClassDraft>(() => ({
@@ -302,6 +315,8 @@ export function Dashboard() {
         formDataLancamentoNotas,
         formDataProva1,
         formDataProva2,
+        formCargaHoraria,
+        formSoftwareTurma,
         selectedInstructors,
         instructorInput,
         formIoad,
@@ -326,6 +341,8 @@ export function Dashboard() {
         formDataLancamentoNotas,
         formDataProva1,
         formDataProva2,
+        formCargaHoraria,
+        formSoftwareTurma,
         selectedInstructors,
         instructorInput,
         formIoad,
@@ -451,6 +468,8 @@ export function Dashboard() {
         setFormHora2("");
         setFormDataProva1("");
         setFormDataProva2("");
+        setFormCargaHoraria("");
+        setFormSoftwareTurma("");
         setSelectedInstructors([]);
         setInstructorInput("");
         setFormIoad("");
@@ -483,6 +502,8 @@ export function Dashboard() {
         setFormHora2(draft.formHora2);
         setFormDataProva1(draft.formDataProva1);
         setFormDataProva2(draft.formDataProva2);
+        setFormCargaHoraria(draft.formCargaHoraria);
+        setFormSoftwareTurma(draft.formSoftwareTurma);
 
         setSelectedInstructors(
             draft.selectedInstructors.map(value => resolveProfileId(value, instructorUsers)).filter(Boolean)
@@ -525,6 +546,9 @@ export function Dashboard() {
         data_prova_1: true,
         data_prova_2: true,
         status_notas: true,
+        status_turma: true,
+        carga_horaria: true,
+        software_utilizado: true,
         prazo: true,
         sn: true
     });
@@ -552,6 +576,9 @@ export function Dashboard() {
         data_prova_1: "1ª Prova",
         data_prova_2: "2ª Prova",
         status_notas: "Nota Lançada?",
+        status_turma: "Situação",
+        carga_horaria: "Carga horária",
+        software_utilizado: "Software",
         prazo: "Prazo",
         sn: "S/N"
     };
@@ -713,6 +740,11 @@ export function Dashboard() {
             alert('O ID interno da escola deve ser um número inteiro.');
             return;
         }
+        const cargaHoraria = formCargaHoraria.trim() === '' ? null : Number(formCargaHoraria);
+        if (cargaHoraria !== null && (!Number.isFinite(cargaHoraria) || cargaHoraria < 0)) {
+            alert('A carga horária deve ser um número igual ou maior que zero.');
+            return;
+        }
         classSubmitRef.current = true;
 
         try {
@@ -737,6 +769,8 @@ export function Dashboard() {
                         data_inicio: formDataInicio,
                         data_termino: formDataTermino,
                         data_lancamento_notas: formDataLancamentoNotas,
+                        carga_horaria: cargaHoraria,
+                        software_utilizado: formSoftwareTurma.trim() || null,
                         horario_prova_1_chamada: formHora1 || "Sem prova",
                         horario_prova_2_chamada: formHora2 || "Sem prova",
                         data_prova_1_chamada: formDataProva1,
@@ -759,6 +793,8 @@ export function Dashboard() {
                     data_inicio: formDataInicio,
                     data_termino: formDataTermino,
                     data_lancamento_notas: formDataLancamentoNotas,
+                    carga_horaria: cargaHoraria,
+                    software_utilizado: formSoftwareTurma.trim() || null,
                     endereco_realizacao: addressName,
                     endereco_id: formEndereco,
                     cidade: selectedAddress?.cidade || "São Paulo",
@@ -776,7 +812,8 @@ export function Dashboard() {
                     gestor_turma_id: "user-admin-1",
                     nota_lancada: false,
                     dias_para_vencimento: 5,
-                    status_operacional_sn: true
+                    status_operacional_sn: true,
+                    status_turma: 'Ativa'
                 });
 
                 savedClassId = createdClass.id;
@@ -934,6 +971,9 @@ export function Dashboard() {
                                                 data_prova_1: true,
                                                 data_prova_2: true,
                                                 status_notas: true,
+                                                status_turma: true,
+                                                carga_horaria: true,
+                                                software_utilizado: true,
                                                 prazo: true,
                                                 sn: true
                                             });
@@ -986,6 +1026,12 @@ export function Dashboard() {
                                     className="px-4 py-3 border-r border-gray-200/50 dark:border-slate-800/50">ID Interno</th>}
                                 {visibleColumns.curso && <th
                                     className="px-4 py-3 border-r border-gray-200/50 dark:border-slate-800/50">Curso</th>}
+                                {visibleColumns.status_turma && <th
+                                    className="px-4 py-3 border-r border-gray-200/50 dark:border-slate-800/50">Situação</th>}
+                                {visibleColumns.carga_horaria && <th
+                                    className="px-4 py-3 border-r border-gray-200/50 dark:border-slate-800/50">Carga horária</th>}
+                                {visibleColumns.software_utilizado && <th
+                                    className="px-4 py-3 border-r border-gray-200/50 dark:border-slate-800/50">Software</th>}
                                 {visibleColumns.turno && <th
                                     className="px-4 py-3 border-r border-gray-200/50 dark:border-slate-800/50">Turno</th>}
                                 {visibleColumns.horario && <th
@@ -1081,11 +1127,14 @@ export function Dashboard() {
                                             <div className="flex items-center justify-center">
                                                 <div className="relative">
                                                     <button
+                                                        type="button"
                                                         onClick={e => {
                                                             e.stopPropagation();
                                                             setOpenMenuId(openMenuId === item.id ? null : item.id);
                                                         }}
-                                                        className="p-1 text-gray-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 rounded-full hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors">
+                                                        aria-label={`Ações da turma ${item.id_anac}`}
+                                                        aria-expanded={openMenuId === item.id}
+                                                        className="p-1 text-gray-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 rounded-full hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500">
                                                         <MoreVertical className="w-4 h-4" />
                                                     </button>
                                                     {openMenuId === item.id && (<div
@@ -1108,6 +1157,8 @@ export function Dashboard() {
                                                                 setFormDataInicio(item.data_inicio);
                                                                 setFormDataTermino(item.data_termino);
                                                                 setFormDataLancamentoNotas(item.data_lancamento_notas || "");
+                                                                setFormCargaHoraria(item.carga_horaria == null ? "" : String(item.carga_horaria));
+                                                                setFormSoftwareTurma(item.software_utilizado || "");
 
                                                                 setFormHora1(
                                                                     item.horario_prova_1_chamada !== "Sem prova" ? formatShiftTime(item.horario_prova_1_chamada) : ""
@@ -1149,21 +1200,32 @@ export function Dashboard() {
                                                             className="w-full text-left px-4 py-2 text-xs font-semibold text-teal-600 dark:text-teal-400 hover:bg-gray-50 dark:hover:bg-slate-800 flex items-center gap-2">
                                                             <Edit className="w-4 h-4" />Editar
                                                                                             </button>
+                                                        {item.status_turma !== 'Cancelada' && (<button
+                                                            onClick={e => {
+                                                                e.stopPropagation();
+                                                                setOpenMenuId(null);
+                                                                setClassToCancel(item);
+                                                            }}
+                                                            aria-label={`Cancelar turma ${item.id_anac}`}
+                                                            className="w-full text-left px-4 py-2 text-xs font-semibold text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/30 flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500">
+                                                            <Ban className="w-4 h-4" aria-hidden="true" />Cancelar
+                                                        </button>)}
                                                         <button
                                                             onClick={e => {
                                                                 e.stopPropagation();
                                                                 setOpenMenuId(null);
                                                                 setClassToDelete(item);
                                                             }}
+                                                            aria-label={`Excluir turma ${item.id_anac}`}
                                                             className="w-full text-left px-4 py-2 text-xs font-semibold text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 flex items-center gap-2">
-                                                            <Trash2 className="w-4 h-4" />Excluir
+                                                            <Trash2 className="w-4 h-4" aria-hidden="true" />Excluir
                                                                                             </button>
                                                     </div>)}
                                                 </div>
                                             </div>
                                         </td>)}
                                         {visibleColumns.id_anac && (<td
-                                            className={`px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 font-semibold ${item.status_prazo_notas === ClassStatusPrazo.ATRASADO ? "text-red-500 dark:text-red-400" : "text-slate-900 dark:text-white"}`}>
+                                            className={`px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 font-semibold ${item.status_turma === 'Cancelada' ? "text-gray-500 dark:text-slate-400" : item.status_prazo_notas === ClassStatusPrazo.ATRASADO ? "text-red-500 dark:text-red-400" : "text-slate-900 dark:text-white"}`}>
                                             {item.id_anac}
                                         </td>)}
                                         {visibleColumns.id_interno && (<td
@@ -1172,6 +1234,18 @@ export function Dashboard() {
                                         {visibleColumns.curso && (<td
                                             className="px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 font-sans max-w-xs truncate">
                                             {course?.nome_curso || "Curso de Aviação"}
+                                        </td>)}
+                                        {visibleColumns.status_turma && (<td
+                                            className={`px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 font-sans font-semibold ${item.status_turma === 'Cancelada' ? 'text-gray-500 dark:text-slate-400' : 'text-teal-600 dark:text-teal-400'}`}>
+                                            {item.status_turma}
+                                        </td>)}
+                                        {visibleColumns.carga_horaria && (<td
+                                            className="px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 font-sans">
+                                            {item.carga_horaria ?? '—'}
+                                        </td>)}
+                                        {visibleColumns.software_utilizado && (<td
+                                            className="px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 font-sans max-w-xs truncate">
+                                            {item.software_utilizado || '—'}
                                         </td>)}
                                         {visibleColumns.turno && (<td
                                             className="px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 font-sans">{item.turno}</td>)}
@@ -1187,11 +1261,11 @@ export function Dashboard() {
                                         </td>)}
                                         {visibleColumns.hora1 && (<td
                                             className="px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30">
-                                            {item.data_prova_1_chamada ? new Date(item.data_prova_1_chamada + "T00:00:00").toLocaleDateString("pt-BR") : ""} {item.horario_prova_1_chamada !== "Sem prova" ? item.horario_prova_1_chamada : "Sem prova"}
+                                            {item.data_prova_1_chamada ? new Date(item.data_prova_1_chamada + "T00:00:00").toLocaleDateString("pt-BR") : ""} {getExamTimeLabel(item.horario_prova_1_chamada)}
                                         </td>)}
                                         {visibleColumns.hora2 && (<td
                                             className="px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30">
-                                            {item.data_prova_2_chamada ? new Date(item.data_prova_2_chamada + "T00:00:00").toLocaleDateString("pt-BR") : ""} {item.horario_prova_2_chamada !== "Sem prova" ? item.horario_prova_2_chamada : "Sem prova"}
+                                            {item.data_prova_2_chamada ? new Date(item.data_prova_2_chamada + "T00:00:00").toLocaleDateString("pt-BR") : ""} {getExamTimeLabel(item.horario_prova_2_chamada)}
                                         </td>)}
                                         {visibleColumns.endereco && (<td
                                             className="px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 font-sans max-w-xs truncate">
@@ -1524,6 +1598,33 @@ export function Dashboard() {
                                 className="w-full border border-gray-300 dark:border-slate-700 rounded px-3 py-2 bg-white dark:bg-slate-850 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 font-mono" />
                         </div>
                         {}
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="flex flex-col gap-1.5">
+                                <label htmlFor="form-carga-horaria" className="text-xs font-bold text-gray-700 dark:text-slate-300 uppercase tracking-wide">Carga horária</label>
+                                <input
+                                    id="form-carga-horaria"
+                                    type="number"
+                                    min="0"
+                                    step="0.5"
+                                    value={formCargaHoraria}
+                                    onChange={e => setFormCargaHoraria(e.target.value)}
+                                    placeholder="Ex.: 40"
+                                    className="w-full border border-gray-300 dark:border-slate-700 rounded px-3 py-2 bg-white dark:bg-slate-850 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
+                                />
+                            </div>
+                            <div className="flex flex-col gap-1.5">
+                                <label htmlFor="form-software-turma" className="text-xs font-bold text-gray-700 dark:text-slate-300 uppercase tracking-wide">Software da turma</label>
+                                <input
+                                    id="form-software-turma"
+                                    type="text"
+                                    maxLength={120}
+                                    value={formSoftwareTurma}
+                                    onChange={e => setFormSoftwareTurma(e.target.value)}
+                                    placeholder="Ex.: RayScan"
+                                    className="w-full border border-gray-300 dark:border-slate-700 rounded px-3 py-2 bg-white dark:bg-slate-850 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
+                                />
+                            </div>
+                        </div>
                         <div
                             className="p-4 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-850/40 space-y-4">
                             <h4
@@ -1803,10 +1904,30 @@ export function Dashboard() {
                     },
                     {
                         title: "Ações da turma",
-                        description: "Use o menu de ações de cada linha para editar ou excluir uma turma. A tabela também permite controlar as colunas visíveis e exportar os dados.",
+                        description: "Use o menu de ações de cada linha para editar, cancelar ou excluir uma turma. O cancelamento preserva o registro. A tabela também permite controlar as colunas visíveis e exportar os dados.",
                         icon: <MoreVertical className="h-4 w-4" aria-hidden="true" />
                     }
                 ]}
+            />
+
+            <ConfirmDeleteModal
+                isOpen={!!classToCancel}
+                onClose={() => setClassToCancel(null)}
+                onConfirm={async () => {
+                    if (!classToCancel || cancelClassSubmitRef.current || isCancelling) return;
+                    cancelClassSubmitRef.current = true;
+                    try {
+                        await cancelClass(classToCancel.id);
+                    } catch (err) {
+                        console.error(err);
+                    } finally {
+                        cancelClassSubmitRef.current = false;
+                        setClassToCancel(null);
+                    }
+                }}
+                itemName={classToCancel?.id_anac}
+                isPending={isCancelling}
+                variant="cancel"
             />
 
             <Modal isOpen={!!classToDelete} onClose={() => setClassToDelete(null)}>

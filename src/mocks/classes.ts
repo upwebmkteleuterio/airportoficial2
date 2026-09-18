@@ -28,7 +28,10 @@ export const mockTurmas: Turma[] = [
     gestor_turma_id: 'user-admin-1', // Marcelo Ribeiro
     status_prazo_notas: ClassStatusPrazo.NOTA_LANCADA,
     dias_para_vencimento: 0,
-    status_operacional_sn: true // S (Sim, Verde)
+    status_operacional_sn: true, // S (Sim, Verde)
+    status_turma: 'Ativa',
+    carga_horaria: 16,
+    software_utilizado: 'ViteOS'
   },
   {
     id: 'turma-882',
@@ -52,7 +55,10 @@ export const mockTurmas: Turma[] = [
     gestor_turma_id: 'user-admin-1',
     status_prazo_notas: ClassStatusPrazo.NO_PRAZO,
     dias_para_vencimento: 2,
-    status_operacional_sn: false // N (Não, Vermelho)
+    status_operacional_sn: false, // N (Não, Vermelho)
+    status_turma: 'Ativa',
+    carga_horaria: 40,
+    software_utilizado: 'RayScan'
   },
   {
     id: 'turma-885',
@@ -76,7 +82,10 @@ export const mockTurmas: Turma[] = [
     gestor_turma_id: 'user-admin-1',
     status_prazo_notas: ClassStatusPrazo.ATRASADO,
     dias_para_vencimento: -3,
-    status_operacional_sn: false // N (Não, Vermelho)
+    status_operacional_sn: false, // N (Não, Vermelho)
+    status_turma: 'Ativa',
+    carga_horaria: 16,
+    software_utilizado: 'SecurePass'
   }
 ];
 

@@ -345,6 +345,9 @@ export const classService = {
     if (changedLockedField) {
       throw new Error(`O campo estrutural ${String(changedLockedField)} não pode ser alterado após o início da operação da turma.`);
     }
+    if (Object.prototype.hasOwnProperty.call(updates, 'status_turma')) {
+      throw new Error('A situação da turma só pode ser alterada pela ação de cancelamento.');
+    }
 
     const { id: _ignoredId, ...classUpdates } = updates;
     const identifiers = {
@@ -384,6 +387,23 @@ export const classService = {
       throw serviceError(`Não foi possível atualizar a turma ${id}`, error);
     }
     if (!data) throw new Error(`Não foi possível atualizar a turma ${id}: turma não encontrada`);
+    return data as Turma;
+  },
+
+  cancel: async (id: string): Promise<Turma> => {
+    await assertCanManageTurmas();
+    const turma = await getClassById(id);
+    if (!turma) throw new Error(`Não foi possível cancelar a turma ${id}: turma não encontrada`);
+    if (turma.status_turma === 'Cancelada') return turma;
+
+    const { data, error } = await supabase
+      .from('turmas')
+      .update({ status_turma: 'Cancelada' })
+      .eq('id', id)
+      .select()
+      .maybeSingle();
+    if (error) throw serviceError(`Não foi possível cancelar a turma ${id}`, error);
+    if (!data) throw new Error(`Não foi possível cancelar a turma ${id}: turma não encontrada`);
     return data as Turma;
   },
 

@@ -65,6 +65,14 @@ export function useClasses(options: ClassesOptions = {}) {
     }
   });
 
+  const cancelClassMutation = useMutation({
+    mutationFn: (id: string) => classService.cancel(id),
+    onSuccess: (_, id) => {
+      queryClient.invalidateQueries({ queryKey: ['classes'] });
+      queryClient.invalidateQueries({ queryKey: ['class', id] });
+    }
+  });
+
   const deleteClassMutation = useMutation({
     mutationFn: (id: string) => classService.delete(id),
     onSuccess: () => {
@@ -85,6 +93,8 @@ export function useClasses(options: ClassesOptions = {}) {
     getInstrutoresByTurma: classService.getInstrutoresByTurma,
     saveInstrutoresForTurma: saveInstrutoresForTurmaMutation.mutateAsync,
     isSavingInstrutoresForTurma: saveInstrutoresForTurmaMutation.isPending,
+    cancelClass: cancelClassMutation.mutateAsync,
+    isCancelling: cancelClassMutation.isPending,
     deleteClass: deleteClassMutation.mutateAsync,
     isDeleting: deleteClassMutation.isPending
   };

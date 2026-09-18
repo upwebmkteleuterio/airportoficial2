@@ -7,6 +7,14 @@ interface PrazoStatusResult {
 }
 
 export function getStatusPrazoNotas(turma: Turma): PrazoStatusResult {
+  if (turma.status_turma === 'Cancelada') {
+    return {
+      prazoText: 'Cancelada',
+      prazoColor: 'text-gray-500 dark:text-slate-400',
+      trColor: 'bg-gray-100/60 dark:bg-slate-800/50',
+    };
+  }
+
   let prazoText = '-';
   let prazoColor = 'text-gray-400';
   let trColor = '';

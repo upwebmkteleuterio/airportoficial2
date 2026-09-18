@@ -141,10 +141,10 @@ export interface Turma {
   uf: string;
   concessionaria_visita_id?: string;
   qt_alunos_matriculados: number;
-  horario_prova_1_chamada: string; // Ex: "13:30-15:00" ou "Sem prova"
-  horario_prova_2_chamada: string; // Ex: "17:00-18:30" ou "Sem prova"
-  data_prova_1_chamada?: string;
-  data_prova_2_chamada?: string;
+  horario_prova_1_chamada: string | null; // Ex: "13:30-15:00", "Sem prova" ou histórico sem valor
+  horario_prova_2_chamada: string | null; // Ex: "17:00-18:30", "Sem prova" ou histórico sem valor
+  data_prova_1_chamada?: string | null;
+  data_prova_2_chamada?: string | null;
   vigilante_sem_deslocamento: boolean;
   anotacoes_turma: string;
   
@@ -160,9 +160,12 @@ export interface Turma {
   status_prazo_notas?: ClassStatusPrazo;
   dias_para_vencimento?: number;
   status_operacional_sn: boolean; // S/N Vermelho/Verde do Excel
-  data_lancamento_notas?: string;
+  status_turma: 'Ativa' | 'Cancelada';
+  carga_horaria?: number | null;
+  software_utilizado?: string | null;
+  data_lancamento_notas?: string | null;
   nota_lancada?: boolean;
-  data_lancada_real?: string;
+  data_lancada_real?: string | null;
 }
 
 export interface TurmaInstrutor {
