@@ -56,6 +56,8 @@ import {
     Filter,
     HelpCircle,
     Info,
+    BookOpen,
+    MapPin,
 } from "lucide-react";
 
 import { useClasses } from "../hooks/useClasses";
@@ -71,6 +73,7 @@ import { Modal } from "../components/ui/Modal";
 import { HelpModal } from "../components/ui/HelpModal";
 import { SlidePanel } from "../components/ui/SlidePanel";
 import { ConfirmDeleteModal } from "../components/ui/ConfirmDeleteModal";
+import { TruncatedInfoTooltip } from "../components/ui/TruncatedInfoTooltip";
 
 type ClassDraft = {
     formIdAnac: string;
@@ -175,8 +178,8 @@ export function Dashboard() {
     const isInstructor = userLogged?.role === 'INSTRUTOR';
 
     const [currentPage, setCurrentPage] = useState(1);
-    const [turmaInstructorsMap, setTurmaInstructorsMap] = useState<Record<string, string[]>>({});
-    const itemsPerPage = 6;
+    const [turmaInstructorsMap, setTurmaInstructorsMap] = useState<Record<string, { instrutor_id: string; funcao: string }[]>>({});
+    const itemsPerPage = 20;
 
     const {
         courses
@@ -626,7 +629,7 @@ export function Dashboard() {
         iscr: "Coord. ISCR",
         icar: "Coord. ICAR",
         aplicador: "Aplicador",
-        instrutores_turma: "Instrutores da Turma",
+        instrutores_turma: "Equipe por função",
         vigia: "Vigilante sem deslocamento",
         notas_lancadas_em: "Data de Lançamento",
         data_lancamento_real: "Lançada em",
@@ -755,25 +758,49 @@ export function Dashboard() {
         icar: getInstructorName(turma.coordenador_icar_id || ""),
         aplicador: getUserName(turma.aplicador_id),
     });
+    const getClassAddressLabel = (turma: Turma) => {
+        const address = addresses.find((candidate) => candidate.id === turma.endereco_id);
+        if (address) return `${address.logradouro} - ${address.cidade}/${address.estado}`;
+        const location = [turma.cidade, turma.uf].filter(Boolean).join('/');
+        if (turma.endereco_realizacao && location && !turma.endereco_realizacao.includes(location)) {
+            return `${turma.endereco_realizacao} - ${location}`;
+        }
+        return turma.endereco_realizacao || location || "Não aplicável";
+    };
+    const getClassTeam = (turma: Turma) => {
+        const relations = turmaInstructorsMap[turma.id] ?? [];
+        const getNames = (funcao: InstructorFuncao) => relations
+            .filter((relation) => relation.funcao === funcao)
+            .map((relation) => getInstructorName(relation.instrutor_id))
+            .filter((name) => name !== "Não aplicável");
+        const aplicadores = getNames(InstructorFuncao.APLICADOR_PROVA);
+        const applicatorId = normalizeForeignKeyValue(turma.aplicador_id);
+        if (applicatorId) {
+            const applicatorName = getUserName(applicatorId);
+            if (applicatorName !== "Não aplicável" && !aplicadores.includes(applicatorName)) {
+                aplicadores.push(applicatorName);
+            }
+        }
+        return {
+            instrutor: getNames(InstructorFuncao.INSTRUTOR_TUTOR),
+            convidado: getNames(InstructorFuncao.CONVIDADO),
+            aplicador: aplicadores,
+        };
+    };
 
-    // Debug: carrega os vínculos reais de turma_instrutores para a coluna "Instrutores da Turma".
-    // O mapa guarda apenas os IDs; os nomes são resolvidos no render para evitar
-    // dependências instáveis (getInstructorName muda a cada render e causava loop).
+    // Carrega os vínculos reais de turma_instrutores, incluindo a função persistida.
+    // Os nomes são resolvidos no render para evitar dependências instáveis.
     useEffect(() => {
         if (!classes.length) return;
         let cancelled = false;
         const load = async () => {
-            console.debug("[turmas] buscando instrutores vinculados no banco", { turmas: classes.length });
             const pairs = await Promise.all(classes.map(async (turma) => {
                 try {
                     const relations = await getInstrutoresByTurma(turma.id);
-                    console.debug("[turmas] instrutores encontrados", {
-                        turmaId: turma.id,
-                        idAnac: turma.id_anac,
-                        qtd: relations.length,
-                        instrutores: relations.map(relation => relation.instrutor_id)
-                    });
-                    return [turma.id, relations.map(relation => relation.instrutor_id)] as const;
+                    return [turma.id, relations.map(relation => ({
+                        instrutor_id: relation.instrutor_id,
+                        funcao: relation.funcao,
+                    }))] as const;
                 } catch (error) {
                     console.warn("[turmas] falha ao carregar instrutores da turma", { turmaId: turma.id, error });
                     return [turma.id, []] as const;
@@ -1120,7 +1147,7 @@ export function Dashboard() {
                                 {visibleColumns.aplicador && <th
                                     className="px-4 py-3 border-r border-gray-200/50 dark:border-slate-800/50">Aplicador</th>}
                                 {visibleColumns.instrutores_turma && <th
-                                    className="px-4 py-3 border-r border-gray-200/50 dark:border-slate-800/50">Instrutores da Turma</th>}
+                                    className="px-4 py-3 border-r border-gray-200/50 dark:border-slate-800/50">Equipe por função</th>}
                                 {visibleColumns.vigia && <th
                                     className="px-4 py-3 border-r border-gray-200/50 dark:border-slate-800/50">Vigilante</th>}
                                 {visibleColumns.notas_lancadas_em && <th
@@ -1303,8 +1330,12 @@ export function Dashboard() {
                                             className="px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 text-gray-500 dark:text-slate-400">T-OP-{item.id_interno_escola}
                                         </td>)}
                                         {visibleColumns.curso && (<td
-                                            className="px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 font-sans max-w-xs truncate">
-                                            {course?.nome_curso || "Curso de Aviação"}
+                                            className="px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 font-sans max-w-xs">
+                                            <TruncatedInfoTooltip
+                                                text={course?.nome_curso || "Curso de Aviação"}
+                                                title="Curso"
+                                                icon={BookOpen}
+                                            />
                                         </td>)}
                                         {visibleColumns.status_notas && (<td
                                             className="px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 font-sans text-center"
@@ -1370,8 +1401,12 @@ export function Dashboard() {
                                             {item.data_prova_2_chamada ? new Date(item.data_prova_2_chamada + "T00:00:00").toLocaleDateString("pt-BR") : ""} {getExamTimeLabel(item.horario_prova_2_chamada)}
                                         </td>)}
                                         {visibleColumns.endereco && (<td
-                                            className="px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 font-sans max-w-xs truncate">
-                                            {item.endereco_realizacao}
+                                            className="px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 font-sans max-w-xs">
+                                            <TruncatedInfoTooltip
+                                                text={getClassAddressLabel(item)}
+                                                title="Endereço"
+                                                icon={MapPin}
+                                            />
                                         </td>)}
                                         {visibleColumns.ioad && (<td
                                             className="px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 font-sans">
@@ -1390,11 +1425,17 @@ export function Dashboard() {
                                             {getUserName(item.aplicador_id)}
                                         </td>)}
                                         {visibleColumns.instrutores_turma && (<td
-                                            className="px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 font-sans max-w-xs truncate"
-                                            title={(turmaInstructorsMap[item.id] ?? []).map(getInstructorName).join(', ')}>
-                                            {(turmaInstructorsMap[item.id] ?? []).length > 0
-                                              ? (turmaInstructorsMap[item.id] ?? []).map(getInstructorName).join(', ')
-                                              : '—'}
+                                            className="min-w-[220px] max-w-xs whitespace-normal px-4 py-2 align-top border-r border-gray-200/30 dark:border-slate-800/30 font-sans leading-5">
+                                            {(() => {
+                                                const team = getClassTeam(item);
+                                                return (
+                                                    <div>
+                                                        <span className="block"><strong>INSTRUTOR:</strong> {team.instrutor.join(', ') || '—'}</span>
+                                                        <span className="block"><strong>CONVIDADO:</strong> {team.convidado.join(', ') || '—'}</span>
+                                                        <span className="block"><strong>APLICADOR PR:</strong> {team.aplicador.join(', ') || '—'}</span>
+                                                    </div>
+                                                );
+                                            })()}
                                         </td>)}
                                         {visibleColumns.vigia && (<td
                                             className="px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 font-sans">
