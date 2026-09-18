@@ -36,6 +36,8 @@ export default function Migration() {
   const allProblems = parsed?.rows.reduce((total, row) => total + row.problems.length, 0) ?? 0;
   const allWarnings = parsed?.rows.reduce((total, row) => total + row.warnings.length, 0) ?? 0;
   const resultWarnings = runResult?.results.flatMap((result) => (result.warnings ?? []).map((warning) => `Linha ${result.line} · TURMA ${result.turma || '—'} · ANAC ${result.anac || '—'}: ${warning}`)) ?? [];
+  const warningRows = parsed?.rows.filter((row) => row.warnings.length > 0) ?? [];
+  const problemRows = parsed?.rows.filter((row) => row.problems.length > 0) ?? [];
   const hasBlockingFileIssue = Boolean(parsed && (parsed.duplicateHeaders.length > 0 || parsed.recognized.length === 0));
 
   const handleFile = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -145,6 +147,23 @@ export default function Migration() {
                   <tbody>{parsed.rows.slice(0, 10).map((row) => <tr key={row.line} className="border-t border-slate-200 dark:border-slate-800"><td className="px-3 py-2 font-semibold">{row.line}</td><td className="px-3 py-2">{row.values.TURMA}</td><td className="px-3 py-2">{row.values.ANAC}</td><td className="px-3 py-2">{row.values.Curso}</td><td className="px-3 py-2">{row.values['INÍCIO']}</td><td className="px-3 py-2">{row.values['TÉRMINO']}</td><td className="px-3 py-2">{row.values.Status}</td><td className="max-w-xs px-3 py-2 text-amber-700 dark:text-amber-300">{row.warnings.join(' ') || 'Nenhum'}</td><td className="max-w-xs px-3 py-2 text-rose-700 dark:text-rose-300">{row.problems.join(' ') || 'Nenhum'}</td></tr>)}</tbody>
                 </table>
               </div>
+
+              <div className="mt-5 grid gap-4 lg:grid-cols-2">
+                <ReviewPanel
+                  title="Avisos de revisão — não bloqueantes"
+                  rows={warningRows}
+                  messageCount={allWarnings}
+                  emptyMessage="Nenhum aviso de revisão nesta planilha."
+                  tone="warning"
+                />
+                <ReviewPanel
+                  title="Problemas por linha — bloqueantes"
+                  rows={problemRows}
+                  messageCount={allProblems}
+                  emptyMessage="Nenhum problema bloqueante nesta planilha."
+                  tone="danger"
+                />
+              </div>
             </Section>
 
             <Section title="3. Selecionar lote">
@@ -188,4 +207,57 @@ function Summary({ label, value, tone = 'default' }: { label: string; value: str
 function MappingList({ title, values, tone, mapping = false }: { title: string; values: readonly string[] | string[]; tone: 'success' | 'warning' | 'danger'; mapping?: boolean }) {
   const colors = tone === 'success' ? 'text-emerald-700 dark:text-emerald-300' : tone === 'warning' ? 'text-amber-700 dark:text-amber-300' : 'text-rose-700 dark:text-rose-300';
   return <div><h3 className="text-xs font-bold uppercase text-slate-500 dark:text-slate-400">{title}</h3><div className={`mt-1 text-xs leading-6 ${colors}`}>{values.length ? values.map((value) => <div key={value}>{value}{mapping ? ` → ${MIGRATION_DESTINATIONS[value as keyof typeof MIGRATION_DESTINATIONS]}` : ''}</div>) : 'Nenhuma'}</div></div>;
+}
+
+function ReviewPanel({
+  title,
+  rows,
+  messageCount,
+  emptyMessage,
+  tone,
+}: {
+  title: string;
+  rows: MigrationParseResult['rows'];
+  messageCount: number;
+  emptyMessage: string;
+  tone: 'warning' | 'danger';
+}) {
+  const panelClasses = tone === 'warning'
+    ? 'border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30'
+    : 'border-rose-200 bg-rose-50 dark:border-rose-900 dark:bg-rose-950/30';
+  const headingClasses = tone === 'warning'
+    ? 'text-amber-900 dark:text-amber-200'
+    : 'text-rose-900 dark:text-rose-200';
+  const messageClasses = tone === 'warning'
+    ? 'text-amber-800 dark:text-amber-200'
+    : 'text-rose-800 dark:text-rose-200';
+
+  return (
+    <section aria-labelledby={`${tone}-review-heading`} className={`rounded-lg border p-4 ${panelClasses}`}>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <h3 id={`${tone}-review-heading`} className={`font-bold ${headingClasses}`}>{title}</h3>
+        <p className={`text-xs font-semibold ${messageClasses}`}>
+          {messageCount} {messageCount === 1 ? 'mensagem' : 'mensagens'} · {rows.length} {rows.length === 1 ? 'linha' : 'linhas'}
+        </p>
+      </div>
+      {rows.length ? (
+        <ul className="mt-3 max-h-80 list-none space-y-3 overflow-y-auto pr-2" aria-label={title}>
+          {rows.map((row) => (
+            <li key={row.line} className="rounded-md border border-current/15 bg-white/70 p-3 text-sm dark:bg-slate-950/30">
+              <p className={`font-bold ${headingClasses}`}>
+                Linha {row.line} · TURMA {row.values.TURMA || '—'} · ANAC {row.values.ANAC || '—'}
+              </p>
+              <ul className={`mt-2 list-disc space-y-1 pl-5 ${messageClasses}`}>
+                {(tone === 'warning' ? row.warnings : row.problems).map((message, index) => (
+                  <li key={`${row.line}-${index}`} className="break-words whitespace-normal">{message}</li>
+                ))}
+              </ul>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className={`mt-3 text-sm ${messageClasses}`}>{emptyMessage}</p>
+      )}
+    </section>
+  );
 }
