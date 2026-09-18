@@ -178,7 +178,7 @@ export function CreateMenu({
               transition={morph}
               ref={panelRef}
               style={{ borderRadius: 18 }}
-              className="w-[min(86vw,380px)] max-h-[calc(100vh-1rem)] overflow-y-auto border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl"
+              className="relative z-10 isolate w-[min(86vw,380px)] max-h-[calc(100vh-1rem)] overflow-y-auto border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl"
             >
               <motion.div
                 role="menu"
@@ -273,7 +273,9 @@ export function CreateMenu({
               className="inline-flex h-[40px] min-w-[155px] px-5 items-center justify-center bg-slate-900 dark:bg-teal-600 hover:bg-slate-850 dark:hover:bg-teal-500 text-sm font-semibold text-white shadow-sm transition-colors rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500"
             >
               <motion.span
-                layout
+                initial={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ opacity: { duration: reduce ? 0 : 0.08 } }}
                 className="inline-flex items-center gap-2 whitespace-nowrap"
               >
                 <UserPlus className="w-4 h-4" />

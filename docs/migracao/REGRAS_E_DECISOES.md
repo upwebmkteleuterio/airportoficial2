@@ -224,7 +224,54 @@ A conversão para usuário deverá ser uma ação posterior, feita quando o aces
 - Os turnos e horários padrão existentes foram preservados.
 - Nenhum fluxo de importação, migração, staging ou pré-visualização foi implementado nesta etapa.
 
-## 8. Próxima ordem de trabalho, quando a migração for autorizada
+## 8. Auditoria da preparação para a futura migração
+
+Esta auditoria cruza o modelo de planilha informado pelo usuário com a inspeção atual do código e do schema. Ela registra capacidade estrutural existente, lacunas de correspondência e decisões que ainda precisam ser tomadas. A migração continua fora do escopo: não há autorização ou implementação de carga, importação de planilhas, staging, lotes ou migração de documentos.
+
+### 8.1 Campos já suportados
+
+- `TURMA` / ID interno: `turmas.id_interno_escola`, com unicidade e sequência interna.
+- `ANAC`: `turmas.id_anac`, com unicidade.
+- Curso: `turmas.curso_id` com FK para `cursos`.
+- `TURNO` e `HORÁRIO`: `turmas.turno` e `turmas.horario_aulas` armazenam o turno e o horário como texto.
+- Datas: `data_inicio` e `data_termino`, além das datas de prova quando aplicáveis.
+- Cidade/UF: `turmas.cidade` e `turmas.uf`.
+- Endereço: `endereco_realizacao` preserva a descrição textual e `endereco_id` permite uma FK opcional para `enderecos`.
+- Instrutor, convidado e aplicador: o modelo de vínculo `turma_instrutores` relaciona uma pessoa (`pessoas`) à turma com `funcao`; o aplicador também possui `turmas.aplicador_id` como referência direta opcional.
+- Status `S/N`: `status_operacional_sn` é booleano e a interface o apresenta como `S`/`N`; a conversão do significado histórico da coluna ainda deve ser confirmada.
+- Software: `turmas.software_utilizado` suporta o valor associado à turma.
+- `H/a`: há `turmas.carga_horaria` para receber um valor numérico, mas a equivalência com `H/a` ainda não está confirmada.
+- Notas e prazo: `anotacoes_turma`, `status_prazo_notas`, `dias_para_vencimento`, `nota_lancada` e datas relacionadas cobrem observações, prazo e acompanhamento do lançamento.
+- `MAT`: não deve ser tratado como dado autoritativo da planilha; `turmas.qt_alunos_matriculados` é mantido como contagem derivada das matrículas, e os alunos em `matriculas` ficam relacionados à turma por `aluno_id`.
+
+### 8.2 Suporte parcial ou ausente
+
+- Status histórico `Encerrado` versus `Ativa`/`Cancelada`: o schema de `turmas` aceita `Ativa` e `Cancelada`, enquanto `Encerrado` aparece separado da lógica operacional de prazo/nota. Não existe ainda uma regra de preservação histórica sem reduzir `Encerrado` a `nota_lancada`.
+- `v.t.` e numeração sequencial de ofício por visita técnica: não há campo nem sequência específica para esses dados. `concessionaria_visita_id` existe como FK para `concessionarias`, mas não representa número de ofício nem a regra de visita.
+- Regra de visita técnica por curso: os cursos **Formação em Base Cosec** e **Formação de Vigilante Aversec** exigem visita técnica. Para cada turma desses cursos, `v.t.` deve receber o próximo número sequencial de ofício; turmas de cursos sem visita técnica permanecem com `v.t.` zerado. A numeração é global, seguindo a sequência de ofícios conforme a ordem histórica das turmas, e não reinicia por curso, salvo confirmação posterior. Ainda falta definir o campo/modelo de destino e o comportamento quando a importação ocorrer fora de ordem.
+- `PASTA`: o caminho antigo pode ser lido como referência de origem, mas não existe vínculo definitivo da turma com esse caminho.
+- `referência` e `CÓPIA TURMA`: não há campos ou regras de destino definidos para esses metadados históricos.
+- Preservação de caminho/documentos: a tabela `documentos` atual pertence a usuários por `usuario_id`; ela não possui vínculo com turmas nem com a coluna `PASTA`. Portanto, o caminho antigo e a associação documental da planilha não estão preservados pelo modelo atual.
+- Identidade e duplicidade de pessoas: `pessoas` permite cadastro sem login e pode apontar para um perfil legado, mas ainda não existe uma chave estável de reconciliação nem uma regra de deduplicação para nomes, CPF ausente ou pessoas que aparecem em múltiplas funções.
+
+### 8.3 Riscos e decisões prévias obrigatórias
+
+Antes de qualquer futura carga, é necessário:
+
+1. Não recalcular ou reinterpretar silenciosamente o histórico; definir quais valores históricos serão preservados literalmente e quais terão uma representação operacional derivada.
+2. Preservar os IDs explícitos da planilha (`TURMA`/ID interno e `ANAC`) e sincronizar a sequência interna após a carga, para que novos cadastros não colidam com os IDs importados.
+3. Mapear previamente os nomes da planilha para os cursos existentes, tratando divergências como decisão e não como correspondência automática.
+4. Separar a situação operacional (`Ativa`/`Cancelada`, prazo e notas) do status histórico da planilha, incluindo `Encerrado`.
+5. Definir a semântica e o destino de `referência`, `CÓPIA TURMA`, `H/a` e `MAT`, sem transformar contagens derivadas em fonte histórica autoritativa.
+6. Definir uma chave estável de pessoas, a política para duplicidades e a forma de vincular a mesma pessoa a funções diferentes.
+7. Definir o vínculo da pasta e dos documentos à turma/aluno, incluindo como preservar ou substituir o caminho legado antes de usar a tabela de documentos atual.
+8. Definir o campo/modelo de destino de `v.t.` e o comportamento da numeração global de ofícios quando a importação ocorrer fora da ordem histórica; a regra dos dois cursos que exigem visita técnica e a não reinicialização por curso estão registradas, mas ainda dependem dessas decisões de modelagem e importação.
+
+### 8.4 Conclusão da auditoria
+
+O banco e o app estão preparados para receber a futura camada de migração: os principais dados de turma, vínculos de pessoas, cursos, endereços, matrículas e contagens derivadas já têm representação estrutural. Porém, ainda não estão completos para executar uma carga fiel das planilhas sem as decisões e os modelos para status histórico, identificadores documentais, visitas técnicas, pessoas e documentos descritos acima. A migração permanece fora do escopo desta etapa.
+
+## 9. Próxima ordem de trabalho, quando a migração for autorizada
 
 1. Confirmar ou ajustar as pendências com o cliente.
 2. Implementar a leitura, validação e pré-visualização da planilha de turmas.
