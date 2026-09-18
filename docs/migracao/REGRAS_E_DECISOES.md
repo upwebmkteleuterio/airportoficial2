@@ -2,7 +2,7 @@
 
 > Documento vivo de alinhamento. Atualizar a cada decisão confirmada sobre a migração das planilhas para o sistema.
 >
-> **Status:** preparação estrutural e de interface concluída. Nenhuma importação real foi executada e o módulo de migração permanece fora do escopo atual.
+> **Status:** módulo de migração de turmas implementado para piloto controlado. Nenhuma importação real é executada sem pré-visualização e confirmação; o piloto concilia cursos, endereços e pessoas durante a execução.
 
 ## 1. Contexto e escopo
 
@@ -154,7 +154,7 @@ A conversão para usuário deverá ser uma ação posterior, feita quando o aces
 |---|---|---|
 | `TURMA` | `turmas.id_interno_escola` | Preservar identificador histórico e validar duplicidade. |
 | `ANAC` | `turmas.id_anac` | Obrigatório e único. |
-| `Curso` | `cursos` + `turmas.curso_id` | Associar curso existente ou solicitar criação/seleção. |
+| `Curso` | `cursos` + `turmas.curso_id` | Localizar por nome normalizado; criar uma vez quando ausente, usando `H/a` válido ou `0`, e reutilizar no lote. Ambiguidade permanece pendente. |
 | `TURNO` | `turmas.turno` | Normalizar e comparar com catálogo de turnos. |
 | `HORÁRIO` | `turmas.horario_aulas` | Preservar horário real da planilha. |
 | `INÍCIO` | `turmas.data_inicio` | Converter de DD/MM/AAAA para AAAA-MM-DD. |
@@ -202,7 +202,9 @@ A conversão para usuário deverá ser uma ação posterior, feita quando o aces
 - O usuário deve visualizar os dados originais e os dados normalizados.
 - Registros com erro não devem ser importados silenciosamente.
 - Duplicidades de ID ANAC e identificador interno devem ser mostradas antes da confirmação.
-- Cursos, endereços e pessoas não encontrados devem gerar pendência para decisão.
+- Cursos devem ser localizados por nome normalizado (acentos, caixa e espaços); quando ausentes, devem ser criados uma vez com `carga_horaria_total` baseada em `H/a` válido (ou `0`) e reutilizados nas linhas seguintes do lote.
+- Se houver mais de um curso com o mesmo nome normalizado, a linha deve permanecer pendente por ambiguidade, sem escolha arbitrária.
+- Endereços e pessoas devem ser localizados por chave normalizada ou criados uma vez e reutilizados; pessoas ambíguas permanecem pendentes.
 - A importação deve ocorrer em lotes.
 - O sistema deve informar o progresso e os registros que falharam.
 - Deve ser possível reprocessar somente os registros pendentes ou com erro.

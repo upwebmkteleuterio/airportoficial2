@@ -296,6 +296,16 @@ async function createPerson(name: string): Promise<ExistingPerson> {
   return data as ExistingPerson;
 }
 
+async function createCourse(name: string, cargaHoraria: string): Promise<ExistingCourse> {
+  const cleanName = normalizeMigrationValue(name).replace(/\s+/g, ' ');
+  const carga = parseNumber(cargaHoraria);
+  const { data, error } = await supabase.from('cursos').insert({
+    id: newServiceId('curso'), nome_curso: cleanName, carga_horaria_total: carga ?? 0,
+  }).select('id,nome_curso,carga_horaria_total').single();
+  if (error || !data) throw safeError('Não foi possível criar o curso histórico.');
+  return data as ExistingCourse;
+}
+
 async function createAddress(logradouro: string, cidade: string, uf: string): Promise<ExistingAddress> {
   const { data, error } = await supabase.from('enderecos').insert({
     id: newServiceId('endereco'), logradouro: normalizeMigrationValue(logradouro), cidade: normalizeMigrationValue(cidade), estado: normalizeMigrationValue(uf).toUpperCase(), ativo: true,
@@ -344,11 +354,22 @@ export async function runMigrationBatch(rows: MigrationParsedRow[], onProgress?:
   const total = selectedRows.length;
   const results: MigrationRowResult[] = [];
   const references = await loadReferenceData();
+  const coursesByName = new Map<string, ExistingCourse>();
+  const ambiguousCourseNames = new Set<string>();
+  references.courses.forEach((course) => {
+    const name = normalizeComparison(course.nome_curso);
+    if (!name) return;
+    if (coursesByName.has(name)) ambiguousCourseNames.add(name);
+    else coursesByName.set(name, course);
+  });
+  const createdCourseNames = new Set<string>();
   const peopleByName = new Map(references.people.map((person) => [normalizeComparison(person.nome), person]));
   const ambiguousPeopleNames = new Set(
     references.people.map((person) => normalizeComparison(person.nome)).filter((name, index, names) => name && names.indexOf(name) !== index),
   );
+  const createdPeopleNames = new Set<string>();
   const addressesByKey = new Map(references.addresses.map((address) => [addressKey(address.logradouro, address.cidade, address.estado), address]));
+  const createdAddressKeys = new Set<string>();
 
   const progress = (stage: MigrationStage, current: number, message: string) => onProgress?.({
     stage, current, total, percent: total === 0 ? 100 : Math.round((current / total) * 100), message,
@@ -359,42 +380,71 @@ export async function runMigrationBatch(rows: MigrationParsedRow[], onProgress?:
     const row = selectedRows[index];
     const current = index + 1;
     const subject = `Turma ${row.values.TURMA || '—'} · ANAC ${row.values.ANAC || '—'} · início ${row.values['INÍCIO'] || '—'}`;
+    let entityActions: string[] = [];
     try {
       progress('validação', current, `Validando ${subject} (linha ${row.line}).`);
       const problems = validateMigrationRow(row.values);
       if (problems.length > 0) throw safeError(problems.join(' '));
       if (await findExistingClass(row)) throw safeError('A turma já existe por ID ANAC ou ID interno da escola.');
 
-      progress('entidades', current, `Conciliando entidades de ${subject}.`);
-      const course = findUnique(references.courses, row.values.Curso, (item) => item.nome_curso);
-      if (!course) throw safeError(`Curso "${normalizeMigrationValue(row.values.Curso)}" não encontrado; a linha ficou pendente.`);
+      const normalizedCourseName = normalizeComparison(row.values.Curso);
+      if (ambiguousCourseNames.has(normalizedCourseName)) throw safeError(`O curso "${normalizeMigrationValue(row.values.Curso)}" é ambíguo.`);
+      const personEntries = personNameValues(row);
+      personEntries.forEach((entry) => {
+        if (ambiguousPeopleNames.has(normalizeComparison(entry.name))) throw safeError(`A pessoa "${normalizeMigrationValue(entry.name)}" é ambígua.`);
+      });
+      let course = coursesByName.get(normalizedCourseName);
+      entityActions = [];
+      let courseAction: string;
+      if (course) {
+        courseAction = createdCourseNames.has(normalizedCourseName) ? 'reutilizado (criado neste lote)' : 'localizado';
+      } else {
+        course = await createCourse(row.values.Curso, row.values['H/a']);
+        coursesByName.set(normalizedCourseName, course);
+        createdCourseNames.add(normalizedCourseName);
+        courseAction = 'criado';
+      }
+      entityActions.push(`Curso ${courseAction}: "${course.nome_curso}"`);
 
       let addressId: string | null = null;
       const addressText = normalizeMigrationValue(row.values.Endereço);
       if (addressText) {
         const key = addressKey(addressText, row.values.CIDADE, row.values.UF);
         let address = addressesByKey.get(key);
+        const addressAction = address && createdAddressKeys.has(key) ? 'reutilizado (criado neste lote)' : address ? 'localizado' : 'criado';
         if (!address) {
           address = await createAddress(addressText, row.values.CIDADE, row.values.UF);
           addressesByKey.set(key, address);
+          createdAddressKeys.add(key);
         }
         addressId = address.id;
+        entityActions.push(`Endereço ${addressAction}`);
+      } else {
+        entityActions.push('Endereço não informado');
       }
 
       const resolvedPeople: Array<{ person: ExistingPerson; funcao: InstructorFuncao }> = [];
-      for (const entry of personNameValues(row)) {
+      for (const entry of personEntries) {
         const normalizedName = normalizeComparison(entry.name);
-        if (ambiguousPeopleNames.has(normalizedName)) throw safeError(`A pessoa "${normalizeMigrationValue(entry.name)}" é ambígua.`);
         let person = peopleByName.get(normalizedName);
+        const personAction = person
+          ? createdPeopleNames.has(normalizedName) ? 'reutilizada (criada neste lote)' : 'localizada'
+          : 'criada';
         if (!person) {
           person = findUnique(references.people, entry.name, (item) => item.nome);
-          if (!person) person = await createPerson(entry.name);
+          if (!person) {
+            person = await createPerson(entry.name);
+            createdPeopleNames.add(normalizedName);
+          }
           peopleByName.set(normalizedName, person);
         }
+        entityActions.push(`Pessoa "${normalizeMigrationValue(entry.name)}" ${personAction}`);
         if (!resolvedPeople.some((resolved) => resolved.person.id === person?.id && resolved.funcao === entry.funcao)) {
           resolvedPeople.push({ person, funcao: entry.funcao });
         }
       }
+      if (resolvedPeople.length === 0) entityActions.push('Pessoas não informadas');
+      progress('entidades', current, `${subject}: ${entityActions.join('; ')}.`);
 
       progress('turma', current, `Gravando ${subject}.`);
       const payload = toClassPayload(row, course, addressId);
@@ -414,10 +464,11 @@ export async function runMigrationBatch(rows: MigrationParsedRow[], onProgress?:
           if (updateError) throw safeError('A turma e os vínculos foram gravados, mas o aplicador não pôde ser associado.');
         }
       }
-      results.push({ line: row.line, status: 'sucesso', message: 'Turma e vínculos gravados com sucesso.' });
+      results.push({ line: row.line, status: 'sucesso', message: `Turma e vínculos gravados com sucesso. ${entityActions.join('; ')}.` });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Não foi possível concluir a linha.';
-      results.push({ line: row.line, status: 'erro', message: message.slice(0, 300) });
+      const entityDetails = entityActions.length > 0 ? `${entityActions.join('; ')}. ` : '';
+      results.push({ line: row.line, status: 'erro', message: `${entityDetails}${message}`.slice(0, 300) });
       progress('erro', current, `Erro seguro na linha ${row.line}.`);
     }
   }
