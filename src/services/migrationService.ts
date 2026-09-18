@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx';
 import { supabase } from '../integrations/supabase/client';
-import { InstructorFuncao, UserRole } from '../types';
+import { ClassStatusPrazo, InstructorFuncao, UserRole } from '../types';
 import { newServiceId } from './supabaseErrors';
 
 export const MIGRATION_COLUMNS = [
@@ -196,11 +196,12 @@ function statusHistory(value: string): 'No prazo' | 'Cancelado' | 'Encerrado' | 
   return null;
 }
 
-function prazoStatus(value: string): 'No prazo' | 'Nota Lançada' | 'Atrasado' | null {
+function prazoStatus(value: string): ClassStatusPrazo | null {
   const normalized = normalizeComparison(value);
-  if (normalized === 'NO PRAZO') return 'No prazo';
-  if (normalized === 'NOTA LANCADA' || normalized === 'NOTA LANÇADA') return 'Nota Lançada';
-  if (normalized === 'ATRASADO') return 'Atrasado';
+  if (normalized === 'NO PRAZO') return ClassStatusPrazo.NO_PRAZO;
+  if (normalized === 'NOTA LANCADA' || normalized === 'NOTA LANÇADA') return ClassStatusPrazo.NOTA_LANCADA;
+  if (normalized === 'ATRASADO') return ClassStatusPrazo.ATRASADO;
+  if (normalized === 'ENCERRADO') return ClassStatusPrazo.ENCERRADO;
   return null;
 }
 

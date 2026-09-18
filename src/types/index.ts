@@ -23,7 +23,8 @@ export enum ClassTurno {
 export enum ClassStatusPrazo {
   NO_PRAZO = 'No prazo',
   NOTA_LANCADA = 'Nota Lançada',
-  ATRASADO = 'Atrasado'
+  ATRASADO = 'Atrasado',
+  ENCERRADO = 'Encerrado'
 }
 
 export enum InstructorFuncao {

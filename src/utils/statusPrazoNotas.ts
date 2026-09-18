@@ -1,4 +1,4 @@
-import { Turma } from '../types';
+import { ClassStatusPrazo, Turma } from '../types';
 
 interface PrazoStatusResult {
   prazoText: string;
@@ -12,6 +12,14 @@ export function getStatusPrazoNotas(turma: Turma): PrazoStatusResult {
       prazoText: 'Cancelada',
       prazoColor: 'text-gray-500 dark:text-slate-400',
       trColor: 'bg-gray-100/60 dark:bg-slate-800/50',
+    };
+  }
+
+  if (turma.status_historico === 'Encerrado' || turma.status_prazo_notas === ClassStatusPrazo.ENCERRADO) {
+    return {
+      prazoText: ClassStatusPrazo.ENCERRADO,
+      prazoColor: 'text-slate-500 dark:text-slate-400',
+      trColor: '',
     };
   }
 

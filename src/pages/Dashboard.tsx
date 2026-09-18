@@ -186,7 +186,9 @@ const DEFAULT_VISIBLE_COLUMNS = {
     iscr: true,
     icar: true,
     aplicador: true,
-    instrutores_turma: true,
+    instrutor: true,
+    convidado: true,
+    aplicador_pr: true,
     vigia: true,
     notas_lancadas_em: true,
     data_lancamento_real: true,
@@ -204,8 +206,15 @@ function loadVisibleColumns(): VisibleColumns {
     try {
         const parsed = JSON.parse(window.localStorage.getItem(VISIBLE_COLUMNS_STORAGE_KEY) || "null");
         if (!parsed || typeof parsed !== "object") return { ...DEFAULT_VISIBLE_COLUMNS };
+        const legacyTeamVisibility = parsed.instrutores_turma;
         return Object.keys(DEFAULT_VISIBLE_COLUMNS).reduce<VisibleColumns>((result, key) => {
-            result[key as keyof VisibleColumns] = parsed[key] === false ? false : true;
+            const legacyValue = key === "instrutor" || key === "convidado"
+                ? legacyTeamVisibility
+                : key === "aplicador_pr"
+                    ? legacyTeamVisibility ?? parsed.aplicador
+                    : undefined;
+            const storedValue = parsed[key] ?? legacyValue;
+            result[key as keyof VisibleColumns] = storedValue === false ? false : true;
             return result;
         }, { ...DEFAULT_VISIBLE_COLUMNS } as VisibleColumns);
     } catch {
@@ -243,7 +252,7 @@ export function Dashboard() {
     const [advancedFilters, setAdvancedFilters] = useState<ClassFilters>({ ...DEFAULT_CLASS_FILTERS });
     const [draftAdvancedFilters, setDraftAdvancedFilters] = useState<ClassFilters>({ ...DEFAULT_CLASS_FILTERS });
     const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
-    const itemsPerPage = 20;
+    const itemsPerPage = 100;
 
     const {
         courses
@@ -673,7 +682,9 @@ export function Dashboard() {
         iscr: "Coord. ISCR",
         icar: "Coord. ICAR",
         aplicador: "Aplicador",
-        instrutores_turma: "Equipe por função",
+        instrutor: "Instrutor",
+        convidado: "Convidado",
+        aplicador_pr: "Aplicador PR",
         vigia: "Vigilante sem deslocamento",
         notas_lancadas_em: "Data de Lançamento",
         data_lancamento_real: "Lançada em",
@@ -1199,8 +1210,12 @@ export function Dashboard() {
                                     className="px-4 py-3 border-r border-gray-200/50 dark:border-slate-800/50">Coord. ICAR</th>}
                                 {visibleColumns.aplicador && <th
                                     className="px-4 py-3 border-r border-gray-200/50 dark:border-slate-800/50">Aplicador</th>}
-                                {visibleColumns.instrutores_turma && <th
-                                    className="px-4 py-3 border-r border-gray-200/50 dark:border-slate-800/50">Equipe por função</th>}
+                                {visibleColumns.instrutor && <th
+                                    className="px-4 py-3 border-r border-gray-200/50 dark:border-slate-800/50">Instrutor</th>}
+                                {visibleColumns.convidado && <th
+                                    className="px-4 py-3 border-r border-gray-200/50 dark:border-slate-800/50">Convidado</th>}
+                                {visibleColumns.aplicador_pr && <th
+                                    className="px-4 py-3 border-r border-gray-200/50 dark:border-slate-800/50">Aplicador PR</th>}
                                 {visibleColumns.vigia && <th
                                     className="px-4 py-3 border-r border-gray-200/50 dark:border-slate-800/50">Vigilante</th>}
                                 {visibleColumns.notas_lancadas_em && <th
@@ -1262,6 +1277,7 @@ export function Dashboard() {
                                     prazoColor,
                                     trColor
                                 } = getStatusPrazoNotas(item);
+                                const team = getClassTeam(item);
 
                                 return (
                                     <tr
@@ -1479,18 +1495,17 @@ export function Dashboard() {
                                             className="px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 font-sans">
                                             {getUserName(item.aplicador_id)}
                                         </td>)}
-                                        {visibleColumns.instrutores_turma && (<td
-                                            className="min-w-[220px] max-w-xs whitespace-normal px-4 py-2 align-top border-r border-gray-200/30 dark:border-slate-800/30 font-sans leading-5">
-                                            {(() => {
-                                                const team = getClassTeam(item);
-                                                return (
-                                                    <div>
-                                                        <span className="block"><strong>INSTRUTOR:</strong> {team.instrutor.join(', ') || '—'}</span>
-                                                        <span className="block"><strong>CONVIDADO:</strong> {team.convidado.join(', ') || '—'}</span>
-                                                        <span className="block"><strong>APLICADOR PR:</strong> {team.aplicador.join(', ') || '—'}</span>
-                                                    </div>
-                                                );
-                                            })()}
+                                        {visibleColumns.instrutor && (<td
+                                            className="min-w-[180px] max-w-xs whitespace-normal px-4 py-2 align-top border-r border-gray-200/30 dark:border-slate-800/30 font-sans">
+                                            {team.instrutor.join(', ') || '—'}
+                                        </td>)}
+                                        {visibleColumns.convidado && (<td
+                                            className="min-w-[180px] max-w-xs whitespace-normal px-4 py-2 align-top border-r border-gray-200/30 dark:border-slate-800/30 font-sans">
+                                            {team.convidado.join(', ') || '—'}
+                                        </td>)}
+                                        {visibleColumns.aplicador_pr && (<td
+                                            className="min-w-[180px] max-w-xs whitespace-normal px-4 py-2 align-top border-r border-gray-200/30 dark:border-slate-800/30 font-sans">
+                                            {team.aplicador.join(', ') || '—'}
                                         </td>)}
                                         {visibleColumns.vigia && (<td
                                             className="px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 font-sans">
