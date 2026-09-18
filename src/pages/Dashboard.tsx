@@ -155,6 +155,12 @@ const hasClassDraftContent = (draft: ClassDraft) => (Object.entries(draft).some(
 const normalizeForeignKeyValue = (value?: string | null) => value && value !== "Não aplicável" ? value : "";
 const formatShiftTime = (value: string | null | undefined) => value ? value.slice(0, 5) : "";
 const getExamTimeLabel = (value: string | null | undefined) => value === null || value === undefined ? "Não informado" : value === "Sem prova" || value === "" ? "Sem prova" : value;
+const getLocalDateString = () => {
+    const today = new Date();
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
+    return `${today.getFullYear()}-${month}-${day}`;
+};
 
 export function Dashboard() {
     const {
@@ -202,6 +208,7 @@ export function Dashboard() {
     const [lockedClassFields, setLockedClassFields] = useState<string[]>([]);
     const [classToDelete, setClassToDelete] = useState<Turma | null>(null);
     const [classToCancel, setClassToCancel] = useState<Turma | null>(null);
+    const [selectedClassToLaunch, setSelectedClassToLaunch] = useState<Turma | null>(null);
     const [isHelpOpen, setIsHelpOpen] = useState(false);
 
     const {
@@ -310,6 +317,7 @@ export function Dashboard() {
     const classSubmitRef = useRef(false);
     const cancelClassSubmitRef = useRef(false);
     const deleteClassSubmitRef = useRef(false);
+    const launchClassSubmitRef = useRef(false);
 
     const currentClassDraft = useMemo<ClassDraft>(() => ({
         formIdAnac,
@@ -414,26 +422,48 @@ export function Dashboard() {
         currentClassDraft
     ]);
 
-    const handleToggleNotaLancada = async (e: React.MouseEvent, classId: string, currentStatus: boolean) => {
+    const handleToggleNotaLancada = async (e: React.MouseEvent, turma: Turma) => {
         e.stopPropagation();
 
+        if (launchClassSubmitRef.current || isUpdating)
+            return;
+
+        if (!turma.nota_lancada) {
+            setSelectedClassToLaunch(turma);
+            return;
+        }
+
         try {
-            const isNowLaunched = !currentStatus;
-
-            const updates: Partial<Turma> = {
-                nota_lancada: isNowLaunched
-            };
-
-            if (isNowLaunched) {
-                updates.data_lancada_real = new Date().toISOString().split("T")[0];
-            }
-
             await updateClass({
-                id: classId,
-                updates
+                id: turma.id,
+                updates: {
+                    nota_lancada: false,
+                    data_lancada_real: null
+                }
             });
         } catch (err) {
             console.error(err);
+        }
+    };
+
+    const handleConfirmNotaLancada = async () => {
+        if (!selectedClassToLaunch || launchClassSubmitRef.current || isUpdating)
+            return;
+
+        launchClassSubmitRef.current = true;
+        try {
+            await updateClass({
+                id: selectedClassToLaunch.id,
+                updates: {
+                    nota_lancada: true,
+                    data_lancada_real: getLocalDateString()
+                }
+            });
+        } catch (err) {
+            console.error(err);
+        } finally {
+            launchClassSubmitRef.current = false;
+            setSelectedClassToLaunch(null);
         }
     };
 
@@ -567,6 +597,7 @@ export function Dashboard() {
         instrutores_turma: true,
         vigia: true,
         notas_lancadas_em: true,
+        data_lancamento_real: true,
         data_prova_1: true,
         data_prova_2: true,
         software_utilizado: true,
@@ -598,6 +629,7 @@ export function Dashboard() {
         instrutores_turma: "Instrutores da Turma",
         vigia: "Vigilante sem deslocamento",
         notas_lancadas_em: "Data de Lançamento",
+        data_lancamento_real: "Lançada em",
         data_prova_1: "1ª Prova",
         data_prova_2: "2ª Prova",
         software_utilizado: "Software",
@@ -1000,6 +1032,7 @@ export function Dashboard() {
                                                 instrutores_turma: true,
                                                 vigia: true,
                                                 notas_lancadas_em: true,
+                                                data_lancamento_real: true,
                                                 data_prova_1: true,
                                                 data_prova_2: true,
                                                 software_utilizado: true,
@@ -1092,6 +1125,8 @@ export function Dashboard() {
                                     className="px-4 py-3 border-r border-gray-200/50 dark:border-slate-800/50">Vigilante</th>}
                                 {visibleColumns.notas_lancadas_em && <th
                                     className="px-4 py-3 border-r border-gray-200/50 dark:border-slate-800/50">Lançamento</th>}
+                                {visibleColumns.data_lancamento_real && <th
+                                    className="px-4 py-3 border-r border-gray-200/50 dark:border-slate-800/50">Lançada em</th>}
                                 {visibleColumns.data_prova_1 && <th
                                     className="px-4 py-3 border-r border-gray-200/50 dark:border-slate-800/50">1ª Prova</th>}
                                 {visibleColumns.data_prova_2 && <th
@@ -1284,8 +1319,11 @@ export function Dashboard() {
                                                         <span
                                                             className={`text-xs font-semibold ${!item.nota_lancada ? "text-gray-800 dark:text-gray-200" : "text-gray-400"}`}>Não</span>
                                                         <button
-                                                            onClick={e => handleToggleNotaLancada(e, item.id, !!item.nota_lancada)}
-                                                            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors cursor-pointer ${item.nota_lancada ? "bg-teal-500" : "bg-gray-300 dark:bg-slate-600"}`}>
+                                                            type="button"
+                                                            onClick={e => handleToggleNotaLancada(e, item)}
+                                                            aria-label={`Marcar notas da turma ${item.id_anac} como ${item.nota_lancada ? "não lançadas" : "lançadas"}`}
+                                                            aria-pressed={item.nota_lancada}
+                                                            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 ${item.nota_lancada ? "bg-teal-500" : "bg-gray-300 dark:bg-slate-600"}`}>
                                                             <span
                                                                 className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${item.nota_lancada ? "translate-x-4.5" : "translate-x-1"}`} />
                                                         </button>
@@ -1365,6 +1403,10 @@ export function Dashboard() {
                                         {visibleColumns.notas_lancadas_em && (<td
                                             className="px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 font-sans">
                                             {item.data_lancamento_notas ? new Date(item.data_lancamento_notas + "T00:00:00").toLocaleDateString("pt-BR") : '—'}
+                                        </td>)}
+                                        {visibleColumns.data_lancamento_real && (<td
+                                            className="px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 font-sans">
+                                            {item.data_lancada_real ? new Date(item.data_lancada_real + "T00:00:00").toLocaleDateString("pt-BR") : '—'}
                                         </td>)}
                                         {visibleColumns.data_prova_1 && (<td
                                             className="px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 font-sans">
@@ -1969,6 +2011,15 @@ export function Dashboard() {
                         icon: <MoreVertical className="h-4 w-4" aria-hidden="true" />
                     }
                 ]}
+            />
+
+            <ConfirmDeleteModal
+                isOpen={!!selectedClassToLaunch}
+                onClose={() => setSelectedClassToLaunch(null)}
+                onConfirm={handleConfirmNotaLancada}
+                itemName={selectedClassToLaunch?.id_anac}
+                isPending={isUpdating}
+                variant="launch"
             />
 
             <ConfirmDeleteModal
