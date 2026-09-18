@@ -754,7 +754,10 @@ export const classService = {
     const validInstrutores = instrutores.filter(({ instrutor_id }) =>
       Boolean(instrutor_id) && instrutor_id !== 'Não aplicável'
     );
-    const newRels: TurmaInstrutorRel[] = validInstrutores.map((instrutor) => ({
+    const uniqueInstrutores = validInstrutores.filter((instrutor, index, all) =>
+      all.findIndex((candidate) => candidate.instrutor_id === instrutor.instrutor_id && candidate.funcao === instrutor.funcao) === index
+    );
+    const newRels: TurmaInstrutorRel[] = uniqueInstrutores.map((instrutor) => ({
       id: newServiceId('rel'),
       turma_id: turmaId,
       instrutor_id: instrutor.instrutor_id,

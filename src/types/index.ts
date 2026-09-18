@@ -95,6 +95,16 @@ export interface Usuario {
   turma_id_pendente?: string;
 }
 
+export interface Pessoa {
+  id: string;
+  nome: string;
+  cpf?: string | null;
+  ativo: boolean;
+  visivel_diretorio: boolean;
+  profile_legacy_id?: string | null;
+  created_at?: string;
+}
+
 export interface Empresa {
   id: string;
   nome_fantasia: string;

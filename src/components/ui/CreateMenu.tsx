@@ -72,6 +72,8 @@ export interface CreateMenuProps {
   onSelect?: (label: string) => void;
   className?: string;
   label?: string;
+  triggerLabel?: string;
+  anchor?: "left" | "right";
 }
 
 export function CreateMenu({
@@ -79,27 +81,36 @@ export function CreateMenu({
   onSelect,
   className,
   label = "Quando clicar em adicionar aluno",
+  triggerLabel = "Adicionar Aluno",
+  anchor = "left",
 }: CreateMenuProps) {
   const [open, setOpen] = useState(false);
   const reduce = useReducedMotion();
   const layoutId = useId();
   const ref = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const firstItemRef = useRef<HTMLButtonElement>(null);
+  const closeMenu = () => {
+    setOpen(false);
+    window.setTimeout(() => triggerRef.current?.focus(), 0);
+  };
 
   useEffect(() => {
     if (!open) return;
 
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") closeMenu();
     };
 
     const onPointer = (e: PointerEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
+        closeMenu();
       }
     };
 
     window.addEventListener("keydown", onKey);
     window.addEventListener("pointerdown", onPointer);
+    firstItemRef.current?.focus();
 
     return () => {
       window.removeEventListener("keydown", onKey);
@@ -113,7 +124,10 @@ export function CreateMenu({
     <div ref={ref} className={cn("relative inline-flex z-40", className)}>
       <div className="h-10 w-[155px]" aria-hidden />
 
-      <div className="pointer-events-none absolute left-0 top-1/2 z-50 grid h-[260px] w-[min(86vw,380px)] -translate-y-1/2 items-center justify-items-start [&>*]:pointer-events-auto">
+      <div className={cn(
+        "pointer-events-none absolute top-1/2 z-50 grid h-[260px] w-[min(86vw,380px)] -translate-y-1/2 items-center [&>*]:pointer-events-auto",
+        anchor === "right" ? "right-0 justify-items-end" : "left-0 justify-items-start"
+      )}>
         <AnimatePresence initial={false} mode="popLayout">
           {open ? (
             <motion.div
@@ -124,6 +138,8 @@ export function CreateMenu({
               className="w-[min(86vw,380px)] overflow-hidden border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl"
             >
               <motion.div
+                role="menu"
+                aria-label={label}
                 layout
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -136,9 +152,9 @@ export function CreateMenu({
 
                   <button
                     type="button"
-                    onClick={() => setOpen(false)}
-                    aria-label="Close menu"
-                    className="text-gray-400 transition-colors hover:text-slate-900 dark:hover:text-white"
+                    onClick={closeMenu}
+                    aria-label="Fechar menu de cadastro"
+                    className="rounded p-1 text-gray-400 transition-colors hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:hover:text-white"
                   >
                     <X className="h-5 w-5" />
                   </button>
@@ -157,10 +173,12 @@ export function CreateMenu({
                   {items.map((item, i) => (
                     <button
                       key={item.label}
+                      ref={i === 0 ? firstItemRef : undefined}
                       type="button"
+                      role="menuitem"
                       onClick={() => {
                         onSelect?.(item.label);
-                        setOpen(false);
+                        closeMenu();
                       }}
                       className={cn(
                         "flex items-center justify-center px-4 py-8 text-gray-500 dark:text-slate-400 transition-colors hover:text-slate-900 dark:hover:text-white",
@@ -195,6 +213,7 @@ export function CreateMenu({
             </motion.div>
           ) : (
             <motion.button
+              ref={triggerRef}
               key="trigger"
               type="button"
               layoutId={layoutId}
@@ -203,15 +222,16 @@ export function CreateMenu({
               onClick={() => setOpen(true)}
               aria-haspopup="menu"
               aria-expanded={open}
+              aria-label={triggerLabel}
               whileTap={reduce ? undefined : { scale: 0.97 }}
-              className="inline-flex h-[40px] w-[155px] px-4 items-center justify-center bg-slate-900 dark:bg-teal-600 hover:bg-slate-850 dark:hover:bg-teal-500 text-sm font-semibold text-white shadow-sm transition-colors rounded-lg"
+              className="inline-flex h-[40px] w-[155px] px-4 items-center justify-center bg-slate-900 dark:bg-teal-600 hover:bg-slate-850 dark:hover:bg-teal-500 text-sm font-semibold text-white shadow-sm transition-colors rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500"
             >
               <motion.span
                 layout
                 className="inline-flex items-center gap-2 whitespace-nowrap"
               >
                 <UserPlus className="w-4 h-4" />
-                Adicionar Aluno
+                {triggerLabel}
               </motion.span>
             </motion.button>
           )}

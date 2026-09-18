@@ -2,7 +2,7 @@
 
 > Documento vivo de alinhamento. Atualizar a cada decisão confirmada sobre a migração das planilhas para o sistema.
 >
-> **Status:** planejamento e definição de regras. Nenhuma importação real foi executada.
+> **Status:** preparação estrutural e de interface concluída. Nenhuma importação real foi executada e o módulo de migração permanece fora do escopo atual.
 
 ## 1. Contexto e escopo
 
@@ -215,14 +215,20 @@ A conversão para usuário deverá ser uma ação posterior, feita quando o aces
 - Confirmar a referência exata usada na planilha de alunos para identificar a turma.
 - Definir como os arquivos PDF serão fornecidos para a futura migração documental.
 
-## 7. Próxima ordem de trabalho
+## 7. Estado da preparação atual
+
+- As alterações estruturais de turma, status, carga horária e software estão implementadas.
+- O diretório `public.pessoas` está preparado para pessoas com ou sem login, com RLS, grants e sincronização dos instrutores usuários.
+- A tela de instrutores oferece `Usuário com acesso` e `Pessoa sem login` por meio de menu reutilizável.
+- Os vínculos de turma permitem pessoa + função para Instrutor/Tutor, Convidado e Aplicador de Prova.
+- Os turnos e horários padrão existentes foram preservados.
+- Nenhum fluxo de importação, migração, staging ou pré-visualização foi implementado nesta etapa.
+
+## 8. Próxima ordem de trabalho, quando a migração for autorizada
 
 1. Confirmar ou ajustar as pendências com o cliente.
-2. Implementar as alterações estruturais de turma, status, carga horária e software.
-3. Implementar cadastro de pessoa sem login e conversão futura para usuário.
-4. Implementar funções de instrutor, convidado e aplicador na inclusão manual de turma.
-5. Implementar a leitura, validação e pré-visualização da planilha de turmas.
-6. Testar com uma pequena amostra.
-7. Executar a importação completa das turmas.
-8. Implementar e testar a importação da planilha de alunos.
-9. Planejar a migração dos documentos.
+2. Implementar a leitura, validação e pré-visualização da planilha de turmas.
+3. Testar com uma pequena amostra.
+4. Executar a importação completa das turmas.
+5. Implementar e testar a importação da planilha de alunos.
+6. Planejar a migração dos documentos.

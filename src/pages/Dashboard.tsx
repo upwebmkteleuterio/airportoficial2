@@ -60,6 +60,7 @@ import {
 
 import { useClasses } from "../hooks/useClasses";
 import { useUsers } from "../hooks/useUsers";
+import { usePeople } from "../hooks/usePeople";
 import { useCourses } from "../hooks/useCourses";
 import { shiftService } from "../services/shifts";
 import { useAddresses } from "../hooks/useAddresses";
@@ -90,6 +91,7 @@ type ClassDraft = {
     formCargaHoraria: string;
     formSoftwareTurma: string;
     selectedInstructors: string[];
+    selectedInstructorFunctions: Record<string, InstructorFuncao>;
     instructorInput: string;
     formIoad: string;
     formIscr: string;
@@ -130,6 +132,7 @@ const getClassDraft = (): ClassDraft | null => {
             formCargaHoraria: typeof parsed.formCargaHoraria === "string" ? parsed.formCargaHoraria : "",
             formSoftwareTurma: typeof parsed.formSoftwareTurma === "string" ? parsed.formSoftwareTurma : "",
             selectedInstructors: Array.isArray(parsed.selectedInstructors) ? parsed.selectedInstructors.filter((value: unknown): value is string => typeof value === "string") : [],
+            selectedInstructorFunctions: parsed.selectedInstructorFunctions && typeof parsed.selectedInstructorFunctions === "object" ? parsed.selectedInstructorFunctions as Record<string, InstructorFuncao> : {},
             instructorInput: typeof parsed.instructorInput === "string" ? parsed.instructorInput : "",
             formIoad: typeof parsed.formIoad === "string" ? parsed.formIoad : "",
             formIscr: typeof parsed.formIscr === "string" ? parsed.formIscr : "",
@@ -144,7 +147,7 @@ const getClassDraft = (): ClassDraft | null => {
 };
 
 const hasClassDraftContent = (draft: ClassDraft) => (Object.entries(draft).some(
-    ([key, value]) => key === "formVigilante" ? value : Array.isArray(value) ? value.length > 0 : Boolean(value)
+    ([key, value]) => key === "formVigilante" ? value : Array.isArray(value) ? value.length > 0 : value && typeof value === "object" ? Object.keys(value).length > 0 : Boolean(value)
 ));
 
 const normalizeForeignKeyValue = (value?: string | null) => value && value !== "Não aplicável" ? value : "";
@@ -202,10 +205,16 @@ export function Dashboard() {
     const {
         users
     } = useUsers();
+    const { people } = usePeople({ activeOnly: true });
 
     const instructorUsers = useMemo(() => users.filter(user => user.role === "INSTRUTOR" && user.status === "ativo").slice().sort(
         (first, second) => first.nome_completo.localeCompare(second.nome_completo, "pt-BR")
     ), [users]);
+
+    const directoryPeople = useMemo(() => people.filter(person => person.ativo).slice().sort(
+        (first, second) => first.nome.localeCompare(second.nome, "pt-BR")
+    ), [people]);
+    const assignmentPeople = directoryPeople;
 
     const {
         addresses
@@ -262,19 +271,14 @@ export function Dashboard() {
     const [formCargaHoraria, setFormCargaHoraria] = useState("");
     const [formSoftwareTurma, setFormSoftwareTurma] = useState("");
     const [selectedInstructors, setSelectedInstructors] = useState<string[]>([]);
+    const [selectedInstructorFunctions, setSelectedInstructorFunctions] = useState<Record<string, InstructorFuncao>>({});
     const [instructorInput, setInstructorInput] = useState("");
     const [formIoad, setFormIoad] = useState("");
     const [formIscr, setFormIscr] = useState("");
     const [formIcar, setFormIcar] = useState("");
     const [formAplicador, setFormAplicador] = useState("");
 
-    const applicatorUsers = useMemo(
-        () => users.filter(user =>
-            user.status === "ativo" &&
-            [UserRole.EQUIPE, UserRole.INSTRUTOR, UserRole.COORDENADOR].includes(user.role)
-        ),
-        [users]
-    );
+    const applicatorPeople = directoryPeople;
 
     const resolveProfileId = (value: string | null | undefined, candidates: typeof users) => {
         const normalizedValue = normalizeForeignKeyValue(value);
@@ -289,6 +293,11 @@ export function Dashboard() {
             user => user.id === normalizedValue || user.nome_completo === normalizedValue
         )?.id || "";
     };
+    const resolveDirectoryId = (value: string | null | undefined) => {
+        const normalizedValue = normalizeForeignKeyValue(value);
+        return directoryPeople.find(person => person.id === normalizedValue || person.nome === normalizedValue)?.id || "";
+    };
+    const selectedApplicatorId = selectedInstructors.find((personId) => selectedInstructorFunctions[personId] === InstructorFuncao.APLICADOR_PROVA) || resolveDirectoryId(formAplicador);
 
     const [formVigilante, setFormVigilante] = useState(false);
     const [formNotes, setFormNotes] = useState("");
@@ -318,6 +327,7 @@ export function Dashboard() {
         formCargaHoraria,
         formSoftwareTurma,
         selectedInstructors,
+        selectedInstructorFunctions,
         instructorInput,
         formIoad,
         formIscr,
@@ -344,6 +354,7 @@ export function Dashboard() {
         formCargaHoraria,
         formSoftwareTurma,
         selectedInstructors,
+        selectedInstructorFunctions,
         instructorInput,
         formIoad,
         formIscr,
@@ -471,6 +482,7 @@ export function Dashboard() {
         setFormCargaHoraria("");
         setFormSoftwareTurma("");
         setSelectedInstructors([]);
+        setSelectedInstructorFunctions({});
         setInstructorInput("");
         setFormIoad("");
         setFormIscr("");
@@ -505,15 +517,15 @@ export function Dashboard() {
         setFormCargaHoraria(draft.formCargaHoraria);
         setFormSoftwareTurma(draft.formSoftwareTurma);
 
-        setSelectedInstructors(
-            draft.selectedInstructors.map(value => resolveProfileId(value, instructorUsers)).filter(Boolean)
-        );
+        const draftInstructorIds = draft.selectedInstructors.map(value => resolveDirectoryId(value)).filter(Boolean);
+        setSelectedInstructors(draftInstructorIds);
+        setSelectedInstructorFunctions(draft.selectedInstructorFunctions);
 
         setInstructorInput(draft.instructorInput);
         setFormIoad(resolveProfileId(draft.formIoad, instructorUsers));
         setFormIscr(resolveProfileId(draft.formIscr, instructorUsers));
         setFormIcar(resolveProfileId(draft.formIcar, instructorUsers));
-        setFormAplicador(resolveProfileId(draft.formAplicador, applicatorUsers));
+        setFormAplicador(resolveDirectoryId(draft.formAplicador));
         setFormVigilante(draft.formVigilante);
         setFormNotes(draft.formNotes);
         setClassDraftToResume(null);
@@ -687,10 +699,15 @@ export function Dashboard() {
 
     const handleRemoveInstructor = (instructorId: string) => {
         setSelectedInstructors(selectedInstructors.filter(id => id !== instructorId));
+        setSelectedInstructorFunctions((current) => {
+            const next = { ...current };
+            delete next[instructorId];
+            return next;
+        });
     };
 
-    const getInstructorName = (instructorId: string) => instructorUsers.find(instructor => instructor.id === instructorId)?.nome_completo || users.find(user => user.id === instructorId)?.nome_completo || instructorId;
-    const getUserName = (userId?: string | null) => users.find(user => user.id === userId)?.nome_completo || userId || "Não aplicável";
+    const getInstructorName = (instructorId: string) => directoryPeople.find(person => person.id === instructorId)?.nome || instructorUsers.find(instructor => instructor.id === instructorId)?.nome_completo || users.find(user => user.id === instructorId)?.nome_completo || instructorId;
+    const getUserName = (userId?: string | null) => directoryPeople.find(person => person.id === userId)?.nome || users.find(user => user.id === userId)?.nome_completo || userId || "Não aplicável";
     const getCoordinatorNames = (turma: Turma) => ({
         ioad: getInstructorName(turma.coordenador_ioad_id || ""),
         iscr: getInstructorName(turma.coordenador_iscr_id || ""),
@@ -780,7 +797,7 @@ export function Dashboard() {
                         coordenador_ioad_id: normalizeForeignKeyValue(formIoad) || undefined,
                         coordenador_iscr_id: normalizeForeignKeyValue(formIscr) || undefined,
                         coordenador_icar_id: normalizeForeignKeyValue(formIcar) || undefined,
-                        aplicador_id: resolveProfileId(formAplicador, applicatorUsers) || undefined
+                        aplicador_id: selectedApplicatorId || undefined
                     }
                 });
             } else {
@@ -808,7 +825,7 @@ export function Dashboard() {
                     coordenador_ioad_id: normalizeForeignKeyValue(formIoad) || undefined,
                     coordenador_iscr_id: normalizeForeignKeyValue(formIscr) || undefined,
                     coordenador_icar_id: normalizeForeignKeyValue(formIcar) || undefined,
-                    aplicador_id: resolveProfileId(formAplicador, applicatorUsers) || undefined,
+                    aplicador_id: selectedApplicatorId || undefined,
                     gestor_turma_id: "user-admin-1",
                     nota_lancada: false,
                     dias_para_vencimento: 5,
@@ -820,17 +837,16 @@ export function Dashboard() {
             }
 
             if (savedClassId) {
-                const instructorsToSave = selectedInstructors.map(
-                    instructorId => instructorUsers.find(instructor => instructor.id === instructorId)?.id
-                ).filter((instructorId): instructorId is string => Boolean(instructorId));
+                const assignmentsToSave = selectedInstructors
+                    .map((personId) => ({
+                        instrutor_id: personId,
+                        funcao: selectedInstructorFunctions[personId] || InstructorFuncao.INSTRUTOR_TUTOR,
+                    }))
+                    .filter((assignment, index, assignments) => assignments.findIndex((item) => item.instrutor_id === assignment.instrutor_id && item.funcao === assignment.funcao) === index);
 
                 await saveInstrutoresForTurma({
                     turmaId: savedClassId,
-
-                    instrutores: instructorsToSave.map(instrutorId => ({
-                        instrutor_id: instrutorId,
-                        funcao: InstructorFuncao.INSTRUTOR_TUTOR
-                    }))
+                    instrutores: assignmentsToSave
                 });
             }
 
@@ -1171,17 +1187,22 @@ export function Dashboard() {
                                                                 setFormDataProva1(item.data_prova_1_chamada || "");
                                                                 setFormDataProva2(item.data_prova_2_chamada || "");
                                                                 setSelectedInstructors([]);
+                                                                setSelectedInstructorFunctions({});
                                                                 setInstructorInput("");
                                                                 setFormIoad(resolveProfileId(item.coordenador_ioad_id, instructorUsers));
                                                                 setFormIscr(resolveProfileId(item.coordenador_iscr_id, instructorUsers));
                                                                 setFormIcar(resolveProfileId(item.coordenador_icar_id, instructorUsers));
-                                                                setFormAplicador(resolveProfileId(item.aplicador_id, applicatorUsers));
+                                                                setFormAplicador(resolveDirectoryId(item.aplicador_id));
                                                                 setFormNotes(item.anotacoes_turma || "");
                                                                 setFormVigilante(item.vigilante_sem_deslocamento);
 
                                                                 try {
                                                                     const relations = await getInstrutoresByTurma(item.id);
-                                                                    setSelectedInstructors(relations.map(relation => relation.instrutor_id));
+                                                                    const relationIds = relations.map(relation => resolveDirectoryId(relation.instrutor_id)).filter(Boolean);
+                                                                    setSelectedInstructors(relationIds);
+                                                                    setSelectedInstructorFunctions(Object.fromEntries(
+                                                                        relations.map(relation => [resolveDirectoryId(relation.instrutor_id) || relation.instrutor_id, relation.funcao as InstructorFuncao])
+                                                                    ));
                                                                 } catch (error) {
                                                                     console.error("Não foi possível carregar os instrutores da turma", error);
                                                                     return;
@@ -1673,38 +1694,45 @@ export function Dashboard() {
                             </div>
                         </div>
                         {}
-                        <div className="flex flex-col gap-1.5">
-                            <label
-                                className="text-xs font-bold text-gray-700 dark:text-slate-300 uppercase tracking-wide">Instrutores *
-                                              </label>
-                            <div
-                                className="border border-gray-300 dark:border-slate-700 rounded p-2 bg-white dark:bg-slate-850 min-h-[44px] flex flex-wrap gap-2 items-center focus-within:border-teal-500 focus-within:ring-1 focus-within:ring-teal-500 transition-all">
-                                {selectedInstructors.map(instructorId => (<span
-                                    key={instructorId}
-                                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs font-medium rounded border border-gray-250 dark:border-slate-700">
-                                    {getInstructorName(instructorId)}
-                                    <button
-                                        type="button"
-                                        onClick={() => handleRemoveInstructor(instructorId)}
-                                        className="text-gray-400 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400">
-                                        <X className="w-3.5 h-3.5" />
-                                    </button>
-                                </span>))}
+                        <div className="flex flex-col gap-2">
+                            <div>
+                                <h4 className="text-xs font-bold text-gray-700 dark:text-slate-300 uppercase tracking-wide">Atribuições</h4>
+                                <p className="mt-1 text-[10px] text-gray-500 dark:text-slate-400">Selecione uma pessoa ativa e sua função na turma.</p>
+                            </div>
+                            <div className="space-y-2 rounded border border-gray-300 bg-white p-2 dark:border-slate-700 dark:bg-slate-850">
+                                {selectedInstructors.map(instructorId => (
+                                    <div key={instructorId} className="flex flex-wrap items-center gap-2 rounded bg-slate-50 p-2 dark:bg-slate-800">
+                                        <span className="min-w-[140px] flex-1 text-xs font-medium text-slate-800 dark:text-slate-200">{getInstructorName(instructorId)}</span>
+                                        <select
+                                            aria-label={`Função de ${getInstructorName(instructorId)}`}
+                                            value={selectedInstructorFunctions[instructorId] || InstructorFuncao.INSTRUTOR_TUTOR}
+                                            onChange={(event) => setSelectedInstructorFunctions((current) => ({ ...current, [instructorId]: event.target.value as InstructorFuncao }))}
+                                            className="rounded border border-gray-300 bg-white px-2 py-1.5 text-xs text-slate-900 focus:border-teal-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                                        >
+                                            <option value={InstructorFuncao.INSTRUTOR_TUTOR}>Instrutor/Tutor</option>
+                                            <option value={InstructorFuncao.CONVIDADO}>Convidado</option>
+                                            <option value={InstructorFuncao.APLICADOR_PROVA}>Aplicador de Prova</option>
+                                        </select>
+                                        <button type="button" aria-label={`Remover ${getInstructorName(instructorId)}`} onClick={() => handleRemoveInstructor(instructorId)} className="rounded p-1 text-gray-400 hover:text-red-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:text-slate-500 dark:hover:text-red-400">
+                                            <X className="h-3.5 w-3.5" />
+                                        </button>
+                                    </div>
+                                ))}
                                 <select
                                     id="form-instructors-add-select"
                                     value=""
-                                    onChange={e => {
-                                        const val = e.target.value;
-
-                                        if (val && !selectedInstructors.includes(val)) {
-                                            setSelectedInstructors([...selectedInstructors, val]);
+                                    aria-label="Adicionar pessoa à atribuição"
+                                    onChange={(event) => {
+                                        const value = event.target.value;
+                                        if (value && !selectedInstructors.includes(value)) {
+                                            setSelectedInstructors((current) => [...current, value]);
+                                            setSelectedInstructorFunctions((current) => ({ ...current, [value]: InstructorFuncao.INSTRUTOR_TUTOR }));
                                         }
                                     }}
-                                    className="flex-1 min-w-[120px] border-none outline-none bg-transparent text-sm p-1 text-slate-900 dark:text-white">
-                                    <option value="" disabled>Selecione um instrutor...</option>
-                                    {instructorUsers.map(
-                                        instructor => (<option key={instructor.id} value={instructor.id}>{instructor.nome_completo}</option>)
-                                    )}
+                                    className="w-full border-none bg-transparent p-1 text-sm text-slate-900 outline-none dark:text-white"
+                                >
+                                    <option value="">Selecione uma pessoa...</option>
+                                    {assignmentPeople.map((person) => <option key={person.id} value={person.id}>{person.nome}</option>)}
                                 </select>
                             </div>
                         </div>
@@ -1769,8 +1797,8 @@ export function Dashboard() {
                                         onChange={e => setFormAplicador(e.target.value)}
                                         className="w-full border border-gray-300 dark:border-slate-700 rounded px-3 py-2 text-sm bg-white dark:bg-slate-850 text-slate-900 dark:text-white focus:outline-none">
                                         <option value="">Não aplicável</option>
-                                        {applicatorUsers.map(
-                                            user => (<option key={user.id} value={user.id}>{user.nome_completo}</option>)
+                                        {applicatorPeople.map(
+                                            person => (<option key={person.id} value={person.id}>{person.nome}</option>)
                                         )}
                                     </select>
                                 </div>

@@ -15,6 +15,7 @@ import {
   X
 } from 'lucide-react';
 import { useUsers } from '../hooks/useUsers';
+import { usePeople } from '../hooks/usePeople';
 import { UserRole } from '../types';
 import { Modal } from '../components/ui/Modal';
 import { StaffRegistrationModal } from '../components/StaffRegistrationModal';
@@ -22,6 +23,8 @@ import { FolderIcon } from '../components/ui/FolderIcon';
 import { PasswordModal } from '../components/ui/PasswordModal';
 import { SharedDocumentsPanel } from '../components/SharedDocumentsPanel';
 import { StaffDetailsPanel } from '../components/StaffDetailsPanel';
+import { CreateMenu } from '../components/ui/CreateMenu';
+import { PersonRegistrationModal } from '../components/PersonRegistrationModal';
 import { DocumentAccessGrant } from '../services/documentAccessService';
 
 
@@ -33,11 +36,13 @@ type ToastState = {
 export function Instructors() {
   const queryClient = useQueryClient();
   const [registrationModalOpen, setRegistrationModalOpen] = useState(false);
+  const [personRegistrationOpen, setPersonRegistrationOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [toast, setToast] = useState<ToastState | null>(null);
   
   const [detailsPanelOpen, setDetailsPanelOpen] = useState(false);
   const [selectedStaffForDetails, setSelectedStaffForDetails] = useState<any | null>(null);
+  const [selectedPersonForEdit, setSelectedPersonForEdit] = useState<any | null>(null);
 
   const [selectedStaffForEdit, setSelectedStaffForEdit] = useState<any | null>(null);
   const [staffToDelete, setStaffToDelete] = useState<any | null>(null);
@@ -77,19 +82,32 @@ export function Instructors() {
   // Pagination is performed by Supabase; only the current page is kept in memory.
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 50;
-  const { users, total, isLoading } = useUsers({
-    page: currentPage,
-    pageSize: itemsPerPage,
+  const { users, isLoading: isUsersLoading } = useUsers({
     role: UserRole.INSTRUTOR,
     search: searchQuery
+  });
+  const { people, createPerson, updatePerson, isLoading: isPeopleLoading } = usePeople({
+    search: searchQuery,
+    directoryOnly: true,
   });
 
   useEffect(() => {
     setCurrentPage(1);
   }, [searchQuery]);
 
+  const instructorRows: any[] = [
+    ...people.map((person) => {
+      const profile = users.find((user) => user.id === person.id || user.id === person.profile_legacy_id);
+      return profile
+        ? { ...person, ...profile, id: profile.id, is_directory_person: false }
+        : { ...person, nome_completo: person.nome, cpf: person.cpf ?? '', email: '', telefone: '', certificacao_avsec: '', is_directory_person: true };
+    }),
+    ...users.filter((user) => !people.some((person) => person.id === user.id || person.profile_legacy_id === user.id)),
+  ];
+  const total = instructorRows.length;
+  const paginatedInstructors = instructorRows.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
   const totalPages = Math.ceil(total / itemsPerPage) || 1;
-  const paginatedInstructors = users;
+  const isLoading = isUsersLoading || isPeopleLoading;
   const getErrorMessage = (error: unknown) => {
     if (error instanceof Error && error.message.trim()) return error.message;
     if (error && typeof error === 'object' && 'message' in error) {
@@ -111,14 +129,19 @@ export function Instructors() {
             Gerenciamento de todos os instrutors cadastrados no sistema.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setRegistrationModalOpen(true)}
-          className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-slate-800 dark:bg-teal-600 dark:hover:bg-teal-500"
-        >
-          <UserPlus className="w-4 h-4" />
-          Cadastrar Instrutor
-        </button>
+        <CreateMenu
+          anchor="right"
+          triggerLabel="Cadastrar Instrutor"
+          label="Como deseja cadastrar o instrutor?"
+          items={[
+            { label: 'Usuário com acesso', icon: UserPlus },
+            { label: 'Pessoa sem login', icon: User },
+          ]}
+          onSelect={(label) => {
+            if (label === 'Usuário com acesso') setRegistrationModalOpen(true);
+            if (label === 'Pessoa sem login') setPersonRegistrationOpen(true);
+          }}
+        />
       </div>
 
       {/* Filter and Count Bar */}
@@ -162,13 +185,13 @@ export function Instructors() {
                 <th className="px-5 py-3">E-mail</th>
                 <th className="px-5 py-3">Telefone</th>
                 <th className="px-5 py-3">Certificação Avsec</th>
-                
+                <th className="px-5 py-3">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-slate-800 text-gray-700 dark:text-slate-300">
               {isLoading ? (
                 <tr>
-                  <td colSpan={6} className="px-5 py-12 text-center">
+                  <td colSpan={7} className="px-5 py-12 text-center">
                     <div className="flex flex-col items-center justify-center gap-2 text-gray-500">
                       <div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin"></div>
                       <p className="font-sans text-sm">Carregando instrutors...</p>
@@ -177,7 +200,7 @@ export function Instructors() {
                 </tr>
               ) : paginatedInstructors.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-gray-500 dark:text-slate-400 font-sans">
+                  <td colSpan={7} className="px-6 py-12 text-center text-gray-500 dark:text-slate-400 font-sans">
                     <div className="flex flex-col items-center justify-center gap-2.5 max-w-sm mx-auto">
                       <div className="p-3 bg-teal-500/10 rounded-full text-teal-500">
                         <User className="w-6 h-6" />
@@ -220,9 +243,13 @@ export function Instructors() {
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setOpenMenuId(null);
-                                // TODO: Handle Edit
-                                setSelectedStaffForEdit(instrutor);
-                                setRegistrationModalOpen(true);
+                                if (instrutor.is_directory_person) {
+                                  setSelectedPersonForEdit(instrutor);
+                                  setPersonRegistrationOpen(true);
+                                } else {
+                                  setSelectedStaffForEdit(instrutor);
+                                  setRegistrationModalOpen(true);
+                                }
                               }}
                               className="w-full text-left px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 flex items-center gap-2"
                             >
@@ -264,8 +291,8 @@ export function Instructors() {
                         {instrutor.telefone || '-'}
                       </div>
                     </td>
-                                        <td className="px-5 py-2.5"><span className="px-2 py-1 bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300 rounded text-xs font-semibold">{instrutor.certificacao_avsec || "-"}</span></td>
-                    
+                    <td className="px-5 py-2.5"><span className="px-2 py-1 bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300 rounded text-xs font-semibold">{instrutor.certificacao_avsec || "-"}</span></td>
+                    <td className="px-5 py-2.5"><span className={`px-2 py-1 rounded text-xs font-semibold ${instrutor.status === 'ativo' || instrutor.ativo ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-gray-100 text-gray-600 dark:bg-slate-800 dark:text-slate-300'}`}>{instrutor.status === 'ativo' || instrutor.ativo ? 'Ativo' : 'Inativo'}</span></td>
                   </tr>
                 ))
               )}
@@ -357,6 +384,23 @@ export function Instructors() {
         }}
         student={selectedStaffForDocs}
         accessGrant={accessGrant}
+      />
+      <PersonRegistrationModal
+        isOpen={personRegistrationOpen}
+        initialData={selectedPersonForEdit}
+        onClose={() => {
+          setPersonRegistrationOpen(false);
+          setSelectedPersonForEdit(null);
+        }}
+        onSubmit={async (input) => {
+          if (selectedPersonForEdit) {
+            await updatePerson({ id: selectedPersonForEdit.id, updates: input });
+          } else {
+            await createPerson(input);
+          }
+          await queryClient.invalidateQueries({ queryKey: ['people'] });
+          setToast({ type: 'success', message: selectedPersonForEdit ? 'Pessoa atualizada com sucesso.' : 'Pessoa cadastrada com sucesso.' });
+        }}
       />
       <StaffRegistrationModal role={UserRole.INSTRUTOR}
         initialData={selectedStaffForEdit}
