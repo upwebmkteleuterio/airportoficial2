@@ -85,13 +85,37 @@ export function CreateMenu({
   anchor = "left",
 }: CreateMenuProps) {
   const [open, setOpen] = useState(false);
+  const [panelPosition, setPanelPosition] = useState<{ top: number; left?: number; right?: number } | null>(null);
   const reduce = useReducedMotion();
   const layoutId = useId();
   const ref = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const firstItemRef = useRef<HTMLButtonElement>(null);
+
+  const getPanelPosition = (panelHeight = 260) => {
+    const anchorRect = ref.current?.getBoundingClientRect();
+    if (!anchorRect) return null;
+
+    const gap = 8;
+    const spaceBelow = window.innerHeight - anchorRect.bottom - gap;
+    const openAbove = spaceBelow < panelHeight;
+    const requestedTop = openAbove
+      ? anchorRect.top - gap - panelHeight
+      : anchorRect.bottom + gap;
+    const maxTop = Math.max(gap, window.innerHeight - panelHeight - gap);
+
+    return {
+      top: Math.min(Math.max(requestedTop, gap), maxTop),
+      ...(anchor === "right"
+        ? { right: window.innerWidth - anchorRect.right }
+        : { left: anchorRect.left }),
+    };
+  };
+
   const closeMenu = () => {
     setOpen(false);
+    setPanelPosition(null);
     window.setTimeout(() => triggerRef.current?.focus(), 0);
   };
 
@@ -108,15 +132,27 @@ export function CreateMenu({
       }
     };
 
+    const updatePanelPosition = () => {
+      const height = panelRef.current?.getBoundingClientRect().height ?? 260;
+      const nextPosition = getPanelPosition(height);
+      if (nextPosition) setPanelPosition(nextPosition);
+    };
+    const frame = window.requestAnimationFrame(updatePanelPosition);
+
     window.addEventListener("keydown", onKey);
     window.addEventListener("pointerdown", onPointer);
+    window.addEventListener("resize", updatePanelPosition);
+    window.addEventListener("scroll", updatePanelPosition, true);
     firstItemRef.current?.focus();
 
     return () => {
+      window.cancelAnimationFrame(frame);
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("pointerdown", onPointer);
+      window.removeEventListener("resize", updatePanelPosition);
+      window.removeEventListener("scroll", updatePanelPosition, true);
     };
-  }, [open]);
+  }, [open, anchor]);
 
   const morph = reduce ? { duration: 0.15 } : SPRING_FOLDER;
 
@@ -124,18 +160,25 @@ export function CreateMenu({
     <div ref={ref} className={cn("relative inline-flex z-40", className)}>
       <div className="h-10 w-[155px]" aria-hidden />
 
-      <div className={cn(
-        "pointer-events-none absolute top-1/2 z-50 grid h-[260px] w-[min(86vw,380px)] -translate-y-1/2 items-center [&>*]:pointer-events-auto",
-        anchor === "right" ? "right-0 justify-items-end" : "left-0 justify-items-start"
-      )}>
+      <div
+        className={cn(
+          "pointer-events-none z-50 grid w-[min(86vw,380px)] items-center [&>*]:pointer-events-auto",
+          open && panelPosition ? "fixed" : "absolute top-1/2 -translate-y-1/2",
+          anchor === "right"
+            ? cn("justify-items-end", !(open && panelPosition) && "right-0")
+            : cn("justify-items-start", !(open && panelPosition) && "left-0")
+        )}
+        style={open && panelPosition ? panelPosition : undefined}
+      >
         <AnimatePresence initial={false} mode="popLayout">
           {open ? (
             <motion.div
               key="panel"
               layoutId={layoutId}
               transition={morph}
+              ref={panelRef}
               style={{ borderRadius: 18 }}
-              className="w-[min(86vw,380px)] overflow-hidden border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl"
+              className="w-[min(86vw,380px)] max-h-[calc(100vh-1rem)] overflow-y-auto border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl"
             >
               <motion.div
                 role="menu"
@@ -181,7 +224,7 @@ export function CreateMenu({
                         closeMenu();
                       }}
                       className={cn(
-                        "flex items-center justify-center px-4 py-8 text-gray-500 dark:text-slate-400 transition-colors hover:text-slate-900 dark:hover:text-white",
+                        "flex items-center justify-center px-4 py-8 text-gray-500 dark:text-slate-400 transition-colors hover:text-slate-900 dark:hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-teal-500",
                         i % 2 !== 1 && "border-r border-gray-100 dark:border-slate-800",
                         i < items.length - 2 && "border-b border-gray-100 dark:border-slate-800"
                       )}
@@ -219,12 +262,15 @@ export function CreateMenu({
               layoutId={layoutId}
               transition={morph}
               style={{ borderRadius: 8 }}
-              onClick={() => setOpen(true)}
+              onClick={() => {
+                setPanelPosition(getPanelPosition());
+                setOpen(true);
+              }}
               aria-haspopup="menu"
               aria-expanded={open}
               aria-label={triggerLabel}
               whileTap={reduce ? undefined : { scale: 0.97 }}
-              className="inline-flex h-[40px] w-[155px] px-4 items-center justify-center bg-slate-900 dark:bg-teal-600 hover:bg-slate-850 dark:hover:bg-teal-500 text-sm font-semibold text-white shadow-sm transition-colors rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500"
+              className="inline-flex h-[40px] min-w-[155px] px-5 items-center justify-center bg-slate-900 dark:bg-teal-600 hover:bg-slate-850 dark:hover:bg-teal-500 text-sm font-semibold text-white shadow-sm transition-colors rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500"
             >
               <motion.span
                 layout

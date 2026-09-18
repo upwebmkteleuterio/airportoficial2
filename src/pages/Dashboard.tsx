@@ -541,6 +541,10 @@ export function Dashboard() {
         id_anac: true,
         id_interno: true,
         curso: true,
+        status_notas: true,
+        prazo: true,
+        status_turma: true,
+        carga_horaria: true,
         turno: true,
         horario: true,
         inicio: true,
@@ -557,11 +561,7 @@ export function Dashboard() {
         notas_lancadas_em: true,
         data_prova_1: true,
         data_prova_2: true,
-        status_notas: true,
-        status_turma: true,
-        carga_horaria: true,
         software_utilizado: true,
-        prazo: true,
         sn: true
     });
 
@@ -571,6 +571,10 @@ export function Dashboard() {
         id_anac: "ID ANAC",
         id_interno: "ID Interno",
         curso: "Curso",
+        status_notas: "Nota Lançada?",
+        prazo: "Prazo",
+        status_turma: "Situação",
+        carga_horaria: "Carga horária",
         turno: "Turno",
         horario: "Horário",
         inicio: "Início",
@@ -587,11 +591,7 @@ export function Dashboard() {
         notas_lancadas_em: "Data de Lançamento",
         data_prova_1: "1ª Prova",
         data_prova_2: "2ª Prova",
-        status_notas: "Nota Lançada?",
-        status_turma: "Situação",
-        carga_horaria: "Carga horária",
         software_utilizado: "Software",
-        prazo: "Prazo",
         sn: "S/N"
     };
 
@@ -970,6 +970,10 @@ export function Dashboard() {
                                                 id_anac: true,
                                                 id_interno: true,
                                                 curso: true,
+                                                status_notas: true,
+                                                prazo: true,
+                                                status_turma: true,
+                                                carga_horaria: true,
                                                 turno: true,
                                                 horario: true,
                                                 inicio: true,
@@ -986,11 +990,7 @@ export function Dashboard() {
                                                 notas_lancadas_em: true,
                                                 data_prova_1: true,
                                                 data_prova_2: true,
-                                                status_notas: true,
-                                                status_turma: true,
-                                                carga_horaria: true,
                                                 software_utilizado: true,
-                                                prazo: true,
                                                 sn: true
                                             });
                                         }}
@@ -1042,12 +1042,14 @@ export function Dashboard() {
                                     className="px-4 py-3 border-r border-gray-200/50 dark:border-slate-800/50">ID Interno</th>}
                                 {visibleColumns.curso && <th
                                     className="px-4 py-3 border-r border-gray-200/50 dark:border-slate-800/50">Curso</th>}
+                                {visibleColumns.status_notas && <th
+                                    className="px-4 py-3 border-r border-gray-200/50 dark:border-slate-800/50 text-center">Nota Lançada?</th>}
+                                {visibleColumns.prazo && <th
+                                    className="px-4 py-3 border-r border-gray-200/50 dark:border-slate-800/50 text-right">Prazo</th>}
                                 {visibleColumns.status_turma && <th
                                     className="px-4 py-3 border-r border-gray-200/50 dark:border-slate-800/50">Situação</th>}
                                 {visibleColumns.carga_horaria && <th
                                     className="px-4 py-3 border-r border-gray-200/50 dark:border-slate-800/50">Carga horária</th>}
-                                {visibleColumns.software_utilizado && <th
-                                    className="px-4 py-3 border-r border-gray-200/50 dark:border-slate-800/50">Software</th>}
                                 {visibleColumns.turno && <th
                                     className="px-4 py-3 border-r border-gray-200/50 dark:border-slate-800/50">Turno</th>}
                                 {visibleColumns.horario && <th
@@ -1080,10 +1082,8 @@ export function Dashboard() {
                                     className="px-4 py-3 border-r border-gray-200/50 dark:border-slate-800/50">1ª Prova</th>}
                                 {visibleColumns.data_prova_2 && <th
                                     className="px-4 py-3 border-r border-gray-200/50 dark:border-slate-800/50">2ª Prova</th>}
-                                {visibleColumns.status_notas && <th
-                                    className="px-4 py-3 border-r border-gray-200/50 dark:border-slate-800/50 text-center">Nota Lançada?</th>}
-                                {visibleColumns.prazo && <th
-                                    className="px-4 py-3 border-r border-gray-200/50 dark:border-slate-800/50 text-right">Prazo</th>}
+                                {visibleColumns.software_utilizado && <th
+                                    className="px-4 py-3 border-r border-gray-200/50 dark:border-slate-800/50">Software</th>}
                                 {visibleColumns.sn && <th
                                     className="px-4 py-3 border-r border-gray-200/50 dark:border-slate-800/50 text-center">S/N</th>}
                             </tr>
@@ -1256,6 +1256,34 @@ export function Dashboard() {
                                             className="px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 font-sans max-w-xs truncate">
                                             {course?.nome_curso || "Curso de Aviação"}
                                         </td>)}
+                                        {visibleColumns.status_notas && (<td
+                                            className="px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 font-sans text-center"
+                                            onClick={e => e.stopPropagation()}>
+                                            <div className="flex items-center justify-center gap-2">
+                                                {isInstructor ? (
+                                                    <span className={`text-xs font-semibold ${item.nota_lancada ? "text-teal-600 dark:text-teal-400" : "text-gray-400"}`}>
+                                                        {item.nota_lancada ? "Sim" : "Não"}
+                                                    </span>
+                                                ) : (
+                                                    <>
+                                                        <span
+                                                            className={`text-xs font-semibold ${!item.nota_lancada ? "text-gray-800 dark:text-gray-200" : "text-gray-400"}`}>Não</span>
+                                                        <button
+                                                            onClick={e => handleToggleNotaLancada(e, item.id, !!item.nota_lancada)}
+                                                            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors cursor-pointer ${item.nota_lancada ? "bg-teal-500" : "bg-gray-300 dark:bg-slate-600"}`}>
+                                                            <span
+                                                                className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${item.nota_lancada ? "translate-x-4.5" : "translate-x-1"}`} />
+                                                        </button>
+                                                        <span
+                                                            className={`text-xs font-semibold ${item.nota_lancada ? "text-teal-600 dark:text-teal-400" : "text-gray-400"}`}>Sim</span>
+                                                    </>
+                                                )}
+                                            </div>
+                                        </td>)}
+                                        {visibleColumns.prazo && (<td
+                                            className={`px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 text-right font-bold ${prazoColor}`}>
+                                            {prazoText}
+                                        </td>)}
                                         {visibleColumns.status_turma && (<td
                                             className={`px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 font-sans font-semibold ${item.status_turma === 'Cancelada' ? 'text-gray-500 dark:text-slate-400' : 'text-teal-600 dark:text-teal-400'}`}>
                                             {item.status_turma}
@@ -1263,10 +1291,6 @@ export function Dashboard() {
                                         {visibleColumns.carga_horaria && (<td
                                             className="px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 font-sans">
                                             {item.carga_horaria ?? '—'}
-                                        </td>)}
-                                        {visibleColumns.software_utilizado && (<td
-                                            className="px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 font-sans max-w-xs truncate">
-                                            {item.software_utilizado || '—'}
                                         </td>)}
                                         {visibleColumns.turno && (<td
                                             className="px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 font-sans">{item.turno}</td>)}
@@ -1331,33 +1355,9 @@ export function Dashboard() {
                                             className="px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 font-sans">
                                             {item.data_prova_2_chamada ? new Date(item.data_prova_2_chamada + "T00:00:00").toLocaleDateString("pt-BR") : '—'}
                                         </td>)}
-                                        {visibleColumns.status_notas && (<td
-                                            className="px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 font-sans text-center"
-                                            onClick={e => e.stopPropagation()}>
-                                            <div className="flex items-center justify-center gap-2">
-                                                {isInstructor ? (
-                                                    <span className={`text-xs font-semibold ${item.nota_lancada ? "text-teal-600 dark:text-teal-400" : "text-gray-400"}`}>
-                                                        {item.nota_lancada ? "Sim" : "Não"}
-                                                    </span>
-                                                ) : (
-                                                    <>
-                                                        <span
-                                                            className={`text-xs font-semibold ${!item.nota_lancada ? "text-gray-800 dark:text-gray-200" : "text-gray-400"}`}>Não</span>
-                                                        <button
-                                                            onClick={e => handleToggleNotaLancada(e, item.id, !!item.nota_lancada)}
-                                                            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors cursor-pointer ${item.nota_lancada ? "bg-teal-500" : "bg-gray-300 dark:bg-slate-600"}`}>
-                                                            <span
-                                                                className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${item.nota_lancada ? "translate-x-4.5" : "translate-x-1"}`} />
-                                                        </button>
-                                                        <span
-                                                            className={`text-xs font-semibold ${item.nota_lancada ? "text-teal-600 dark:text-teal-400" : "text-gray-400"}`}>Sim</span>
-                                                    </>
-                                                )}
-                                            </div>
-                                        </td>)}
-                                        {visibleColumns.prazo && (<td
-                                            className={`px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 text-right font-bold ${prazoColor}`}>
-                                            {prazoText}
+                                        {visibleColumns.software_utilizado && (<td
+                                            className="px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 font-sans max-w-xs truncate">
+                                            {item.software_utilizado || '—'}
                                         </td>)}
                                         {visibleColumns.sn && (<td
                                             className="px-4 py-2 text-center border-r border-gray-200/30 dark:border-slate-800/30"
