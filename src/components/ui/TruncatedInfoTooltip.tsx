@@ -89,16 +89,18 @@ export function TruncatedInfoTooltip({ text, title, icon: Icon, className = '' }
         <div
           id={tooltipId}
           role="tooltip"
-          className="pointer-events-none fixed z-[9999] flex max-h-[calc(100vh-2rem)] max-w-[calc(100vw-2rem)] items-start gap-2 overflow-y-auto rounded-md bg-slate-800 px-3 py-2 text-left text-xs text-slate-100 shadow-lg"
+          className="pointer-events-none fixed z-[9999] flex max-h-[calc(100vh-2rem)] w-[min(20rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] items-start gap-2 overflow-y-auto break-words rounded-md bg-slate-800 px-3 py-2 text-left text-xs text-slate-100 shadow-lg"
           style={{
+            boxSizing: 'border-box',
             left: position.left,
             top: position.top,
+            width: Math.min(320, Math.max(0, window.innerWidth - 32)),
             transform: position.below ? 'translateX(-50%)' : 'translate(-50%, -100%)',
           }}
         >
           <Icon className="mt-0.5 h-4 w-4 shrink-0 text-teal-300" aria-hidden="true" />
-          <span className="min-w-0">
-            <span className="block font-bold text-white">{title}</span>
+          <span className="min-w-0 break-words">
+            <span className="block break-words font-bold text-white">{title}</span>
             <span className="block whitespace-normal break-words">{text}</span>
           </span>
         </div>,

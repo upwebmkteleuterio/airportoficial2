@@ -34,6 +34,7 @@ export type MigrationParsedRow = {
   line: number;
   values: Record<MigrationColumn, string>;
   problems: string[];
+  warnings: string[];
 };
 
 export type MigrationParseResult = {
@@ -50,6 +51,9 @@ export type MigrationRowResult = {
   line: number;
   status: 'sucesso' | 'erro';
   message: string;
+  turma?: string;
+  anac?: string;
+  warnings?: string[];
 };
 
 export type MigrationRunResult = {
@@ -101,6 +105,29 @@ function displayCell(value: unknown): string {
   return normalizeMigrationValue(value);
 }
 
+const LOCATION_DEFAULTS = {
+  CIDADE: 'RIO DE JANEIRO',
+  UF: 'RJ',
+  Endereço: 'ENDEREÇO NÃO INFORMADO - REVISAR MANUALMENTE',
+} as const;
+
+function applyLocationDefaults(values: Record<MigrationColumn, string>): string[] {
+  const warnings: string[] = [];
+  if (!normalizeMigrationValue(values.CIDADE)) {
+    values.CIDADE = LOCATION_DEFAULTS.CIDADE;
+    warnings.push(`CIDADE ausente: aplicado ${LOCATION_DEFAULTS.CIDADE}.`);
+  }
+  if (!normalizeMigrationValue(values.UF)) {
+    values.UF = LOCATION_DEFAULTS.UF;
+    warnings.push(`UF ausente: aplicado ${LOCATION_DEFAULTS.UF}.`);
+  }
+  if (!normalizeMigrationValue(values.Endereço)) {
+    values.Endereço = LOCATION_DEFAULTS.Endereço;
+    warnings.push(`Endereço ausente: aplicado ${LOCATION_DEFAULTS.Endereço}.`);
+  }
+  return warnings;
+}
+
 export async function parseMigrationFile(file: File): Promise<MigrationParseResult> {
   const buffer = await file.arrayBuffer();
   const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
@@ -136,8 +163,10 @@ export async function parseMigrationFile(file: File): Promise<MigrationParseResu
     headerMap.forEach((index, column) => {
       values[column] = displayCell(row[index]);
     });
-    return { line: rowIndex + 2, values, problems: validateMigrationRow(values) };
-  }).filter((row) => Object.values(row.values).some(Boolean));
+    const hasSourceValue = Object.values(values).some(Boolean);
+    const warnings = applyLocationDefaults(values);
+    return { line: rowIndex + 2, values, problems: validateMigrationRow(values), warnings, hasSourceValue };
+  }).filter((row) => row.hasSourceValue).map(({ hasSourceValue: _hasSourceValue, ...row }) => row);
 
   const keyLines = new Map<string, number>();
   rows.forEach((row) => {
@@ -330,6 +359,11 @@ async function findExistingClass(row: MigrationParsedRow): Promise<boolean> {
   return (byAnac.data?.length ?? 0) > 0 || (byInternal.data?.length ?? 0) > 0;
 }
 
+function migrationReviewNote(row: MigrationParsedRow): string {
+  if (row.warnings.length === 0) return '';
+  return `Revisão manual da localização: ${row.warnings.join(' ')}`;
+}
+
 function toClassPayload(row: MigrationParsedRow, course: ExistingCourse, addressId: string | null) {
   const historicalStatus = statusHistory(row.values.Status);
   const prazo = prazoStatus(row.values.Prazo);
@@ -345,7 +379,7 @@ function toClassPayload(row: MigrationParsedRow, course: ExistingCourse, address
     endereco_realizacao: normalizeMigrationValue(row.values.Endereço), cidade: city, uf,
     qt_alunos_matriculados: 0, horario_prova_1_chamada: normalizeMigrationValue(row.values['1ª CH']) || null,
     horario_prova_2_chamada: normalizeMigrationValue(row.values['2ª CH']) || null, data_prova_1_chamada: null, data_prova_2_chamada: null,
-    vigilante_sem_deslocamento: false, anotacoes_turma: normalizeMigrationValue(row.values['obs.:']), status_prazo_notas: prazo,
+    vigilante_sem_deslocamento: false, anotacoes_turma: [normalizeMigrationValue(row.values['obs.:']), migrationReviewNote(row)].filter(Boolean).join(' | '), status_prazo_notas: prazo,
     status_operacional_sn: booleanValue(row.values['S/N']), status_turma: historicalStatus === 'Cancelado' ? 'Cancelada' : 'Ativa',
     status_historico: historicalStatus, numero_vt: vt === null ? null : Math.trunc(vt), carga_horaria: carga,
     software_utilizado: normalizeMigrationValue(row.values.SOFTWARE) || null, nota_lancada: prazo === 'Nota Lançada',
@@ -384,8 +418,10 @@ export async function runMigrationBatch(rows: MigrationParsedRow[], onProgress?:
   for (let index = 0; index < selectedRows.length; index += 1) {
     const row = selectedRows[index];
     const current = index + 1;
+    const locationWarnings = applyLocationDefaults(row.values);
+    row.warnings = [...new Set([...row.warnings, ...locationWarnings])];
     const subject = `Turma ${row.values.TURMA || '—'} · ANAC ${row.values.ANAC || '—'} · início ${row.values['INÍCIO'] || '—'}`;
-    let entityActions: string[] = [];
+    let entityActions: string[] = row.warnings.length > 0 ? [`Avisos de revisão: ${row.warnings.join(' ')}`] : [];
     try {
       progress('validação', current, `Validando ${subject} (linha ${row.line}).`);
       const problems = validateMigrationRow(row.values);
@@ -399,7 +435,6 @@ export async function runMigrationBatch(rows: MigrationParsedRow[], onProgress?:
         if (ambiguousPeopleNames.has(normalizeComparison(entry.name))) throw safeError(`A pessoa "${normalizeMigrationValue(entry.name)}" é ambígua.`);
       });
       let course = coursesByName.get(normalizedCourseName);
-      entityActions = [];
       let courseAction: string;
       if (course) {
         courseAction = createdCourseNames.has(normalizedCourseName) ? 'reutilizado (criado neste lote)' : 'localizado';
@@ -469,11 +504,25 @@ export async function runMigrationBatch(rows: MigrationParsedRow[], onProgress?:
           if (updateError) throw safeError('A turma e os vínculos foram gravados, mas o aplicador não pôde ser associado.');
         }
       }
-      results.push({ line: row.line, status: 'sucesso', message: `Turma e vínculos gravados com sucesso. ${entityActions.join('; ')}.` });
+      results.push({
+        line: row.line,
+        status: 'sucesso',
+        turma: normalizeMigrationValue(row.values.TURMA),
+        anac: normalizeMigrationValue(row.values.ANAC),
+        warnings: row.warnings,
+        message: `Turma e vínculos gravados com sucesso. ${entityActions.join('; ')}.`,
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Não foi possível concluir a linha.';
       const entityDetails = entityActions.length > 0 ? `${entityActions.join('; ')}. ` : '';
-      results.push({ line: row.line, status: 'erro', message: `${entityDetails}${message}`.slice(0, 300) });
+      results.push({
+        line: row.line,
+        status: 'erro',
+        turma: normalizeMigrationValue(row.values.TURMA),
+        anac: normalizeMigrationValue(row.values.ANAC),
+        warnings: row.warnings,
+        message: `${entityDetails}${message}`.slice(0, 300),
+      });
       progress('erro', current, `Erro seguro na linha ${row.line}.`);
     }
   }
@@ -486,7 +535,19 @@ export async function runMigrationBatch(rows: MigrationParsedRow[], onProgress?:
   };
 }
 
+function migrationResultLine(item: MigrationRowResult): string {
+  const identifiers = [
+    item.turma ? `TURMA ${item.turma}` : '',
+    item.anac ? `ANAC ${item.anac}` : '',
+  ].filter(Boolean).join(' · ');
+  return `[${item.status.toUpperCase()}] Linha ${item.line}${identifiers ? ` · ${identifiers}` : ''}: ${item.message}`;
+}
+
 export function migrationLogText(result: MigrationRunResult): string {
-  return result.results.map((item) => `[${item.status.toUpperCase()}] Linha ${item.line}: ${item.message}`).join('\n');
+  return result.results.map(migrationResultLine).join('\n');
+}
+
+export function migrationIssuesLogText(result: MigrationRunResult): string {
+  return result.results.filter((item) => item.status === 'erro').map(migrationResultLine).join('\n');
 }
 

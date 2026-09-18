@@ -3,6 +3,7 @@ import { CheckCircle2, Clipboard, FileSpreadsheet, LoaderCircle, Play, TriangleA
 import {
   MIGRATION_COLUMNS,
   MIGRATION_DESTINATIONS,
+  migrationIssuesLogText,
   migrationLogText,
   parseMigrationFile,
   runMigrationBatch,
@@ -33,6 +34,8 @@ export default function Migration() {
 
   const selectedRows = useMemo(() => parsed?.rows.slice(0, Math.min(batchSize, parsed.rows.length)) ?? [], [batchSize, parsed]);
   const allProblems = parsed?.rows.reduce((total, row) => total + row.problems.length, 0) ?? 0;
+  const allWarnings = parsed?.rows.reduce((total, row) => total + row.warnings.length, 0) ?? 0;
+  const resultWarnings = runResult?.results.flatMap((result) => (result.warnings ?? []).map((warning) => `Linha ${result.line} · TURMA ${result.turma || '—'} · ANAC ${result.anac || '—'}: ${warning}`)) ?? [];
   const hasBlockingFileIssue = Boolean(parsed && (parsed.duplicateHeaders.length > 0 || parsed.recognized.length === 0));
 
   const handleFile = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -79,9 +82,19 @@ export default function Migration() {
     if (!runResult) return;
     try {
       await navigator.clipboard.writeText(migrationLogText(runResult));
-      setClipboardMessage('Log copiado para a área de transferência.');
+      setClipboardMessage('Log completo copiado para a área de transferência.');
     } catch {
       setClipboardMessage('Não foi possível copiar o log. Verifique a permissão da área de transferência.');
+    }
+  };
+
+  const copyIssuesLog = async () => {
+    if (!runResult || runResult.errorCount === 0) return;
+    try {
+      await navigator.clipboard.writeText(migrationIssuesLogText(runResult));
+      setClipboardMessage('Log de erros e pendências copiado para a área de transferência.');
+    } catch {
+      setClipboardMessage('Não foi possível copiar o log de erros. Verifique a permissão da área de transferência.');
     }
   };
 
@@ -108,10 +121,11 @@ export default function Migration() {
         {parsed && (
           <>
             <Section title="2. Mapeamento e validação">
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
                 <Summary label="Linhas lidas" value={String(parsed.rows.length)} />
                 <Summary label="Colunas reconhecidas" value={`${parsed.recognized.length}/${MIGRATION_COLUMNS.length}`} />
                 <Summary label="Problemas por linha" value={String(allProblems)} tone={allProblems ? 'warning' : 'success'} />
+                <Summary label="Avisos de revisão" value={String(allWarnings)} tone={allWarnings ? 'warning' : 'success'} />
                 <Summary label="Ignoradas explicitamente" value={parsed.ignored.length ? parsed.ignored.join(', ') : 'Nenhuma'} />
               </div>
               <div className="mt-4 grid gap-4 lg:grid-cols-3">
@@ -121,13 +135,14 @@ export default function Migration() {
               </div>
               <p className="mt-4 rounded-md bg-slate-100 p-3 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">PASTA, CÓPIA TURMA e referência são explicitamente ignoradas e não serão gravadas, estejam ou não presentes no arquivo.</p>
               <p className="mt-3 rounded-md border border-teal-200 bg-teal-50 p-3 text-sm text-teal-800 dark:border-teal-900 dark:bg-teal-950/30 dark:text-teal-200"><strong>Conciliação automática na confirmação:</strong> cada linha válida procura curso por nome normalizado (acentos, caixa e espaços). Se o curso não existir, ele será criado com a carga de H/a e reutilizado nas linhas seguintes do lote. Endereços e pessoas também são localizados ou criados uma vez; correspondências ambíguas permanecem pendentes. A decisão efetiva aparece no acompanhamento e no log.</p>
+              {allWarnings > 0 && <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200"><strong>Avisos não bloqueantes:</strong> campos de localização ausentes receberam valores padrão e permanecem destacados por linha para revisão manual antes ou depois da gravação.</p>}
               {parsed.duplicateHeaders.length > 0 && <p role="alert" className="mt-4 rounded-md bg-rose-50 p-3 text-sm text-rose-700 dark:bg-rose-950/30 dark:text-rose-300">Cabeçalhos duplicados impedem o lote: {parsed.duplicateHeaders.join(', ')}.</p>}
 
               <div className="mt-5 overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
                 <table className="min-w-full text-left text-xs">
                   <caption className="sr-only">Amostra das primeiras linhas da planilha</caption>
-                  <thead className="bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"><tr><th className="px-3 py-2">Linha</th><th className="px-3 py-2">TURMA</th><th className="px-3 py-2">ANAC</th><th className="px-3 py-2">Curso</th><th className="px-3 py-2">INÍCIO</th><th className="px-3 py-2">TÉRMINO</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">Problemas</th></tr></thead>
-                  <tbody>{parsed.rows.slice(0, 10).map((row) => <tr key={row.line} className="border-t border-slate-200 dark:border-slate-800"><td className="px-3 py-2 font-semibold">{row.line}</td><td className="px-3 py-2">{row.values.TURMA}</td><td className="px-3 py-2">{row.values.ANAC}</td><td className="px-3 py-2">{row.values.Curso}</td><td className="px-3 py-2">{row.values['INÍCIO']}</td><td className="px-3 py-2">{row.values['TÉRMINO']}</td><td className="px-3 py-2">{row.values.Status}</td><td className="max-w-xs px-3 py-2 text-rose-700 dark:text-rose-300">{row.problems.join(' ') || 'Nenhum'}</td></tr>)}</tbody>
+                  <thead className="bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"><tr><th className="px-3 py-2">Linha</th><th className="px-3 py-2">TURMA</th><th className="px-3 py-2">ANAC</th><th className="px-3 py-2">Curso</th><th className="px-3 py-2">INÍCIO</th><th className="px-3 py-2">TÉRMINO</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">Avisos de revisão</th><th className="px-3 py-2">Problemas</th></tr></thead>
+                  <tbody>{parsed.rows.slice(0, 10).map((row) => <tr key={row.line} className="border-t border-slate-200 dark:border-slate-800"><td className="px-3 py-2 font-semibold">{row.line}</td><td className="px-3 py-2">{row.values.TURMA}</td><td className="px-3 py-2">{row.values.ANAC}</td><td className="px-3 py-2">{row.values.Curso}</td><td className="px-3 py-2">{row.values['INÍCIO']}</td><td className="px-3 py-2">{row.values['TÉRMINO']}</td><td className="px-3 py-2">{row.values.Status}</td><td className="max-w-xs px-3 py-2 text-amber-700 dark:text-amber-300">{row.warnings.join(' ') || 'Nenhum'}</td><td className="max-w-xs px-3 py-2 text-rose-700 dark:text-rose-300">{row.problems.join(' ') || 'Nenhum'}</td></tr>)}</tbody>
                 </table>
               </div>
             </Section>
@@ -146,7 +161,15 @@ export default function Migration() {
             {(running || progress || runResult) && <Section title="4. Acompanhamento e logs">
               {progress && <div aria-live="polite"><div className="mb-2 flex justify-between text-sm font-semibold"><span>Etapa: {progress.stage} — {progress.message}</span><span>{progress.current}/{progress.total} ({progress.percent}%)</span></div><div className="h-3 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800"><div className={`h-full transition-all ${progress.stage === 'erro' ? 'bg-rose-600' : 'bg-teal-600'}`} style={{ width: `${progress.percent}%` }} /></div></div>}
               {running && <p className="mt-4 flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300"><LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> Processando linha a linha. O botão permanece desabilitado durante a execução.</p>}
-              {runResult && <div className="mt-4"><div className="grid gap-3 sm:grid-cols-3"><Summary label="Sucessos" value={String(runResult.successCount)} tone="success" /><Summary label="Erros/pendências" value={String(runResult.errorCount)} tone={runResult.errorCount ? 'warning' : 'success'} /><Summary label="Total processado" value={String(runResult.results.length)} /></div><div className="mt-4 flex items-center justify-between gap-3"><h3 className="text-sm font-bold text-slate-700 dark:text-slate-200">Log do lote</h3><button type="button" onClick={() => void copyLog()} className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-xs font-bold dark:border-slate-700"><Clipboard className="h-4 w-4" aria-hidden="true" /> Copiar log</button></div><pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap rounded-md bg-slate-950 p-4 text-xs text-slate-200">{migrationLogText(runResult)}</pre>{clipboardMessage && <p role="status" className="mt-2 text-sm text-slate-600 dark:text-slate-300">{clipboardMessage}</p>}</div>}
+              {runResult && <div className="mt-4">
+                <div className="grid gap-3 sm:grid-cols-3"><Summary label="Sucessos" value={String(runResult.successCount)} tone="success" /><Summary label="Erros/pendências" value={String(runResult.errorCount)} tone={runResult.errorCount ? 'warning' : 'success'} /><Summary label="Total processado" value={String(runResult.results.length)} /></div>
+                {resultWarnings.length > 0 && <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200"><h3 className="font-bold">Avisos de revisão (não bloqueantes)</h3><ul className="mt-2 list-disc space-y-1 pl-5">{resultWarnings.map((warning, index) => <li key={`${warning}-${index}`}>{warning}</li>)}</ul></div>}
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3"><h3 className="text-sm font-bold text-slate-700 dark:text-slate-200">Logs do lote</h3><div className="flex flex-wrap gap-2"><button type="button" onClick={() => void copyLog()} className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-xs font-bold dark:border-slate-700"><Clipboard className="h-4 w-4" aria-hidden="true" /> Copiar log completo</button><button type="button" onClick={() => void copyIssuesLog()} disabled={runResult.errorCount === 0} className="inline-flex items-center gap-2 rounded-md border border-rose-300 px-3 py-2 text-xs font-bold text-rose-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-rose-800 dark:text-rose-300"><Clipboard className="h-4 w-4" aria-hidden="true" /> Copiar erros/pendências</button></div></div>
+                <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{runResult.errorCount === 0 ? 'Não há erros ou pendências para copiar.' : 'O log de erros/pendências contém somente as linhas que não foram concluídas.'}</p>
+                <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap rounded-md bg-slate-950 p-4 text-xs text-slate-200">{migrationLogText(runResult)}</pre>
+                {runResult.errorCount > 0 && <pre className="mt-3 max-h-56 overflow-auto whitespace-pre-wrap rounded-md bg-rose-950 p-4 text-xs text-rose-100">{migrationIssuesLogText(runResult)}</pre>}
+                {clipboardMessage && <p role="status" className="mt-2 text-sm text-slate-600 dark:text-slate-300">{clipboardMessage}</p>}
+              </div>}
             </Section>}
           </>
         )}
