@@ -12,6 +12,8 @@ import {
   type MigrationRunResult,
 } from '../services/migrationService';
 
+const MAX_BATCH_SIZE = 1000;
+
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -24,7 +26,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 export default function Migration() {
   const [parsed, setParsed] = useState<MigrationParseResult | null>(null);
   const [fileName, setFileName] = useState('');
-  const [batchSize, setBatchSize] = useState(500);
+  const [batchSize, setBatchSize] = useState(MAX_BATCH_SIZE);
   const [confirming, setConfirming] = useState(false);
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<MigrationProgress | null>(null);
@@ -32,7 +34,7 @@ export default function Migration() {
   const [parseError, setParseError] = useState('');
   const [clipboardMessage, setClipboardMessage] = useState('');
 
-  const selectedRows = useMemo(() => parsed?.rows.slice(0, Math.min(batchSize, parsed.rows.length)) ?? [], [batchSize, parsed]);
+  const selectedRows = useMemo(() => parsed?.rows.slice(0, Math.min(batchSize, MAX_BATCH_SIZE, parsed.rows.length)) ?? [], [batchSize, parsed]);
   const allProblems = parsed?.rows.reduce((total, row) => total + row.problems.length, 0) ?? 0;
   const allWarnings = parsed?.rows.reduce((total, row) => total + row.warnings.length, 0) ?? 0;
   const resultWarnings = runResult?.results.flatMap((result) => (result.warnings ?? []).map((warning) => `Linha ${result.line} · TURMA ${result.turma || '—'} · ANAC ${result.anac || '—'}: ${warning}`)) ?? [];
@@ -50,7 +52,7 @@ export default function Migration() {
       const result = await parseMigrationFile(file);
       setParsed(result);
       setFileName(file.name);
-      setBatchSize(Math.min(500, result.rows.length || 1));
+      setBatchSize(Math.min(MAX_BATCH_SIZE, result.rows.length || 1));
     } catch (error) {
       setParsed(null);
       setFileName('');
@@ -168,8 +170,8 @@ export default function Migration() {
 
             <Section title="3. Selecionar lote">
               <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-                <label className="text-sm font-semibold text-slate-700 dark:text-slate-200">Quantidade de linhas a gravar (máximo {parsed.rows.length})
-                  <input type="number" min={parsed.rows.length ? 1 : 0} max={parsed.rows.length} value={Math.min(batchSize, parsed.rows.length)} onChange={(event) => setBatchSize(Math.max(1, Math.min(parsed.rows.length, Number(event.target.value) || 1)))} disabled={running || parsed.rows.length === 0} className="mt-2 block w-36 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950" />
+                <label className="text-sm font-semibold text-slate-700 dark:text-slate-200">Quantidade de linhas a gravar (máximo {Math.min(MAX_BATCH_SIZE, parsed.rows.length)})
+                  <input type="number" min={parsed.rows.length ? 1 : 0} max={Math.min(MAX_BATCH_SIZE, parsed.rows.length)} value={Math.min(batchSize, MAX_BATCH_SIZE, parsed.rows.length)} onChange={(event) => setBatchSize(Math.max(1, Math.min(MAX_BATCH_SIZE, parsed.rows.length, Number(event.target.value) || 1)))} disabled={running || parsed.rows.length === 0} className="mt-2 block w-36 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950" />
                 </label>
                 <p className="max-w-xl text-xs text-slate-500 dark:text-slate-400">Somente as primeiras {selectedRows.length} linhas selecionadas serão gravadas. Depois da confirmação, cursos, endereços e pessoas serão conciliados por chave normalizada: registros existentes serão localizados e os ausentes serão criados uma vez e reutilizados. Linhas inválidas e entidades ambíguas permanecem pendentes.</p>
               </div>
