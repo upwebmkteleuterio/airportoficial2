@@ -23,7 +23,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 export default function Migration() {
   const [parsed, setParsed] = useState<MigrationParseResult | null>(null);
   const [fileName, setFileName] = useState('');
-  const [batchSize, setBatchSize] = useState(10);
+  const [batchSize, setBatchSize] = useState(500);
   const [confirming, setConfirming] = useState(false);
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<MigrationProgress | null>(null);
@@ -45,7 +45,7 @@ export default function Migration() {
       const result = await parseMigrationFile(file);
       setParsed(result);
       setFileName(file.name);
-      setBatchSize(Math.min(10, result.rows.length || 1));
+      setBatchSize(Math.min(500, result.rows.length || 1));
     } catch (error) {
       setParsed(null);
       setFileName('');
@@ -91,7 +91,7 @@ export default function Migration() {
         <header>
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-teal-600 dark:text-teal-400">Operação controlada</p>
           <h1 className="mt-1 text-2xl font-extrabold text-slate-900 dark:text-white">Migração de turmas</h1>
-          <p className="mt-2 max-w-3xl text-sm text-slate-600 dark:text-slate-400">Leia a planilha em memória, revise o mapeamento e execute somente um lote piloto confirmado. Nenhum arquivo ou dado da planilha é persistido automaticamente.</p>
+          <p className="mt-2 max-w-3xl text-sm text-slate-600 dark:text-slate-400">Leia a planilha em memória, revise o mapeamento e execute somente um lote confirmado. Nenhum arquivo ou dado da planilha é persistido automaticamente.</p>
         </header>
 
         <Section title="1. Selecionar arquivo">
@@ -121,7 +121,7 @@ export default function Migration() {
               </div>
               <p className="mt-4 rounded-md bg-slate-100 p-3 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">PASTA, CÓPIA TURMA e referência são explicitamente ignoradas e não serão gravadas, estejam ou não presentes no arquivo.</p>
               <p className="mt-3 rounded-md border border-teal-200 bg-teal-50 p-3 text-sm text-teal-800 dark:border-teal-900 dark:bg-teal-950/30 dark:text-teal-200"><strong>Conciliação automática na confirmação:</strong> cada linha válida procura curso por nome normalizado (acentos, caixa e espaços). Se o curso não existir, ele será criado com a carga de H/a e reutilizado nas linhas seguintes do lote. Endereços e pessoas também são localizados ou criados uma vez; correspondências ambíguas permanecem pendentes. A decisão efetiva aparece no acompanhamento e no log.</p>
-              {parsed.duplicateHeaders.length > 0 && <p role="alert" className="mt-4 rounded-md bg-rose-50 p-3 text-sm text-rose-700 dark:bg-rose-950/30 dark:text-rose-300">Cabeçalhos duplicados impedem o piloto: {parsed.duplicateHeaders.join(', ')}.</p>}
+              {parsed.duplicateHeaders.length > 0 && <p role="alert" className="mt-4 rounded-md bg-rose-50 p-3 text-sm text-rose-700 dark:bg-rose-950/30 dark:text-rose-300">Cabeçalhos duplicados impedem o lote: {parsed.duplicateHeaders.join(', ')}.</p>}
 
               <div className="mt-5 overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
                 <table className="min-w-full text-left text-xs">
@@ -132,14 +132,14 @@ export default function Migration() {
               </div>
             </Section>
 
-            <Section title="3. Lote piloto">
+            <Section title="3. Selecionar lote">
               <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
                 <label className="text-sm font-semibold text-slate-700 dark:text-slate-200">Quantidade de linhas a gravar (máximo {parsed.rows.length})
                   <input type="number" min={parsed.rows.length ? 1 : 0} max={parsed.rows.length} value={Math.min(batchSize, parsed.rows.length)} onChange={(event) => setBatchSize(Math.max(1, Math.min(parsed.rows.length, Number(event.target.value) || 1)))} disabled={running || parsed.rows.length === 0} className="mt-2 block w-36 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950" />
                 </label>
                 <p className="max-w-xl text-xs text-slate-500 dark:text-slate-400">Somente as primeiras {selectedRows.length} linhas selecionadas serão gravadas. Depois da confirmação, cursos, endereços e pessoas serão conciliados por chave normalizada: registros existentes serão localizados e os ausentes serão criados uma vez e reutilizados. Linhas inválidas e entidades ambíguas permanecem pendentes.</p>
               </div>
-              {confirming && <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/20"><p className="font-bold text-amber-900 dark:text-amber-200">Confirme o piloto antes de gravar</p><p className="mt-1 text-sm text-amber-800 dark:text-amber-300">Você está prestes a processar {selectedRows.length} linha(s). A execução criará apenas os registros conciliados e continuará após erros individuais.</p><div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => void executeBatch()} className="inline-flex items-center gap-2 rounded-md bg-teal-700 px-4 py-2 text-sm font-bold text-white hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-500"><CheckCircle2 className="h-4 w-4" aria-hidden="true" /> Confirmar e iniciar piloto</button><button type="button" onClick={() => setConfirming(false)} className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold dark:border-slate-700">Voltar</button></div></div>}
+              {confirming && <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/20"><p className="font-bold text-amber-900 dark:text-amber-200">Confirme o lote antes de gravar</p><p className="mt-1 text-sm text-amber-800 dark:text-amber-300">Você está prestes a processar {selectedRows.length} linha(s). A execução criará apenas os registros conciliados e continuará após erros individuais.</p><div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => void executeBatch()} className="inline-flex items-center gap-2 rounded-md bg-teal-700 px-4 py-2 text-sm font-bold text-white hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-500"><CheckCircle2 className="h-4 w-4" aria-hidden="true" /> Confirmar e iniciar lote</button><button type="button" onClick={() => setConfirming(false)} className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold dark:border-slate-700">Voltar</button></div></div>}
               <button type="button" onClick={prepareBatch} disabled={running || !selectedRows.length || hasBlockingFileIssue} className="mt-4 inline-flex items-center gap-2 rounded-md bg-slate-900 px-4 py-2 text-sm font-bold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-teal-700 dark:hover:bg-teal-600"><Play className="h-4 w-4" aria-hidden="true" /> Revisar e confirmar lote</button>
             </Section>
 

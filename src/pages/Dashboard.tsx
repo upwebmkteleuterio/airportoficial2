@@ -66,6 +66,7 @@ import { usePeople } from "../hooks/usePeople";
 import { useCourses } from "../hooks/useCourses";
 import { shiftService } from "../services/shifts";
 import { useAddresses } from "../hooks/useAddresses";
+import { type ClassFilters } from "../services/classService";
 import { useUIStore } from "../store/uiStore";
 import { ClassStatusPrazo, InstructorFuncao, Turma, UserRole } from "../types";
 import { getStatusPrazoNotas } from "../utils/statusPrazoNotas";
@@ -165,6 +166,66 @@ const getLocalDateString = () => {
     return `${today.getFullYear()}-${month}-${day}`;
 };
 
+const DEFAULT_VISIBLE_COLUMNS = {
+    id_anac: true,
+    id_interno: true,
+    curso: true,
+    status_notas: true,
+    prazo: true,
+    status_turma: true,
+    status_historico: true,
+    carga_horaria: true,
+    turno: true,
+    horario: true,
+    inicio: true,
+    termino: true,
+    hora1: true,
+    hora2: true,
+    endereco: true,
+    ioad: true,
+    iscr: true,
+    icar: true,
+    aplicador: true,
+    instrutores_turma: true,
+    vigia: true,
+    notas_lancadas_em: true,
+    data_lancamento_real: true,
+    data_prova_1: true,
+    data_prova_2: true,
+    software_utilizado: true,
+    sn: true,
+} as const;
+
+type VisibleColumns = { -readonly [Key in keyof typeof DEFAULT_VISIBLE_COLUMNS]: boolean };
+const VISIBLE_COLUMNS_STORAGE_KEY = "dashboard-visible-columns-v1";
+
+function loadVisibleColumns(): VisibleColumns {
+    if (typeof window === "undefined") return { ...DEFAULT_VISIBLE_COLUMNS };
+    try {
+        const parsed = JSON.parse(window.localStorage.getItem(VISIBLE_COLUMNS_STORAGE_KEY) || "null");
+        if (!parsed || typeof parsed !== "object") return { ...DEFAULT_VISIBLE_COLUMNS };
+        return Object.keys(DEFAULT_VISIBLE_COLUMNS).reduce<VisibleColumns>((result, key) => {
+            result[key as keyof VisibleColumns] = parsed[key] === false ? false : true;
+            return result;
+        }, { ...DEFAULT_VISIBLE_COLUMNS } as VisibleColumns);
+    } catch {
+        return { ...DEFAULT_VISIBLE_COLUMNS };
+    }
+}
+
+const DEFAULT_CLASS_FILTERS: ClassFilters = {
+    idAnac: "",
+    idInterno: "",
+    course: "",
+    shift: "",
+    statusTurma: "",
+    statusHistorico: "",
+    city: "",
+    uf: "",
+    startDateFrom: "",
+    startDateTo: "",
+};
+
 export function Dashboard() {
     const {
         filters,
@@ -179,6 +240,9 @@ export function Dashboard() {
 
     const [currentPage, setCurrentPage] = useState(1);
     const [turmaInstructorsMap, setTurmaInstructorsMap] = useState<Record<string, { instrutor_id: string; funcao: string }[]>>({});
+    const [advancedFilters, setAdvancedFilters] = useState<ClassFilters>({ ...DEFAULT_CLASS_FILTERS });
+    const [draftAdvancedFilters, setDraftAdvancedFilters] = useState<ClassFilters>({ ...DEFAULT_CLASS_FILTERS });
+    const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
     const itemsPerPage = 20;
 
     const {
@@ -204,7 +268,8 @@ export function Dashboard() {
         page: currentPage,
         pageSize: itemsPerPage,
         search: filters.classSearchTerm,
-        courseSearch: filters.classCourseFilter ?? ''
+        courseSearch: filters.classCourseFilter ?? '',
+        filters: advancedFilters
     });
 
     const [editingClassId, setEditingClassId] = useState<string | null>(null);
@@ -577,37 +642,16 @@ export function Dashboard() {
         setClassDraftToResume(null);
     };
 
-    const [visibleColumns, setVisibleColumns] = useState({
-        id_anac: true,
-        id_interno: true,
-        curso: true,
-        status_notas: true,
-        prazo: true,
-        status_turma: true,
-        status_historico: true,
-        carga_horaria: true,
-        turno: true,
-        horario: true,
-        inicio: true,
-        termino: true,
-        hora1: true,
-        hora2: true,
-        endereco: true,
-        ioad: true,
-        iscr: true,
-        icar: true,
-        aplicador: true,
-        instrutores_turma: true,
-        vigia: true,
-        notas_lancadas_em: true,
-        data_lancamento_real: true,
-        data_prova_1: true,
-        data_prova_2: true,
-        software_utilizado: true,
-        sn: true
-    });
-
+    const [visibleColumns, setVisibleColumns] = useState<VisibleColumns>(loadVisibleColumns);
     const [showColsDropdown, setShowColsDropdown] = useState(false);
+    const hiddenColumnsCount = Object.values(visibleColumns).filter((visible) => !visible).length;
+
+    useEffect(() => {
+        try {
+            if (hiddenColumnsCount === 0) window.localStorage.removeItem(VISIBLE_COLUMNS_STORAGE_KEY);
+            else window.localStorage.setItem(VISIBLE_COLUMNS_STORAGE_KEY, JSON.stringify(visibleColumns));
+        } catch {}
+    }, [hiddenColumnsCount, visibleColumns]);
 
     const columnLabels = {
         id_anac: "ID ANAC",
@@ -739,7 +783,7 @@ export function Dashboard() {
 
     useEffect(() => {
         setCurrentPage(1);
-    }, [filters.classSearchTerm, filters.classCourseFilter]);
+    }, [filters.classSearchTerm, filters.classCourseFilter, advancedFilters]);
 
     const handleRemoveInstructor = (instructorId: string) => {
         setSelectedInstructors(selectedInstructors.filter(id => id !== instructorId));
@@ -983,10 +1027,39 @@ export function Dashboard() {
             <div
                 className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 p-4 bg-slate-50 dark:bg-slate-850 rounded-xl border border-gray-200 dark:border-slate-800 shrink-0">
                 <div className="flex flex-col lg:flex-row lg:items-center gap-3 min-w-0">
-                    <div
-                        className="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-750 px-3 py-1.5 rounded-lg font-bold text-xs text-slate-800 dark:text-white shadow-sm shrink-0">
-                        <Filter className="w-3.5 h-3.5 text-gray-500" />
-                        <span>Filtros</span>
+                    <div className="relative shrink-0">
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setDraftAdvancedFilters({ ...advancedFilters });
+                                setShowAdvancedFilters((open) => !open);
+                            }}
+                            aria-expanded={showAdvancedFilters}
+                            aria-controls="advanced-class-filters"
+                            className="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-750 px-3 py-1.5 rounded-lg font-bold text-xs text-slate-800 dark:text-white shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500"
+                        >
+                            <Filter className="w-3.5 h-3.5 text-gray-500" aria-hidden="true" />
+                            <span>Filtros</span>
+                            {Object.values(advancedFilters).some(Boolean) && <span className="rounded-full bg-teal-600 px-1.5 text-[10px] text-white">ativos</span>}
+                        </button>
+                        {showAdvancedFilters && <div id="advanced-class-filters" role="dialog" aria-label="Filtros avançados de turmas" className="absolute left-0 top-full z-30 mt-2 w-[min(90vw,42rem)] rounded-xl border border-gray-200 bg-white p-4 shadow-xl dark:border-slate-800 dark:bg-slate-950">
+                            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">ID ANAC<input value={draftAdvancedFilters.idAnac} onChange={(event) => setDraftAdvancedFilters((current) => ({ ...current, idAnac: event.target.value }))} className="mt-1 w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900" /></label>
+                                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">ID interno<input inputMode="numeric" value={draftAdvancedFilters.idInterno} onChange={(event) => setDraftAdvancedFilters((current) => ({ ...current, idInterno: event.target.value }))} className="mt-1 w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900" /></label>
+                                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Curso<input value={draftAdvancedFilters.course} onChange={(event) => setDraftAdvancedFilters((current) => ({ ...current, course: event.target.value }))} className="mt-1 w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900" /></label>
+                                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Turno<select value={draftAdvancedFilters.shift} onChange={(event) => setDraftAdvancedFilters((current) => ({ ...current, shift: event.target.value }))} className="mt-1 w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"><option value="">Todos</option><option>MANHÃ</option><option>TARDE</option><option>NOITE</option><option>MANHÃ/TARDE</option><option>TARDE/NOITE</option><option>MANHÃ/TARDE E NOITE</option></select></label>
+                                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Situação<select value={draftAdvancedFilters.statusTurma} onChange={(event) => setDraftAdvancedFilters((current) => ({ ...current, statusTurma: event.target.value }))} className="mt-1 w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"><option value="">Todas</option><option>Ativa</option><option>Cancelada</option></select></label>
+                                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Status histórico<select value={draftAdvancedFilters.statusHistorico} onChange={(event) => setDraftAdvancedFilters((current) => ({ ...current, statusHistorico: event.target.value }))} className="mt-1 w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"><option value="">Todos</option><option>No prazo</option><option>Cancelado</option><option>Encerrado</option></select></label>
+                                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Cidade<input value={draftAdvancedFilters.city} onChange={(event) => setDraftAdvancedFilters((current) => ({ ...current, city: event.target.value }))} className="mt-1 w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900" /></label>
+                                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">UF<input maxLength={2} value={draftAdvancedFilters.uf} onChange={(event) => setDraftAdvancedFilters((current) => ({ ...current, uf: event.target.value.toUpperCase() }))} className="mt-1 w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm uppercase dark:border-slate-700 dark:bg-slate-900" /></label>
+                                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Início a partir de<input type="date" value={draftAdvancedFilters.startDateFrom} onChange={(event) => setDraftAdvancedFilters((current) => ({ ...current, startDateFrom: event.target.value }))} className="mt-1 w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900" /></label>
+                                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Início até<input type="date" value={draftAdvancedFilters.startDateTo} onChange={(event) => setDraftAdvancedFilters((current) => ({ ...current, startDateTo: event.target.value }))} className="mt-1 w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900" /></label>
+                            </div>
+                            <div className="mt-4 flex justify-end gap-2">
+                                <button type="button" onClick={() => { setAdvancedFilters({ ...DEFAULT_CLASS_FILTERS }); setDraftAdvancedFilters({ ...DEFAULT_CLASS_FILTERS }); setShowAdvancedFilters(false); }} className="rounded-md border border-gray-300 px-3 py-2 text-xs font-bold text-slate-700 dark:border-slate-700 dark:text-slate-300">Limpar</button>
+                                <button type="button" onClick={() => { setAdvancedFilters({ ...draftAdvancedFilters }); setShowAdvancedFilters(false); }} className="rounded-md bg-teal-700 px-3 py-2 text-xs font-bold text-white hover:bg-teal-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500">Aplicar filtros</button>
+                            </div>
+                        </div>}
                     </div>
                     <div className="relative w-full lg:w-80 xl:w-96">
                         <Search
@@ -996,8 +1069,8 @@ export function Dashboard() {
                             type="text"
                             value={filters.classSearchTerm}
                             onChange={e => setFilter("classSearchTerm", e.target.value)}
-                            placeholder="Buscar por ID, Curso ou Instrutor..."
-                            aria-label="Buscar turmas por ID, curso ou instrutor"
+                            placeholder="Buscar por T-... ou curso..."
+                            aria-label="Buscar turmas por ID interno T- ou curso"
                             className="w-full pl-9 pr-4 py-2 bg-white dark:bg-slate-900 rounded-lg border border-gray-300 dark:border-slate-700 text-gray-900 dark:text-white font-sans text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 shadow-sm" />
                     </div>
                     <div
@@ -1021,10 +1094,14 @@ export function Dashboard() {
                     <div className="relative">
                         <button
                             id="btn-cols-view"
+                            type="button"
                             onClick={() => setShowColsDropdown(!showColsDropdown)}
-                            className={`p-2 border rounded-lg transition-colors cursor-pointer ${showColsDropdown ? "border-teal-500 bg-teal-500/10 text-teal-600 dark:text-teal-400" : "border-gray-300 dark:border-slate-800 bg-white dark:bg-slate-900 text-gray-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-slate-800"}`}
-                            title="Alternar Colunas">
-                            <Columns className="w-4 h-4" />
+                            aria-label={hiddenColumnsCount > 0 ? `Configurar colunas; ${hiddenColumnsCount} coluna(s) oculta(s)` : "Configurar colunas"}
+                            aria-expanded={showColsDropdown}
+                            className={`relative p-2 border rounded-lg transition-colors cursor-pointer ${showColsDropdown ? "border-teal-500 bg-teal-500/10 text-teal-600 dark:text-teal-400" : "border-gray-300 dark:border-slate-800 bg-white dark:bg-slate-900 text-gray-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-slate-800"}`}
+                            title={hiddenColumnsCount > 0 ? `${hiddenColumnsCount} coluna(s) oculta(s)` : "Configurar colunas"}>
+                            <Columns className="w-4 h-4" aria-hidden="true" />
+                            {hiddenColumnsCount > 0 && <span aria-label={`${hiddenColumnsCount} coluna(s) oculta(s)`} className="absolute -right-2 -top-2 min-w-4 rounded-full bg-amber-500 px-1 text-[10px] font-bold leading-4 text-white">{hiddenColumnsCount}</span>}
                         </button>
                         {showColsDropdown && (<>
                             <div className="fixed inset-0 z-10" onClick={() => setShowColsDropdown(false)} />
@@ -1035,36 +1112,12 @@ export function Dashboard() {
                                     <span
                                         className="text-[11px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-wider">Visualizar Colunas</span>
                                     <button
+                                        type="button"
                                         onClick={() => {
-                                            setVisibleColumns({
-                                                id_anac: true,
-                                                id_interno: true,
-                                                curso: true,
-                                                status_notas: true,
-                                                prazo: true,
-                                                status_turma: true,
-                                                status_historico: true,
-                                                carga_horaria: true,
-                                                turno: true,
-                                                horario: true,
-                                                inicio: true,
-                                                termino: true,
-                                                hora1: true,
-                                                hora2: true,
-                                                endereco: true,
-                                                ioad: true,
-                                                iscr: true,
-                                                icar: true,
-                                                aplicador: true,
-                                                instrutores_turma: true,
-                                                vigia: true,
-                                                notas_lancadas_em: true,
-                                                data_lancamento_real: true,
-                                                data_prova_1: true,
-                                                data_prova_2: true,
-                                                software_utilizado: true,
-                                                sn: true
-                                            });
+                                            setVisibleColumns({ ...DEFAULT_VISIBLE_COLUMNS });
+                                            try {
+                                                window.localStorage.removeItem(VISIBLE_COLUMNS_STORAGE_KEY);
+                                            } catch {}
                                         }}
                                         className="text-[10px] text-teal-600 dark:text-teal-400 font-bold hover:underline">Resetar
                                                             </button>
@@ -1194,6 +1247,8 @@ export function Dashboard() {
                                             onClick={() => {
                                                 setFilter("classSearchTerm", "");
                                                 setFilter("classCourseFilter", null);
+                                                setAdvancedFilters({ ...DEFAULT_CLASS_FILTERS });
+                                                setDraftAdvancedFilters({ ...DEFAULT_CLASS_FILTERS });
                                             }}
                                             className="mt-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-[10px] font-bold rounded-lg text-slate-700 dark:text-slate-200 transition-colors cursor-pointer">Limpar Filtros de Busca
                                                                   </button>

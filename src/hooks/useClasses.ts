@@ -4,7 +4,7 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { classService } from '../services/classService';
+import { classService, type ClassFilters } from '../services/classService';
 import { Turma, Matricula } from '../types';
 
 interface ClassesOptions {
@@ -12,6 +12,7 @@ interface ClassesOptions {
   pageSize?: number;
   search?: string;
   courseSearch?: string;
+  filters?: ClassFilters;
 }
 
 interface ClassesQueryData {
@@ -26,18 +27,19 @@ export function useClasses(options: ClassesOptions = {}) {
   const pageSize = options.pageSize ?? 6;
   const search = options.search ?? '';
   const courseSearch = options.courseSearch ?? '';
+  const filters = options.filters;
 
   // Queries
   const classesQuery = useQuery<ClassesQueryData>({
     queryKey: isPaginated
-      ? ['classes', 'page', page, pageSize, { search, courseSearch }]
+      ? ['classes', 'page', page, pageSize, { search, courseSearch, filters }]
       : ['classes', 'all'],
     queryFn: async () => {
       if (!isPaginated) {
         const data = await classService.getAll();
         return { data, total: data.length };
       }
-      return classService.getPage({ page, pageSize, search, courseSearch });
+      return classService.getPage({ page, pageSize, search, courseSearch, filters });
     },
   });
 

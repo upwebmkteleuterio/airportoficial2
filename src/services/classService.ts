@@ -3,6 +3,19 @@ import { Turma, Matricula, DiarioClasse, UserRole } from '../types';
 import { getAttendancePeriodsForShift } from '../utils/attendanceRules';
 import { newServiceId, serviceError } from './supabaseErrors';
 
+export interface ClassFilters {
+  idAnac: string;
+  idInterno: string;
+  course: string;
+  shift: string;
+  statusTurma: string;
+  statusHistorico: string;
+  city: string;
+  uf: string;
+  startDateFrom: string;
+  startDateTo: string;
+}
+
 interface TurmaInstrutorRel {
   id: string;
   turma_id: string;
@@ -15,6 +28,7 @@ export interface ClassPageOptions {
   pageSize: number;
   search?: string;
   courseSearch?: string;
+  filters?: ClassFilters;
 }
 
 export interface ClassPage {
@@ -206,7 +220,7 @@ export const classService = {
     return (data ?? []) as Turma[];
   },
 
-  getPage: async ({ page, pageSize, search, courseSearch }: ClassPageOptions): Promise<ClassPage> => {
+  getPage: async ({ page, pageSize, search, courseSearch, filters }: ClassPageOptions): Promise<ClassPage> => {
     const context = await getAuthContext();
     if (!context) throw new Error('Sessão não autenticada.');
     const from = Math.max(0, page - 1) * pageSize;
@@ -214,8 +228,7 @@ export const classService = {
     let query = supabase
       .from('turmas')
       .select('*', { count: 'exact' })
-      .order('id_interno_escola', { ascending: false })
-      .range(from, to);
+      .order('id_interno_escola', { ascending: false });
 
     if (context.role === UserRole.INSTRUTOR) {
       const classIds = await getInstructorClassIds(context);
@@ -223,34 +236,20 @@ export const classService = {
       query = query.in('id', classIds);
     }
 
-    const escapeFilterTerm = (value: string) => value.replace(/[^0-9A-Za-zÀ-ÿ_ -]/g, ' ').slice(0, 100);
+    const escapeFilterTerm = (value: string) => value.replace(/[%_\\(),.]/g, ' ').replace(/[^0-9A-Za-zÀ-ÿ -]/g, ' ').slice(0, 100).trim();
     const findCourseIds = async (value: string): Promise<string[]> => {
+      const safeValue = escapeFilterTerm(value);
+      if (!safeValue) return [];
       const { data, error } = await supabase
         .from('cursos')
         .select('id')
-        .ilike('nome_curso', `%${escapeFilterTerm(value)}%`);
+        .ilike('nome_curso', `%${safeValue}%`);
       if (error) throw serviceError('Não foi possível pesquisar os cursos', error);
       return ((data ?? []) as Array<{ id: string }>).map((course) => course.id);
     };
-    const findInstructorClassIds = async (value: string): Promise<string[]> => {
-      const { data: instructors, error: instructorsError } = await supabase
-        .from('profiles')
-        .select('legacy_id')
-        .ilike('nome_completo', `%${escapeFilterTerm(value)}%`)
-        .eq('role', UserRole.INSTRUTOR);
-      if (instructorsError) throw serviceError('Não foi possível pesquisar os instrutores', instructorsError);
-      const instructorIds = ((instructors ?? []) as Array<{ legacy_id: string }>).map((instructor) => instructor.legacy_id);
-      if (instructorIds.length === 0) return [];
-      const { data: relations, error: relationsError } = await supabase
-        .from('turma_instrutores')
-        .select('turma_id')
-        .in('instrutor_id', instructorIds);
-      if (relationsError) throw serviceError('Não foi possível pesquisar as turmas dos instrutores', relationsError);
-      return ((relations ?? []) as Array<{ turma_id: string }>).map((relation) => relation.turma_id);
-    };
 
-    const courseTerm = courseSearch?.trim();
-    if (courseTerm) {
+    const courseTerms = [courseSearch?.trim(), filters?.course.trim()].filter(Boolean) as string[];
+    for (const courseTerm of courseTerms) {
       const courseIds = await findCourseIds(courseTerm);
       if (courseIds.length === 0) return { data: [], total: 0 };
       query = query.in('curso_id', courseIds);
@@ -258,20 +257,36 @@ export const classService = {
 
     const term = search?.trim();
     if (term) {
-      const safeTerm = escapeFilterTerm(term);
-      const [courseIds, instructorClassIds] = await Promise.all([
-        findCourseIds(term),
-        findInstructorClassIds(term),
-      ]);
-      const searchFilters = [`id_anac.ilike.%${safeTerm}%`];
-      const internalTerm = term.toLowerCase().startsWith('t-op-') ? term.slice(5).trim() : term;
-      if (/^\d+$/.test(internalTerm)) searchFilters.push(`id_interno_escola.eq.${internalTerm}`);
-      if (courseIds.length > 0) searchFilters.push(`curso_id.in.(${courseIds.join(',')})`);
-      if (instructorClassIds.length > 0) searchFilters.push(`id.in.(${instructorClassIds.join(',')})`);
-      query = query.or(searchFilters.join(','));
+      const internalMatch = term.match(/^t-(?:op-)?(\d+)$/i);
+      if (internalMatch) {
+        query = query.eq('id_interno_escola', Number(internalMatch[1]));
+      } else if (/^t-/i.test(term)) {
+        return { data: [], total: 0 };
+      } else {
+        const courseIds = await findCourseIds(term);
+        if (courseIds.length === 0) return { data: [], total: 0 };
+        query = query.in('curso_id', courseIds);
+      }
     }
 
-    const { data, count, error } = await query;
+    const activeFilters = filters ?? {
+      idAnac: '', idInterno: '', course: '', shift: '', statusTurma: '', statusHistorico: '',
+      city: '', uf: '', startDateFrom: '', startDateTo: '',
+    };
+    if (activeFilters.idAnac.trim()) query = query.eq('id_anac', activeFilters.idAnac.trim().slice(0, 100));
+    if (activeFilters.idInterno.trim()) {
+      if (!/^\d+$/.test(activeFilters.idInterno.trim())) return { data: [], total: 0 };
+      query = query.eq('id_interno_escola', Number(activeFilters.idInterno.trim()));
+    }
+    if (activeFilters.shift.trim()) query = query.eq('turno', activeFilters.shift.trim());
+    if (activeFilters.statusTurma.trim()) query = query.eq('status_turma', activeFilters.statusTurma.trim());
+    if (activeFilters.statusHistorico.trim()) query = query.eq('status_historico', activeFilters.statusHistorico.trim());
+    if (activeFilters.city.trim()) query = query.ilike('cidade', `%${escapeFilterTerm(activeFilters.city)}%`);
+    if (activeFilters.uf.trim()) query = query.eq('uf', activeFilters.uf.trim().toUpperCase().slice(0, 2));
+    if (activeFilters.startDateFrom) query = query.gte('data_inicio', activeFilters.startDateFrom);
+    if (activeFilters.startDateTo) query = query.lte('data_inicio', activeFilters.startDateTo);
+
+    const { data, count, error } = await query.range(from, to);
     if (error) throw serviceError('Não foi possível carregar as turmas', error);
     return { data: (data ?? []) as Turma[], total: count ?? 0 };
   },
