@@ -47,7 +47,9 @@
   - prazo futuro: mostrar dias restantes;
   - prazo vencido: mostrar atraso;
   - nota lançada: mostrar “Nota Lançada”.
-- O status histórico `Encerrado` da planilha será tratado como `nota_lancada = true`, desde que essa interpretação seja confirmada pelo cliente.
+- A planilha traz o valor histórico `Encerrado`, mas o sistema atual usa `status_turma` para operação e aceita apenas `Ativa`/`Cancelada`.
+- Para copiar o valor sem perder o histórico, recomenda-se uma coluna separada `status_historico`; como alternativa, pode-se ampliar a enumeração existente. Essa decisão deve ser confirmada antes de qualquer alteração no banco.
+- `Encerrado` não deve ser convertido automaticamente em `nota_lancada = true` nem substituir o status operacional sem confirmação específica.
 - `No prazo` não deve ser confundido com encerramento ou cancelamento.
 - Deve existir uma situação separada para turma cancelada.
 - Uma turma cancelada deve mostrar `Cancelada` e não deve ser apresentada como atrasada ou pendente de lançamento.
@@ -118,7 +120,7 @@ A conversão para usuário deverá ser uma ação posterior, feita quando o aces
   - na pré-visualização da migração.
 - A carga horária do curso em `cursos.carga_horaria_total` continua existindo como referência padrão do curso.
 - A carga horária real da turma pode ser diferente da carga horária padrão do curso.
-- O significado exato da coluna `H/a` ainda deve ser confirmado com o cliente antes de sua importação definitiva.
+- `H/a` não exige nova regra neste momento: pode usar a carga horária já existente, sem afirmar equivalência definitiva entre as duas nomenclaturas.
 
 ### 2.9 Software
 
@@ -133,12 +135,17 @@ A conversão para usuário deverá ser uma ação posterior, feita quando o aces
 
 ### 2.10 Pasta e documentos
 
-- A coluna `PASTA` representa caminhos antigos da rede interna.
-- O caminho antigo não precisa ser uma coluna definitiva da turma.
-- Os documentos serão migrados em etapa posterior para o Storage do Supabase.
-- Cada documento deverá ser associado ao aluno correto e registrado na tabela `documentos`.
-- O caminho antigo poderá ser usado temporariamente para localizar e conferir os arquivos.
-- Não tentar importar um caminho de rede como se fosse um documento do sistema.
+- `referência`, `CÓPIA TURMA` e `PASTA` serão desconsideradas na primeira migração e não são pendências para essa etapa.
+- Documentos históricos e o vínculo de pasta ficam para uma fase futura, fora do escopo da primeira migração.
+- A coluna `PASTA` representa caminhos antigos da rede interna, mas não deve ser importada como documento nem como vínculo definitivo neste momento.
+- Em fase futura, os documentos poderão ser migrados para o Storage do Supabase, associados ao aluno correto e registrados na tabela `documentos`, após definição do vínculo da pasta.
+
+### 2.11 Valor de v.t.
+
+- Nesta fase, `v.t.` deve ser apenas preservado como o valor vindo da planilha.
+- Não haverá regra automática, sequência de ofício nem associação obrigatória a curso.
+- Antes da carga, a futura estrutura precisa apenas de uma coluna de destino para esse valor, com nome neutro como `vt` ou `numero_vt`; o tipo da coluna ainda deve ser confirmado.
+- A coluna não será criada agora. A definição de qualquer regra operacional de visita técnica fica para uma fase futura.
 
 ## 3. Mapeamento inicial da planilha de turmas
 
@@ -159,17 +166,17 @@ A conversão para usuário deverá ser uma ação posterior, feita quando o aces
 | `INSTRUTOR` | Relação turma/pessoa | Função padrão: Instrutor/Tutor. |
 | `CONVIDADO` | Relação turma/pessoa | Função: Convidado. |
 | `APLICADOR PR` | Aplicador/relação | Resolver regra final do aplicador. |
-| `Status` | `nota_lancada`/cancelamento | `Encerrado` tende a significar nota lançada; `Cancelado` será situação própria. |
+| `Status` | `status_turma` + destino histórico a confirmar | A planilha traz `Encerrado`, enquanto `status_turma` aceita `Ativa`/`Cancelada`; preferir `status_historico` separado ou confirmar ampliação da enumeração antes de alterar o banco. |
 | `Prazo` | Campos de prazo e histórico | Validar como preservar `No prazo` quando faltarem datas. |
 | `S/N` | Campo operacional da turma | Converter Sim/Não conforme significado confirmado. |
-| `MAT` | Ignorado na etapa de turmas | Quantidade será calculada pelas matrículas. |
+| `MAT` | Contagem derivada de matrículas | Pode continuar como contagem de matrículas; não exige nova regra. |
 | `SOFTWARE` | `turmas.software_utilizado` | Tratar como característica da turma. |
-| `H/a` | Campo de carga horária da turma | Confirmar significado antes de importar. |
+| `H/a` | Campo de carga horária da turma | Usar a carga horária já existente, sem afirmar equivalência definitiva. |
 | `obs.` | `turmas.anotacoes_turma` | Preservar observações. |
-| `CÓPIA TURMA` | Metadado histórico | Definir destino após explicação do cliente. |
-| `v.t.` | Ainda não definido | Aguardar esclarecimento. |
-| `referência` | Metadado histórico | Definir se será necessário preservar. |
-| `PASTA` | Referência temporária | Não importar como documento final. |
+| `CÓPIA TURMA` | Desconsiderada na primeira migração | Sem destino nesta etapa. |
+| `v.t.` | Coluna futura neutra (`vt`/`numero_vt`) | Preservar apenas o valor da planilha; tipo a confirmar, sem regra automática. |
+| `referência` | Desconsiderada na primeira migração | Sem destino nesta etapa. |
+| `PASTA` | Desconsiderada na primeira migração | Documentos e vínculo de pasta ficam para fase futura. |
 
 ## 4. Recursos necessários antes da importação
 
@@ -204,16 +211,15 @@ A conversão para usuário deverá ser uma ação posterior, feita quando o aces
 
 ## 6. Pendências aguardando o cliente
 
-- Confirmar se `Encerrado` sempre significa que a nota foi lançada.
-- Confirmar o significado de `H/a`.
-- Confirmar o significado de `v.t.`.
-- Confirmar o significado de `CÓPIA TURMA`.
+- Confirmar o destino do valor histórico `Encerrado`: criar `status_historico` separado ou ampliar a enumeração de `status_turma`, antes de qualquer alteração no banco.
+- Confirmar o tipo da futura coluna neutra de `v.t.` (`vt`/`numero_vt`), sem criar a coluna nesta etapa.
 - Confirmar o significado completo da coluna `S/N`.
-- Confirmar se `SOFTWARE` sempre pertence à turma.
 - Confirmar como o `APLICADOR PR` deve ser representado.
 - Confirmar como preservar `No prazo` quando não houver data de lançamento.
-- Confirmar a referência exata usada na planilha de alunos para identificar a turma.
-- Definir como os arquivos PDF serão fornecidos para a futura migração documental.
+- Confirmar o identificador usado na planilha de alunos para localizar a turma correspondente.
+- Definir, em fase futura, como os arquivos PDF serão fornecidos para a migração documental.
+
+Não são pendências desta primeira migração: `referência`, `CÓPIA TURMA` e `PASTA` serão desconsideradas; documentos históricos e vínculo de pasta ficam para uma fase futura. `MAT` continuará como contagem de matrículas, `H/a` poderá usar a carga horária existente sem equivalência definitiva, e a reconciliação/deduplicação de pessoas será lógica da futura importação.
 
 ## 7. Estado da preparação atual
 
@@ -246,30 +252,30 @@ Esta auditoria cruza o modelo de planilha informado pelo usuário com a inspeç�
 
 ### 8.2 Suporte parcial ou ausente
 
-- Status histórico `Encerrado` versus `Ativa`/`Cancelada`: o schema de `turmas` aceita `Ativa` e `Cancelada`, enquanto `Encerrado` aparece separado da lógica operacional de prazo/nota. Não existe ainda uma regra de preservação histórica sem reduzir `Encerrado` a `nota_lancada`.
-- `v.t.` e numeração sequencial de ofício por visita técnica: não há campo nem sequência específica para esses dados. `concessionaria_visita_id` existe como FK para `concessionarias`, mas não representa número de ofício nem a regra de visita.
-- Regra de visita técnica por curso: os cursos **Formação em Base Cosec** e **Formação de Vigilante Aversec** exigem visita técnica. Para cada turma desses cursos, `v.t.` deve receber o próximo número sequencial de ofício; turmas de cursos sem visita técnica permanecem com `v.t.` zerado. A numeração é global, seguindo a sequência de ofícios conforme a ordem histórica das turmas, e não reinicia por curso, salvo confirmação posterior. Ainda falta definir o campo/modelo de destino e o comportamento quando a importação ocorrer fora de ordem.
-- `PASTA`: o caminho antigo pode ser lido como referência de origem, mas não existe vínculo definitivo da turma com esse caminho.
-- `referência` e `CÓPIA TURMA`: não há campos ou regras de destino definidos para esses metadados históricos.
-- Preservação de caminho/documentos: a tabela `documentos` atual pertence a usuários por `usuario_id`; ela não possui vínculo com turmas nem com a coluna `PASTA`. Portanto, o caminho antigo e a associação documental da planilha não estão preservados pelo modelo atual.
-- Identidade e duplicidade de pessoas: `pessoas` permite cadastro sem login e pode apontar para um perfil legado, mas ainda não existe uma chave estável de reconciliação nem uma regra de deduplicação para nomes, CPF ausente ou pessoas que aparecem em múltiplas funções.
+- Status histórico `Encerrado` versus `Ativa`/`Cancelada`: o sistema atual usa `status_turma` para operação e aceita `Ativa`/`Cancelada`, enquanto a planilha traz `Encerrado`. Para preservar o valor histórico sem confundi-lo com a operação, recomenda-se `status_historico` em coluna separada; como alternativa, pode-se ampliar a enumeração existente. Essa decisão deve ser confirmada antes de alterar o banco.
+- `v.t.`: nesta fase, deve ser preservado somente como valor da planilha, sem regra automática, sequência de ofício ou associação obrigatória a curso. Falta apenas confirmar o tipo e criar, antes da carga, uma coluna de destino neutra como `vt`/`numero_vt`; essa criação não será feita agora.
+- `referência`, `CÓPIA TURMA` e `PASTA`: serão desconsideradas na primeira migração. Documentos históricos e vínculo de pasta ficam para fase futura e não bloqueiam a preparação atual.
+- `MAT` e `H/a`: não exigem nova regra neste momento. `MAT` pode continuar como contagem de matrículas, e `H/a` pode usar a carga horária já existente, sem afirmar equivalência definitiva.
+- Identidade e duplicidade de pessoas: reconciliação/deduplicação é lógica da futura importação, não uma lacuna estrutural que bloqueie a preparação. A regra deverá usar CPF quando houver e encaminhar nomes ambíguos para revisão manual.
 
 ### 8.3 Riscos e decisões prévias obrigatórias
 
-Antes de qualquer futura carga, é necessário:
+Os bloqueios estruturais mínimos antes de qualquer futura carga são:
 
-1. Não recalcular ou reinterpretar silenciosamente o histórico; definir quais valores históricos serão preservados literalmente e quais terão uma representação operacional derivada.
-2. Preservar os IDs explícitos da planilha (`TURMA`/ID interno e `ANAC`) e sincronizar a sequência interna após a carga, para que novos cadastros não colidam com os IDs importados.
-3. Mapear previamente os nomes da planilha para os cursos existentes, tratando divergências como decisão e não como correspondência automática.
-4. Separar a situação operacional (`Ativa`/`Cancelada`, prazo e notas) do status histórico da planilha, incluindo `Encerrado`.
-5. Definir a semântica e o destino de `referência`, `CÓPIA TURMA`, `H/a` e `MAT`, sem transformar contagens derivadas em fonte histórica autoritativa.
-6. Definir uma chave estável de pessoas, a política para duplicidades e a forma de vincular a mesma pessoa a funções diferentes.
-7. Definir o vínculo da pasta e dos documentos à turma/aluno, incluindo como preservar ou substituir o caminho legado antes de usar a tabela de documentos atual.
-8. Definir o campo/modelo de destino de `v.t.` e o comportamento da numeração global de ofícios quando a importação ocorrer fora da ordem histórica; a regra dos dois cursos que exigem visita técnica e a não reinicialização por curso estão registradas, mas ainda dependem dessas decisões de modelagem e importação.
+1. Confirmar o destino do valor histórico `Encerrado`: coluna separada `status_historico` ou ampliação da enumeração de `status_turma`.
+2. Confirmar o tipo e criar a coluna neutra de destino de `v.t.` (`vt`/`numero_vt`).
+
+As demais regras pertencem à lógica da futura importação e não bloqueiam a preparação estrutural: preservar os IDs explícitos da planilha, mapear cursos, validar vínculos, reconciliar/deduplicar pessoas usando CPF quando houver e revisão manual para nomes ambíguos, além de gerar prévia e tratar erros. A associação de documentos e pastas também fica para fase futura. `referência`, `CÓPIA TURMA` e `PASTA` não serão carregadas na primeira migração.
 
 ### 8.4 Conclusão da auditoria
 
-O banco e o app estão preparados para receber a futura camada de migração: os principais dados de turma, vínculos de pessoas, cursos, endereços, matrículas e contagens derivadas já têm representação estrutural. Porém, ainda não estão completos para executar uma carga fiel das planilhas sem as decisões e os modelos para status histórico, identificadores documentais, visitas técnicas, pessoas e documentos descritos acima. A migração permanece fora do escopo desta etapa.
+O mínimo estrutural restante é:
+
+1. Confirmar o destino de `status_historico` para preservar `Encerrado` sem confundi-lo com `status_turma`.
+2. Criar a coluna neutra de `v.t.` (`vt`/`numero_vt`), após confirmar o tipo.
+3. Depois disso, construir o módulo de importação, incluindo preview e mapeamento.
+
+Nenhuma migração será construída agora: não serão criados neste momento a coluna de VT, `status_historico`, parser Excel, staging, preview, lotes, importação, SQL ou alterações de UI. Reconciliação/deduplicação de pessoas, documentos históricos e vínculo de pasta permanecem como lógica ou escopo de fases futuras.
 
 ## 9. Próxima ordem de trabalho, quando a migração for autorizada
 
