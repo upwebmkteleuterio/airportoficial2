@@ -105,16 +105,16 @@ export default function Addresses() {
       </div>
 
       <div className="flex-1 border border-gray-200 dark:border-slate-800 rounded-xl overflow-hidden bg-white dark:bg-slate-900 shadow-sm flex flex-col min-h-[350px]">
-        <div className="overflow-x-auto overflow-y-auto flex-1 custom-scrollbar">
-          <table className="w-full text-left border-collapse whitespace-nowrap text-xs">
+        <div className="overflow-x-hidden overflow-y-auto flex-1 custom-scrollbar">
+          <table className="w-full table-fixed text-left border-collapse text-xs">
             <thead className="sticky top-0 bg-slate-50 dark:bg-slate-850 z-10 border-b border-gray-200 dark:border-slate-800 font-bold uppercase tracking-wider text-gray-500 dark:text-slate-400">
               <tr>
-                <th className="px-4 py-3 w-10 text-center border-r border-gray-200/50 dark:border-slate-800/50" aria-label="Ações"></th>
-                <th className="px-4 py-3 border-r border-gray-200/50 dark:border-slate-800/50">Logradouro / Nome</th>
-                <th className="px-4 py-3 border-r border-gray-200/50 dark:border-slate-800/50">Cidade</th>
-                <th className="px-4 py-3 border-r border-gray-200/50 dark:border-slate-800/50 text-center">Estado</th>
-                <th className="px-4 py-3 border-r border-gray-200/50 dark:border-slate-800/50">Data de criação</th>
-                <th className="px-4 py-3 border-r border-gray-200/50 dark:border-slate-800/50 text-center">Status</th>
+                <th className="w-12 px-2 py-3 text-center border-r border-gray-200/50 dark:border-slate-800/50" aria-label="Ações"></th>
+                <th className="w-[30%] px-3 py-3 border-r border-gray-200/50 dark:border-slate-800/50">Logradouro / Nome</th>
+                <th className="w-[19%] px-3 py-3 border-r border-gray-200/50 dark:border-slate-800/50">Cidade</th>
+                <th className="w-[10%] px-2 py-3 border-r border-gray-200/50 dark:border-slate-800/50 text-center">Estado</th>
+                <th className="w-[23%] px-3 py-3 border-r border-gray-200/50 dark:border-slate-800/50">Data de criação</th>
+                <th className="w-[12%] px-2 py-3 border-r border-gray-200/50 dark:border-slate-800/50 text-center">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-150 dark:divide-slate-800 text-gray-700 dark:text-slate-200 font-mono">
@@ -167,11 +167,11 @@ export default function Addresses() {
                         </div>
                       </td>
 
-                      <td className="px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 font-sans font-semibold text-slate-800 dark:text-slate-200">{address.logradouro}</td>
-                      <td className="px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30">{address.cidade}</td>
-                      <td className="px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 text-center">{address.estado}</td>
-                      <td className="px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30">{formatCreatedAt(address.created_at)}</td>
-                      <td className="px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 text-center">
+                      <td className="px-3 py-2 align-top whitespace-normal break-words border-r border-gray-200/30 dark:border-slate-800/30 font-sans font-semibold text-slate-800 dark:text-slate-200" title={address.logradouro}>{address.logradouro}</td>
+                      <td className="px-3 py-2 align-top whitespace-normal break-words border-r border-gray-200/30 dark:border-slate-800/30" title={address.cidade}>{address.cidade}</td>
+                      <td className="px-2 py-2 align-top whitespace-normal break-words border-r border-gray-200/30 dark:border-slate-800/30 text-center" title={address.estado}>{address.estado}</td>
+                      <td className="px-3 py-2 align-top whitespace-normal break-words border-r border-gray-200/30 dark:border-slate-800/30">{formatCreatedAt(address.created_at)}</td>
+                      <td className="px-2 py-2 align-top whitespace-normal break-words border-r border-gray-200/30 dark:border-slate-800/30 text-center">
                         <button
                           type="button"
                           onClick={() => void handleToggleActive(address)}

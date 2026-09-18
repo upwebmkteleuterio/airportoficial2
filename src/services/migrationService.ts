@@ -75,6 +75,10 @@ export function normalizeMigrationValue(value: unknown): string {
   return String(value ?? '').replace(/\u00a0/g, ' ').trim();
 }
 
+export function normalizeClassSchedule(value: unknown): string {
+  return normalizeMigrationValue(value).replace(/\s*turno\s*:.*/i, '').trim();
+}
+
 export function normalizeComparison(value: string): string {
   return normalizeMigrationValue(value)
     .normalize('NFD')
@@ -335,7 +339,7 @@ function toClassPayload(row: MigrationParsedRow, course: ExistingCourse, address
   const uf = normalizeMigrationValue(row.values.UF).toUpperCase();
   return {
     id: newServiceId('turma'), id_interno_escola: interno, id_anac: normalizeMigrationValue(row.values.ANAC), curso_id: course.id,
-    turno: normalizeShift(row.values.TURNO), horario_aulas: normalizeMigrationValue(row.values['HORÁRIO']),
+    turno: normalizeShift(row.values.TURNO), horario_aulas: normalizeClassSchedule(row.values['HORÁRIO']),
     data_inicio: parseDate(row.values['INÍCIO']), data_termino: parseDate(row.values['TÉRMINO']), endereco_id: addressId,
     endereco_realizacao: normalizeMigrationValue(row.values.Endereço), cidade: city, uf,
     qt_alunos_matriculados: 0, horario_prova_1_chamada: normalizeMigrationValue(row.values['1ª CH']) || null,
