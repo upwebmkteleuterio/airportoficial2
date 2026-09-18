@@ -86,7 +86,7 @@ export default function Migration() {
   };
 
   return (
-    <main className="min-h-full bg-slate-50 px-4 py-6 dark:bg-slate-950 md:px-8">
+    <main className="flex-1 min-h-0 overflow-y-auto bg-slate-50 px-4 py-6 dark:bg-slate-950 md:px-8">
       <div className="mx-auto max-w-7xl space-y-6">
         <header>
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-teal-600 dark:text-teal-400">Operação controlada</p>
