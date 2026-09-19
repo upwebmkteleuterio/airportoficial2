@@ -1,8 +1,5 @@
-import { X } from "lucide-react";
-import {
-    CLASS_DEADLINE_ALERT_LABELS,
-    ClassDeadlineAlertType,
-} from "../../utils/classDeadlineAlerts";
+import { AlertCircle, AlertTriangle, Clock, X, type LucideIcon } from "lucide-react";
+import { ClassDeadlineAlertType } from "../../utils/classDeadlineAlerts";
 
 interface ClassDeadlineAlertTagsProps {
     counts: Record<ClassDeadlineAlertType, number>;
@@ -11,38 +8,60 @@ interface ClassDeadlineAlertTagsProps {
     onClear: () => void;
 }
 
+const tagIcons: Record<ClassDeadlineAlertType, LucideIcon> = {
+    atrasadas: AlertCircle,
+    "vence-em-1-dia": AlertTriangle,
+    "prazo-curto": Clock,
+};
+
+const tagLabels: Record<ClassDeadlineAlertType, string> = {
+    atrasadas: "Atrasadas",
+    "vence-em-1-dia": "Vence em 1 dia",
+    "prazo-curto": "Prazo Curto",
+};
+
 const tagStyles: Record<ClassDeadlineAlertType, string> = {
-    atrasadas: "border-red-700 bg-red-600 text-white hover:bg-red-700",
-    "vence-em-1-dia": "border-red-200 bg-red-50 text-red-700 hover:bg-red-100 hover:text-red-800",
-    "prazo-curto": "border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100 hover:text-orange-800",
+    atrasadas: "bg-red-600 text-white border-red-700 hover:bg-red-700 hover:shadow-sm",
+    "vence-em-1-dia": "bg-red-50 text-red-700 border-red-200 hover:bg-red-100 hover:text-red-800 hover:border-red-300",
+    "prazo-curto": "bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100 hover:text-orange-800 hover:border-orange-300",
 };
 
 const activeTagStyles: Record<ClassDeadlineAlertType, string> = {
-    atrasadas: "border-red-900 bg-red-800",
-    "vence-em-1-dia": "border-red-300 bg-red-100 text-red-900",
-    "prazo-curto": "border-orange-300 bg-orange-100 text-orange-900",
+    atrasadas: "bg-red-800 text-white border-red-900 ring-2 ring-red-300 ring-offset-1 shadow-sm",
+    "vence-em-1-dia": "bg-red-100 text-red-900 border-red-300 ring-2 ring-red-200 ring-offset-1 shadow-sm",
+    "prazo-curto": "bg-orange-100 text-orange-900 border-orange-300 ring-2 ring-orange-200 ring-offset-1 shadow-sm",
 };
 
 export function ClassDeadlineAlertTags({ counts, activeAlert, onSelect, onClear }: ClassDeadlineAlertTagsProps) {
-    const availableAlerts = (Object.keys(CLASS_DEADLINE_ALERT_LABELS) as ClassDeadlineAlertType[])
+    const availableAlerts = (Object.keys(tagLabels) as ClassDeadlineAlertType[])
         .filter((alert) => counts[alert] > 0);
 
     if (availableAlerts.length === 0) return null;
 
     return (
-        <div className="flex flex-wrap items-center gap-2" aria-label="Alertas de prazo das turmas">
+        <div
+            className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-100 bg-slate-50 px-4 py-2 dark:border-slate-800 dark:bg-slate-900/70"
+            aria-label="Alertas de prazo das turmas"
+        >
+            <span className="mr-1 text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-300">
+                Alertas:
+            </span>
             {availableAlerts.map((alert) => {
                 const isActive = activeAlert === alert;
+                const AlertIcon = tagIcons[alert];
+
                 return (
                     <button
                         key={alert}
                         type="button"
                         onClick={() => onSelect(alert)}
                         aria-pressed={isActive}
-                        aria-label={`${CLASS_DEADLINE_ALERT_LABELS[alert]}: ${counts[alert]} turma${counts[alert] === 1 ? "" : "s"}`}
-                        className={`rounded-full border px-2.5 py-1 text-[10px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 ${isActive ? activeTagStyles[alert] : tagStyles[alert]} ${isActive ? "ring-2 ring-teal-500 ring-offset-1 dark:ring-offset-slate-950" : ""}`}
+                        aria-label={`${tagLabels[alert]}: ${counts[alert]} turma${counts[alert] === 1 ? "" : "s"}`}
+                        title={`Filtrar turmas: ${tagLabels[alert]}`}
+                        className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 ${isActive ? activeTagStyles[alert] : tagStyles[alert]}`}
                     >
-                        {CLASS_DEADLINE_ALERT_LABELS[alert]} ({counts[alert]})
+                        <AlertIcon size={16} aria-hidden="true" />
+                        <span>{counts[alert]} {tagLabels[alert]}</span>
                     </button>
                 );
             })}
@@ -51,10 +70,10 @@ export function ClassDeadlineAlertTags({ counts, activeAlert, onSelect, onClear 
                     type="button"
                     onClick={onClear}
                     aria-label="Limpar filtro de alerta de prazo"
-                    title="Limpar filtro de alerta"
-                    className="inline-flex items-center justify-center rounded-full border border-gray-300 bg-white p-1.5 text-slate-500 transition-colors hover:bg-gray-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+                    title="Limpar filtros"
+                    className="ml-2 rounded-full p-1.5 text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:hover:bg-slate-800 dark:hover:text-slate-200"
                 >
-                    <X className="h-4 w-4" aria-hidden="true" />
+                    <X size={16} aria-hidden="true" />
                 </button>
             )}
         </div>
