@@ -75,6 +75,14 @@ import { HelpModal } from "../components/ui/HelpModal";
 import { SlidePanel } from "../components/ui/SlidePanel";
 import { ConfirmDeleteModal } from "../components/ui/ConfirmDeleteModal";
 import { TruncatedInfoTooltip } from "../components/ui/TruncatedInfoTooltip";
+import { ClassDeadlineAlertModal } from "../components/classes/ClassDeadlineAlertModal";
+import { ClassDeadlineAlertTags } from "../components/classes/ClassDeadlineAlertTags";
+import {
+    ClassDeadlineAlertType,
+    classifyClassDeadlineAlert,
+    getDaysUntilClassDeadline,
+    isClassDeadlineAlertWithinFiveDays,
+} from "../utils/classDeadlineAlerts";
 
 type ClassDraft = {
     formIdAnac: string;
@@ -248,6 +256,8 @@ export function Dashboard() {
     const isInstructor = userLogged?.role === 'INSTRUTOR';
 
     const [currentPage, setCurrentPage] = useState(1);
+    const [activeDeadlineAlert, setActiveDeadlineAlert] = useState<ClassDeadlineAlertType | null>(null);
+    const [isDeadlineAlertModalOpen, setIsDeadlineAlertModalOpen] = useState(false);
     const [turmaInstructorsMap, setTurmaInstructorsMap] = useState<Record<string, { instrutor_id: string; funcao: string }[]>>({});
     const [advancedFilters, setAdvancedFilters] = useState<ClassFilters>({ ...DEFAULT_CLASS_FILTERS });
     const [draftAdvancedFilters, setDraftAdvancedFilters] = useState<ClassFilters>({ ...DEFAULT_CLASS_FILTERS });
@@ -395,6 +405,7 @@ export function Dashboard() {
     const cancelClassSubmitRef = useRef(false);
     const deleteClassSubmitRef = useRef(false);
     const launchClassSubmitRef = useRef(false);
+    const deadlineAlertDatasetRef = useRef<string | null>(null);
 
     const currentClassDraft = useMemo<ClassDraft>(() => ({
         formIdAnac,
@@ -788,13 +799,54 @@ export function Dashboard() {
         };
     }, [modals.newClassOpen]);
 
-    const filteredClasses = classes;
-    const paginatedClasses = classes;
-    const totalPages = Math.ceil(total / itemsPerPage) || 1;
+    const classDeadlineAlerts = useMemo(
+        () => classes.map((turma) => ({ turma, alert: classifyClassDeadlineAlert(turma) })),
+        [classes]
+    );
+    const deadlineAlertCounts = useMemo(() => classDeadlineAlerts.reduce<Record<ClassDeadlineAlertType, number>>(
+        (counts, { alert }) => {
+            if (alert) counts[alert.type] += 1;
+            return counts;
+        },
+        { atrasadas: 0, "vence-em-1-dia": 0, "prazo-curto": 0 }
+    ), [classDeadlineAlerts]);
+    const deadlineModalClasses = useMemo(
+        () => classes
+            .filter((turma) => isClassDeadlineAlertWithinFiveDays(turma))
+            .sort((first, second) => (getDaysUntilClassDeadline(first) ?? 0) - (getDaysUntilClassDeadline(second) ?? 0)),
+        [classes]
+    );
+    const deadlineModalDatasetKey = deadlineModalClasses
+        .map((turma) => `${turma.id}:${turma.data_lancamento_notas ?? ""}:${turma.nota_lancada ? "1" : "0"}`)
+        .join(",");
+    const filteredClasses = activeDeadlineAlert
+        ? classDeadlineAlerts.filter(({ alert }) => alert?.type === activeDeadlineAlert).map(({ turma }) => turma)
+        : classes;
+    const paginatedClasses = filteredClasses;
+    const visibleTotal = activeDeadlineAlert ? filteredClasses.length : total;
+    const totalPages = Math.ceil(visibleTotal / itemsPerPage) || 1;
 
     useEffect(() => {
         setCurrentPage(1);
-    }, [filters.classSearchTerm, filters.classCourseFilter, advancedFilters]);
+    }, [filters.classSearchTerm, filters.classCourseFilter, advancedFilters, activeDeadlineAlert]);
+
+    useEffect(() => {
+        if (activeDeadlineAlert && deadlineAlertCounts[activeDeadlineAlert] === 0) {
+            setActiveDeadlineAlert(null);
+        }
+    }, [activeDeadlineAlert, deadlineAlertCounts]);
+
+    useEffect(() => {
+        if (!isLoading && deadlineModalDatasetKey) {
+            if (deadlineAlertDatasetRef.current !== deadlineModalDatasetKey) {
+                deadlineAlertDatasetRef.current = deadlineModalDatasetKey;
+                setIsDeadlineAlertModalOpen(true);
+            }
+        } else if (!deadlineModalDatasetKey) {
+            deadlineAlertDatasetRef.current = null;
+            setIsDeadlineAlertModalOpen(false);
+        }
+    }, [deadlineModalDatasetKey, isLoading]);
 
     const handleRemoveInstructor = (instructorId: string) => {
         setSelectedInstructors(selectedInstructors.filter(id => id !== instructorId));
@@ -1009,6 +1061,12 @@ export function Dashboard() {
                     <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">Acompanhamento e controle de classes ativas e agendadas.
                                   </p>
                 </div>
+                <ClassDeadlineAlertTags
+                    counts={deadlineAlertCounts}
+                    activeAlert={activeDeadlineAlert}
+                    onSelect={(alert) => setActiveDeadlineAlert((current) => current === alert ? null : alert)}
+                    onClear={() => setActiveDeadlineAlert(null)}
+                />
                 <div className="flex items-center justify-end gap-2">
                     <button
                         type="button"
@@ -1264,6 +1322,7 @@ export function Dashboard() {
                                                 setFilter("classCourseFilter", null);
                                                 setAdvancedFilters({ ...DEFAULT_CLASS_FILTERS });
                                                 setDraftAdvancedFilters({ ...DEFAULT_CLASS_FILTERS });
+                                                setActiveDeadlineAlert(null);
                                             }}
                                             className="mt-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-[10px] font-bold rounded-lg text-slate-700 dark:text-slate-200 transition-colors cursor-pointer">Limpar Filtros de Busca
                                                                   </button>
@@ -1549,9 +1608,9 @@ export function Dashboard() {
                 {}
                 <div className="px-5 py-4 border-t border-gray-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4 font-sans text-xs bg-slate-50 dark:bg-slate-850">
                     <span className="text-gray-500 dark:text-slate-400 font-medium">
-                        {total === 0
+                        {visibleTotal === 0
                             ? 'Exibindo 0 de 0 turmas'
-                            : `Exibindo ${(currentPage - 1) * itemsPerPage + 1}-${Math.min(currentPage * itemsPerPage, total)} de ${total} turmas`}
+                            : `Exibindo ${(currentPage - 1) * itemsPerPage + 1}-${Math.min(currentPage * itemsPerPage, visibleTotal)} de ${visibleTotal} turmas`}
                     </span>
 
                     <div className="flex items-center border border-gray-300 dark:border-slate-750 rounded-lg bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
@@ -2089,6 +2148,12 @@ export function Dashboard() {
                     </div>
                 </div>)}
             </SlidePanel>
+
+            <ClassDeadlineAlertModal
+                isOpen={isDeadlineAlertModalOpen}
+                classes={deadlineModalClasses}
+                onClose={() => setIsDeadlineAlertModalOpen(false)}
+            />
 
             <HelpModal
                 isOpen={isHelpOpen}
