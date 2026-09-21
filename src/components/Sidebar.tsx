@@ -142,7 +142,7 @@ export function Sidebar() {
         id={`sidebar-nav-${item.id}`}
         onClick={() => handleNav(item.id)}
         aria-current={isActive ? 'page' : undefined}
-        className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3 px-4'} py-3 rounded text-sm font-semibold transition-colors text-left ${
+        className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3 px-4'} py-3 rounded text-sm font-semibold transition-colors text-left cursor-pointer ${
           isActive
             ? 'border-l-4 border-teal-600 dark:border-teal-500 bg-teal-50/50 dark:bg-slate-800 text-teal-700 dark:text-teal-400'
             : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/50 dark:hover:bg-slate-800/50 border-l-4 border-transparent'

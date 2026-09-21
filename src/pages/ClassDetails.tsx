@@ -905,7 +905,7 @@ function ClassDetails() {
           <div className="flex-1 flex flex-col gap-4 min-h-0">
             {/* Actions Panel inside Tab */}
             <div className="flex flex-wrap items-center justify-between gap-4 shrink-0 font-sans">
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-6">
                 {!isInstructor && (<CreateMenu
                   onSelect={(label) => {
                     if (label === 'Adicionar aluno existente') {
@@ -922,8 +922,8 @@ function ClassDetails() {
                     type="search"
                     value={studentSearch}
                     onChange={(event) => setStudentSearch(event.target.value)}
-                    placeholder="Buscar aluno por nome ou CPF..."
-                    className="w-56 pl-8 pr-3 py-2 border border-gray-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-850 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    placeholder="Buscar por nome ou CPF..."
+                    className="w-64 pl-8 pr-3 py-2 border border-gray-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-850 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500"
                   />
                 </label>
               </div>
@@ -1141,15 +1141,15 @@ function ClassDetails() {
                   {matriculasTotal === 0 ? 'Exibindo 0 de 0 alunos' : `Exibindo ${(studentPage - 1) * studentPageSize + 1}-${Math.min(studentPage * studentPageSize, matriculasTotal)} de ${matriculasTotal} alunos`}
                 </span>
                 <div className="flex items-center border border-gray-300 dark:border-slate-700 rounded-lg overflow-hidden bg-white dark:bg-slate-900">
-                  <button type="button" onClick={() => setStudentPage((page) => Math.max(1, page - 1))} disabled={studentPage === 1} aria-label="Página anterior de alunos" className="p-2 border-r border-gray-300 dark:border-slate-700 disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-teal-500">
+                  <button type="button" onClick={() => setStudentPage((page) => Math.max(1, page - 1))} disabled={studentPage === 1} aria-label="Página anterior de alunos" className="p-2 cursor-pointer border-r border-gray-300 dark:border-slate-700 disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-teal-500">
                     <ChevronLeft className="w-4 h-4" />
                   </button>
                   {Array.from({ length: Math.max(1, Math.ceil(matriculasTotal / studentPageSize)) }).map((_, index) => (
-                    <button key={index + 1} type="button" onClick={() => setStudentPage(index + 1)} aria-label={`Página ${index + 1} de alunos`} className={`px-3 py-2 border-r border-gray-300 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500 ${studentPage === index + 1 ? 'bg-teal-500/10 text-teal-700 dark:text-teal-400 font-bold' : 'text-gray-600 dark:text-slate-300'}`}>
+                    <button key={index + 1} type="button" onClick={() => setStudentPage(index + 1)} aria-label={`Página ${index + 1} de alunos`} className={`px-3 py-2 cursor-pointer border-r border-gray-300 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500 ${studentPage === index + 1 ? 'bg-teal-500/10 text-teal-700 dark:text-teal-400 font-bold' : 'text-gray-600 dark:text-slate-300'}`}>
                       {index + 1}
                     </button>
                   ))}
-                  <button type="button" onClick={() => setStudentPage((page) => Math.min(Math.max(1, Math.ceil(matriculasTotal / studentPageSize)), page + 1))} disabled={studentPage >= Math.max(1, Math.ceil(matriculasTotal / studentPageSize))} aria-label="Próxima página de alunos" className="p-2 disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-teal-500">
+                  <button type="button" onClick={() => setStudentPage((page) => Math.min(Math.max(1, Math.ceil(matriculasTotal / studentPageSize)), page + 1))} disabled={studentPage >= Math.max(1, Math.ceil(matriculasTotal / studentPageSize))} aria-label="Próxima página de alunos" className="p-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-teal-500">
                     <ChevronRight className="w-4 h-4" />
                   </button>
                 </div>
