@@ -183,14 +183,7 @@ function rowValues(row: unknown[], headerMap: Map<StudentMigrationColumn, number
 }
 
 function hasStudentIdentifier(values: Record<StudentMigrationColumn, string>): boolean {
-  const turma = clean(values.TURMA);
-  const anac = clean(values.ANAC);
-  return Boolean(
-    (turma && !/^0+$/.test(turma))
-    || (anac && !/^0+$/.test(anac))
-    || clean(values.NOMES)
-    || clean(values.CPF),
-  );
+  return Boolean(clean(values.NOMES) || clean(values.CPF));
 }
 
 function validateRow(values: Record<StudentMigrationColumn, string>) {
