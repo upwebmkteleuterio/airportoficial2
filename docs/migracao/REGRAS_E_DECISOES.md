@@ -278,3 +278,120 @@ Nenhuma migração será construída agora: permanecem fora do escopo parser Exc
 4. Executar a importação completa das turmas.
 5. Implementar e testar a importação da planilha de alunos.
 6. Planejar a migração dos documentos.
+
+## 10. Regras alinhadas para a migração de alunos — rodada atual
+
+> Esta seção é um registro temporário de alinhamento. Ela será revisada e consolidada após a próxima rodada de confirmação, antes da implementação.
+
+### 10.1 Padrão de pessoa sem login e conversão para usuário
+
+- A implementação dos alunos deve seguir o mesmo conceito já utilizado para instrutores.
+- `pessoas` será o cadastro principal da pessoa, independentemente de ela possuir login.
+- Uma pessoa sem login deve possuir nome e CPF e poderá ser vinculada a várias turmas.
+- O vínculo histórico deve apontar para a mesma pessoa, não para um usuário criado artificialmente.
+- Quando a pessoa for convertida em usuário, o novo perfil deverá usar o mesmo identificador histórico da pessoa.
+- A conversão não pode criar uma segunda pessoa, segunda matrícula ou segundo histórico.
+- As matrículas e os dados acadêmicos devem permanecer exatamente no vínculo com a turma; somente a capacidade de autenticar será acrescentada.
+- O mesmo padrão deve permitir que o aluno seja visualizado na tela de alunos, na turma, no histórico e, futuramente, na tela autenticada do próprio aluno.
+- O menu visual de cadastro deve reutilizar o mesmo padrão existente em Instrutores: `Usuário com acesso` e `Pessoa sem login`, sem alteração do comportamento visual do botão.
+
+### 10.2 O que foi confirmado na verificação do padrão de instrutores
+
+- A tabela `turma_instrutores` não aponta diretamente para `profiles`; ela aponta para `pessoas.id`.
+- Por isso, o histórico de turmas do instrutor sem login funciona: o histórico pertence à pessoa, não à conta de acesso.
+- `StaffDetailsPanel` consulta esse relacionamento e apresenta as turmas da pessoa.
+- O trigger `sync_instructor_person` mantém a pessoa associada ao perfil de instrutor quando existe login.
+- Para alunos, a mesma ideia deverá ser aplicada ao vínculo de matrícula: o aluno será uma pessoa única e o perfil de login será apenas a camada de acesso dessa mesma pessoa.
+- A conversão explícita de pessoa para usuário ainda deverá ser construída com essa regra; o código atual possui a sincronização da pessoa do instrutor, mas não apresenta uma ação completa de conversão na tela.
+
+### 10.3 Identificação das turmas na planilha
+
+- Uma linha de aluno somente será válida quando possuir simultaneamente:
+  - ID interno da turma (`TURMA`);
+  - ID da ANAC (`ANAC`);
+  - nome completo;
+  - CPF.
+- O vínculo deverá localizar a turma usando os dois identificadores como confirmação da mesma turma.
+- A combinação dos dois IDs evita que uma linha seja vinculada à turma errada quando apenas um identificador coincidir.
+- A turma `TURMA 1` com `ANAC 13916` foi confirmada no banco como a turma existente de ID interno `1` e ID ANAC `13916`.
+- Linhas sem qualquer um desses quatro dados serão desconsideradas e aparecerão no relatório da importação.
+- Linhas com `TURMA = 0` e `ANAC = 0`, sem aluno identificado, serão desconsideradas.
+
+### 10.4 Identidade e CPF
+
+- Todos os alunos da planilha serão importados inicialmente como pessoas sem login.
+- CPF será obrigatório na migração e será normalizado para comparação, removendo pontuação.
+- Se o CPF já corresponder a uma pessoa/aluno existente, a pessoa será reutilizada.
+- O mesmo aluno poderá possuir várias matrículas, uma por turma.
+- O sistema não deverá criar uma nova pessoa quando o CPF já corresponder ao aluno existente.
+- Os registros atuais de alunos e instrutores foram identificados como dados de teste e serão tratados na limpeza controlada antes da carga real; esta limpeza não será executada nesta etapa de alinhamento.
+
+### 10.5 Situação do aluno e da matrícula
+
+- Alunos migrados serão considerados aprovados/ativos no cadastro e não passarão por `Aprovações Pendentes`.
+- `pendente` pertence ao fluxo de aprovação de uma conta de usuário e não deve ser usado para a pessoa histórica importada.
+- A matrícula histórica não deve ser confundida com a aprovação do aluno:
+  - `Ativo`: matrícula em turma ainda operacional, futura ou em andamento;
+  - `Concluido`: matrícula de turma histórica encerrada;
+  - `Cancelado`: vínculo cancelado.
+- Alunos com matrícula `Concluido` também devem aparecer na tela de alunos matriculados e no histórico; esse status não significa apagar ou ocultar o aluno.
+- A regra operacional recomendada é usar `Concluido` para turmas já encerradas e `Ativo` para turmas ainda em andamento ou futuras. Essa regra será confirmada junto com a leitura das datas das turmas.
+
+### 10.6 Dados acadêmicos por matrícula
+
+- Nome e CPF pertencem à pessoa e devem existir uma única vez.
+- Empresa, percentual de presença, primeira chamada, segunda chamada, resultado e resultado final pertencem à matrícula, pois podem ser diferentes em cada turma.
+- Os campos acadêmicos devem permanecer na relação aluno-turma, nunca na tabela geral da pessoa.
+- `CURSO`, `TURNO`, datas de início/fim e local serão desconsiderados na linha do aluno, pois já pertencem à turma e serão usados apenas para conferência.
+- `Software` ficará vazio nesta migração, salvo se houver valor confiável em outra fonte.
+- `REF` será desconsiderada.
+- `Empresa` será conciliada com `empresas B2B` por nome quando houver correspondência única. Empresa sem correspondência não deve ser escolhida arbitrariamente; deverá ficar como aviso/pendência.
+- A coluna `%` será gravada em `matriculas.percentual_presenca` mesmo quando não houver registros diários de presença.
+- `1º CH` e `2º CH` serão gravados em `nota_1_chamada` e `nota_2_chamada`.
+- `RESULTADO` e `RES FINAL` também serão importados para a matrícula e deverão aparecer na tela do aluno dentro da turma.
+
+### 10.7 Resultado, resultado final e edição manual
+
+- `RESULTADO` representa o resultado parcial/acadêmico associado às notas das chamadas.
+- `RES FINAL` representa o resultado final considerando nota e presença.
+- Para a regra informada pelo cliente, nota final igual ou superior a 7 e presença igual ou superior a 80% resultam em `Aprovado`.
+- Quando o aluno não participou e possui 0% de presença, o `RESULTADO` deverá registrar `Falta` e o `RES FINAL` deverá registrar `Reprovado`.
+- A tela deverá apresentar as colunas `Resultado` e `Resultado final` além de CPF, nome, percentual, primeira chamada, segunda chamada e média/nota resultante.
+- Esses dados também deverão poder ser inseridos e alterados no cadastro/edição manual da matrícula.
+- O banco já possui `matriculas.resultado_final` e `matriculas.status_resultado_final`, atualmente usados como `RESULTADO` e `RES FINAL` no código. A implementação deverá revisar a nomenclatura e o tipo dos campos antes de gravar `Falta`, pois o campo numérico atual não comporta esse texto.
+- O valor importado da planilha deve ser preservado como fonte histórica. O sistema não deverá substituir automaticamente o resultado importado por um cálculo diferente sem regra confirmada.
+- Ainda precisa ser confirmada a regra para os casos de primeira chamada preenchida e segunda chamada vazia, ou de segunda chamada inferior à primeira.
+
+### 10.8 Diário de presença
+
+- `diario_classe` é o diário diário de presença: são registros separados para cada aluno e cada data/aula da turma.
+- O fluxo normal de matrícula atualmente cria esses registros automaticamente.
+- A planilha não possui a presença por dia, apenas o percentual consolidado.
+- As matrículas migradas não deverão criar artificialmente linhas de diário sem fonte histórica.
+- O percentual importado será mantido na matrícula e o diário ficará vazio/sem registros para essas cargas históricas.
+- O sistema deverá continuar permitindo o lançamento futuro de frequência quando isso for necessário.
+- O comportamento atual de criação automática do diário para novos cadastros manuais não deverá ser alterado sem decisão específica.
+
+### 10.9 Migração em duas abas
+
+- A tela de migração terá duas abas independentes:
+  - `Turmas`, mantendo o fluxo já utilizado e validado;
+  - `Alunos`, com validação, prévia, conciliação por CPF, localização da turma pelos dois IDs, vínculo e importação dos dados acadêmicos.
+- A aba de alunos não deverá recriar turmas, cursos, horários ou locais.
+- A importação deverá ocorrer somente depois de as turmas correspondentes existirem.
+- A prévia deverá separar registros válidos, desconsiderados, CPFs reutilizados, pessoas novas, matrículas já existentes, turmas não encontradas e empresas sem correspondência.
+- A operação deverá ser idempotente: reprocessar a mesma linha não deverá criar outra pessoa nem outra matrícula para a mesma turma.
+
+### 10.10 Documentos
+
+- A migração de documentos ficará para uma etapa posterior.
+- Os arquivos serão enviados ao Storage e associados à mesma pessoa/aluno já existente, por nome, CPF ou identificador escolhido na tela.
+- A ausência de documentos agora não impede a importação do aluno sem login.
+
+## 11. Pontos ainda aguardando confirmação final
+
+1. Confirmar a regra definitiva de `Ativo` versus `Concluido` com base no encerramento da turma.
+2. Confirmar o comportamento do resultado quando somente a primeira chamada estiver preenchida.
+3. Confirmar se `RESULTADO` será armazenado como texto independente, mantendo a média/nota numérica em campo separado, ou se a estrutura atual será ajustada.
+4. Confirmar o tratamento de empresa quando o nome da planilha não corresponder exatamente a uma empresa B2B existente.
+5. Confirmar o momento e o procedimento da limpeza dos dados de teste antes da carga real.
