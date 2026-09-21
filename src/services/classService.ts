@@ -257,7 +257,7 @@ export const classService = {
 
     const term = search?.trim();
     if (term) {
-      const internalMatch = term.match(/^t-(?:op-)?(\d+)$/i);
+      const internalMatch = term.match(/^(?:t-(?:op-)?)?(\d+)$/i);
       if (internalMatch) {
         query = query.eq('id_interno_escola', Number(internalMatch[1]));
       } else if (/^t-/i.test(term)) {
@@ -780,6 +780,34 @@ export const classService = {
       .select('*')
       .eq('turma_id', turmaId);
     if (error) throw serviceError(`Não foi possível carregar os instrutores da turma ${turmaId}`, error);
+    return (data ?? []) as TurmaInstrutorRel[];
+  },
+
+  getInstrutoresByTurmas: async (turmaIds: string[]): Promise<TurmaInstrutorRel[]> => {
+    const context = await getAuthContext();
+    if (!context) throw new Error('Sessão não autenticada.');
+
+    const requestedTurmaIds = [...new Set(
+      turmaIds
+        .filter((turmaId): turmaId is string => typeof turmaId === 'string')
+        .map((turmaId) => turmaId.trim())
+        .filter(Boolean)
+    )];
+    if (requestedTurmaIds.length === 0) return [];
+
+    let authorizedTurmaIds = requestedTurmaIds;
+    if (context.role === UserRole.INSTRUTOR) {
+      const instructorTurmaIds = await getInstructorClassIds(context);
+      const instructorTurmaIdSet = new Set(instructorTurmaIds);
+      authorizedTurmaIds = requestedTurmaIds.filter((turmaId) => instructorTurmaIdSet.has(turmaId));
+    }
+    if (authorizedTurmaIds.length === 0) return [];
+
+    const { data, error } = await supabase
+      .from('turma_instrutores')
+      .select('id, turma_id, instrutor_id, funcao')
+      .in('turma_id', authorizedTurmaIds);
+    if (error) throw serviceError('Não foi possível carregar os instrutores das turmas', error);
     return (data ?? []) as TurmaInstrutorRel[];
   },
 

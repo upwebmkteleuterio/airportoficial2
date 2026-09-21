@@ -278,6 +278,7 @@ export function Dashboard() {
         cancelClass,
         isCancelling,
         getInstrutoresByTurma,
+        getInstrutoresByTurmas,
         getClassEditability,
         saveInstrutoresForTurma,
         isLoading,
@@ -899,28 +900,36 @@ export function Dashboard() {
     // Carrega os vínculos reais de turma_instrutores, incluindo a função persistida.
     // Os nomes são resolvidos no render para evitar dependências instáveis.
     useEffect(() => {
-        if (!classes.length) return;
+        if (!classes.length) {
+            setTurmaInstructorsMap({});
+            return;
+        }
+
         let cancelled = false;
         const load = async () => {
-            const pairs = await Promise.all(classes.map(async (turma) => {
-                try {
-                    const relations = await getInstrutoresByTurma(turma.id);
-                    return [turma.id, relations.map(relation => ({
-                        instrutor_id: relation.instrutor_id,
-                        funcao: relation.funcao,
-                    }))] as const;
-                } catch (error) {
-                    console.warn("[turmas] falha ao carregar instrutores da turma", { turmaId: turma.id, error });
-                    return [turma.id, []] as const;
+            try {
+                const relations = await getInstrutoresByTurmas(classes.map((turma) => turma.id));
+                const relationsByTurma = relations.reduce<Record<string, { instrutor_id: string; funcao: string }[]>>((map, relation) => {
+                    const turmaRelations = map[relation.turma_id] ?? [];
+                    turmaRelations.push({ instrutor_id: relation.instrutor_id, funcao: relation.funcao });
+                    map[relation.turma_id] = turmaRelations;
+                    return map;
+                }, {});
+                if (!cancelled) {
+                    setTurmaInstructorsMap(Object.fromEntries(
+                        classes.map((turma) => [turma.id, relationsByTurma[turma.id] ?? []])
+                    ));
                 }
-            }));
-            if (!cancelled) {
-                setTurmaInstructorsMap(Object.fromEntries(pairs));
+            } catch (error) {
+                console.warn("[turmas] falha ao carregar instrutores das turmas", { error });
+                if (!cancelled) {
+                    setTurmaInstructorsMap(Object.fromEntries(classes.map((turma) => [turma.id, []])));
+                }
             }
         };
         void load();
         return () => { cancelled = true; };
-    }, [classes, getInstrutoresByTurma]);
+    }, [classes, getInstrutoresByTurmas]);
 
     const handleSaveClass = async () => {
         if (classSubmitRef.current || isCreating || isUpdating) return;
@@ -1139,8 +1148,8 @@ export function Dashboard() {
                             type="text"
                             value={filters.classSearchTerm}
                             onChange={e => setFilter("classSearchTerm", e.target.value)}
-                            placeholder="Buscar por T-... ou curso..."
-                            aria-label="Buscar turmas por ID interno T- ou curso"
+                            placeholder="Buscar por ID interno ou nome do curso"
+                            aria-label="Buscar por ID interno ou nome do curso"
                             className="w-full pl-9 pr-4 py-2 bg-white dark:bg-slate-900 rounded-lg border border-gray-300 dark:border-slate-700 text-gray-900 dark:text-white font-sans text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 shadow-sm" />
                     </div>
                     <div

@@ -89,6 +89,7 @@ export function useClasses(options: ClassesOptions = {}) {
     isFetching: classesQuery.isFetching,
     isError: classesQuery.isError,
     getClassEditability: classService.getEditability,
+    getInstrutoresByTurmas: classService.getInstrutoresByTurmas,
     createClass: createClassMutation.mutateAsync,
     isCreating: createClassMutation.isPending,
     updateClass: updateClassMutation.mutateAsync,
