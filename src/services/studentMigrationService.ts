@@ -163,8 +163,9 @@ function parsePercentage(value: string): { value: number | null; problem?: strin
 function parseGrade(value: string, label: string): { value: number | null; problem?: string } {
   const parsed = parseNumber(value);
   if (parsed === null) return { value: null };
-  if (parsed < 0 || parsed > 10) return { value: null, problem: `${label} deve estar entre 0 e 10.` };
-  return { value: parsed };
+  const normalized = parsed === 100 ? 10 : parsed;
+  if (normalized < 0 || normalized > 10) return { value: null, problem: `${label} deve estar entre 0 e 10.` };
+  return { value: normalized };
 }
 
 function parseStatus(value: string, label: string): { value: StudentStatus | null; problem?: string } {
