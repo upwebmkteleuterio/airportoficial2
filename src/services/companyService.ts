@@ -18,6 +18,10 @@ type ActiveProfileRow = {
   legacy_id: string | null;
 };
 
+type ActivePersonRow = {
+  id: string | null;
+};
+
 export async function getActiveEmployees(companyId: string): Promise<Usuario[]> {
   const { data, error } = await supabase.rpc('get_active_company_employees', {
     target_company_id: companyId,
@@ -41,7 +45,7 @@ export async function getActiveEmployees(companyId: string): Promise<Usuario[]> 
 
  */
 export async function getActiveEmployeeCounts(): Promise<Record<string, number>> {
-  const [{ data: matriculas, error: matriculasError }, { data: profiles, error: profilesError }] = await Promise.all([
+  const [{ data: matriculas, error: matriculasError }, { data: profiles, error: profilesError }, { data: people, error: peopleError }] = await Promise.all([
     supabase
       .from('matriculas')
       .select('aluno_id, empresa_b2b_id')
@@ -51,6 +55,11 @@ export async function getActiveEmployeeCounts(): Promise<Record<string, number>>
       .select('id, legacy_id')
       .eq('role', 'ALUNO')
       .eq('status', 'ativo'),
+    supabase
+      .from('pessoas')
+      .select('id')
+      .eq('papel', 'ALUNO')
+      .eq('ativo', true),
   ]);
 
   if (matriculasError) {
@@ -59,12 +68,18 @@ export async function getActiveEmployeeCounts(): Promise<Record<string, number>>
   if (profilesError) {
     throw serviceError('Não foi possível carregar os perfis ativos dos alunos', profilesError);
   }
+  if (peopleError) {
+    throw serviceError('Não foi possível carregar as pessoas ativas dos alunos', peopleError);
+  }
 
-  const activeStudentIds = new Set(
-    ((profiles ?? []) as ActiveProfileRow[])
+  const activeStudentIds = new Set([
+    ...((profiles ?? []) as ActiveProfileRow[])
       .flatMap((profile) => [profile.id, profile.legacy_id])
-      .filter((id): id is string => Boolean(id))
-  );
+      .filter((id): id is string => Boolean(id)),
+    ...((people ?? []) as ActivePersonRow[])
+      .map((person) => person.id)
+      .filter((id): id is string => Boolean(id)),
+  ]);
   const counts = new Map<string, Set<string>>();
 
   for (const matricula of (matriculas ?? []) as ActiveMatriculaRow[]) {

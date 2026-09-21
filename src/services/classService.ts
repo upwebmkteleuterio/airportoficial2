@@ -107,7 +107,7 @@ async function assertCanUpdateMatricula(turmaId: string, updates: Partial<Matric
   }
 
   await assertCanAccessTurma(turmaId);
-  const allowedGradeFields = new Set(['nota_1_chamada', 'nota_2_chamada', 'resultado_final', 'status_resultado_final']);
+  const allowedGradeFields = new Set(['nota_1_chamada', 'nota_2_chamada', 'resultado_final', 'status_resultado', 'status_resultado_final']);
   if (Object.keys(updates).some((field) => !allowedGradeFields.has(field))) {
     throw new Error('Instrutores podem alterar somente as notas das turmas vinculadas.');
   }
@@ -514,22 +514,46 @@ export const classService = {
     return (data ?? []) as Matricula[];
   },
 
-  createMatricula: async (matricula: Omit<Matricula, 'id' | 'codigo_re' | 'percentual_presenca'>): Promise<Matricula> => {
+  createMatricula: async (matricula: Omit<Matricula, 'id' | 'codigo_re' | 'percentual_presenca'> & { percentual_presenca?: number; criar_diario?: boolean }): Promise<Matricula> => {
     await assertCanManageTurmas();
     await assertCanAccessTurma(matricula.turma_id);
     const classData = await getClassById(matricula.turma_id);
     if (!classData) throw new Error(`Não foi possível carregar a turma ${matricula.turma_id}`);
-    const { data: aluno, error: alunoError } = await supabase
-      .from('profiles')
-      .select('role, status')
-      .eq('legacy_id', matricula.aluno_id)
+    const { data: person, error: personError } = await supabase
+      .from('pessoas')
+      .select('id, ativo, papel, profile_legacy_id')
+      .eq('id', matricula.aluno_id)
       .maybeSingle();
-    if (alunoError) throw serviceError(`Não foi possível validar o aluno ${matricula.aluno_id}`, alunoError);
-    if (!aluno || aluno.role !== UserRole.ALUNO || aluno.status !== 'ativo') {
-      throw new Error('Somente alunos ativos podem ser matriculados nesta turma.');
+    if (personError) throw serviceError(`Não foi possível validar o aluno ${matricula.aluno_id}`, personError);
+    if (person) {
+      if (!person.ativo || (person.papel && person.papel !== UserRole.ALUNO)) {
+        throw new Error('Somente alunos ativos podem ser matriculados nesta turma.');
+      }
+      if (!person.papel && person.profile_legacy_id) {
+        const { data: linkedProfile, error: linkedProfileError } = await supabase
+          .from('profiles')
+          .select('role, status')
+          .eq('legacy_id', person.profile_legacy_id)
+          .maybeSingle();
+        if (linkedProfileError) throw serviceError(`Não foi possível validar o aluno ${matricula.aluno_id}`, linkedProfileError);
+        if (linkedProfile && (linkedProfile.role !== UserRole.ALUNO || linkedProfile.status !== 'ativo')) {
+          throw new Error('Somente alunos ativos podem ser matriculados nesta turma.');
+        }
+      }
+    } else {
+      const { data: aluno, error: alunoError } = await supabase
+        .from('profiles')
+        .select('role, status')
+        .eq('legacy_id', matricula.aluno_id)
+        .maybeSingle();
+      if (alunoError) throw serviceError(`Não foi possível validar o aluno ${matricula.aluno_id}`, alunoError);
+      if (!aluno || aluno.role !== UserRole.ALUNO || aluno.status !== 'ativo') {
+        throw new Error('Somente alunos ativos podem ser matriculados nesta turma.');
+      }
     }
-    const sessions = getClassSessions(classData);
-    if (sessions.length === 0) {
+    const shouldCreateDiary = matricula.criar_diario !== false;
+    const sessions = shouldCreateDiary ? getClassSessions(classData) : [];
+    if (shouldCreateDiary && sessions.length === 0) {
       throw new Error('Não é possível matricular um aluno em uma turma sem períodos válidos de diário.');
     }
     const { data: existingMatriculas, error: listError } = await supabase
@@ -541,12 +565,13 @@ export const classService = {
       (item) => Number(item.codigo_re)
     );
     const nextRe = reCodes.length > 0 ? Math.max(...reCodes) + 1 : 1001;
+    const { criar_diario: _criarDiario, ...matriculaData } = matricula;
     const newMat = {
-      ...matricula,
+      ...matriculaData,
       id: newServiceId('mat'),
       codigo_re: nextRe,
-      percentual_presenca: 0,
-      status_matricula: 'Ativo' as const
+      percentual_presenca: matricula.percentual_presenca ?? 0,
+      status_matricula: matricula.status_matricula ?? 'Ativo'
     };
 
     const { data, error } = await supabase
@@ -613,7 +638,7 @@ export const classService = {
     const context = await getAuthContext();
     if (!context) throw new Error('Sessão não autenticada.');
     if (context.role === UserRole.INSTRUTOR) {
-      const hasGradeUpdate = ['nota_1_chamada', 'nota_2_chamada', 'resultado_final', 'status_resultado_final'].some(
+      const hasGradeUpdate = ['nota_1_chamada', 'nota_2_chamada', 'resultado_final', 'status_resultado', 'status_resultado_final'].some(
         (field) => Object.prototype.hasOwnProperty.call(updates, field)
       );
       if (!hasGradeUpdate) {
@@ -624,6 +649,7 @@ export const classService = {
         nota_1_chamada: updates.nota_1_chamada ?? null,
         nota_2_chamada: updates.nota_2_chamada ?? null,
         resultado_final: updates.resultado_final ?? null,
+        status_resultado: updates.status_resultado ?? null,
         status_resultado_final: updates.status_resultado_final ?? null,
       };
       const { data, error } = await supabase.rpc('update_matricula_notas', {

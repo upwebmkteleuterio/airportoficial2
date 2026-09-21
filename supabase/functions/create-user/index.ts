@@ -24,6 +24,8 @@ const optionalText = (value: unknown) => {
   return normalized || null;
 };
 
+const normalizeCpf = (value: unknown) => optionalText(value)?.replace(/\D/g, '').slice(0, 11) || null;
+
 const normalizeOptionalDate = (value: unknown): string | null => {
   const normalized = optionalText(value);
   if (!normalized) return null;
@@ -111,6 +113,7 @@ Deno.serve(async (req) => {
     const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
     const role = typeof body.role === "string" ? body.role : "";
     const nomeCompleto = typeof body.nome_completo === "string" ? body.nome_completo.trim() : "";
+    const cpf = normalizeCpf(body.cpf);
     const initialPassword = typeof body.password === "string" ? body.password : "";
     const hasOrigin = Object.prototype.hasOwnProperty.call(body, "origem_cadastro");
     const hasStatus = Object.prototype.hasOwnProperty.call(body, "status");
@@ -131,9 +134,36 @@ Deno.serve(async (req) => {
       });
     }
 
-    const legacyId = typeof body.id === "string" && body.id.trim() ? body.id.trim() : `user-${crypto.randomUUID()}`;
+    const requestedPersonId = optionalText(body.person_id);
+    let legacyId = typeof body.id === "string" && body.id.trim() ? body.id.trim() : `user-${crypto.randomUUID()}`;
+    if (requestedPersonId) {
+      const { data: canonicalPerson, error: canonicalPersonError } = await adminClient
+        .from("pessoas")
+        .select("id, profile_legacy_id, papel, ativo")
+        .eq("id", requestedPersonId)
+        .maybeSingle();
+      if (canonicalPersonError || !canonicalPerson || !canonicalPerson.ativo) {
+        return new Response(JSON.stringify({ error: "Pessoa canônica não encontrada" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (role === "ALUNO" && canonicalPerson.papel && canonicalPerson.papel !== "ALUNO") {
+        return new Response(JSON.stringify({ error: "A pessoa canônica pertence a outro papel" }), {
+          status: 409,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (canonicalPerson.profile_legacy_id && canonicalPerson.profile_legacy_id !== requestedPersonId) {
+        return new Response(JSON.stringify({ error: "A pessoa já está associada a outro usuário" }), {
+          status: 409,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      legacyId = requestedPersonId;
+    }
     const origin = requestedOrigin ?? "interno";
-    const status = role === "ALUNO" ? "pendente" : "ativo";
+    const status = role === "ALUNO" ? (requestedPersonId ? "ativo" : "pendente") : "ativo";
     const companyId = optionalText(body.empresa_id);
     const pendingClassId = origin === "b2b" ? optionalText(body.turma_id_pendente) : null;
     const fotoPath = typeof body.foto_url === "string" && body.foto_url.trim().startsWith(`avatars/${legacyId}/`)
@@ -147,7 +177,7 @@ Deno.serve(async (req) => {
       user_metadata: {
         legacy_id: legacyId,
         nome_completo: nomeCompleto,
-        cpf: optionalText(body.cpf) ?? "",
+        cpf: cpf ?? "",
         telefone: optionalText(body.telefone) ?? "",
         termo_lgpd_aceite: body.termo_lgpd_aceite === true,
         data_aceite_lgpd: normalizeOptionalDate(body.data_aceite_lgpd),
@@ -200,6 +230,27 @@ Deno.serve(async (req) => {
 
     if (profileUpdateError) {
       throw profileUpdateError;
+    }
+
+    if (requestedPersonId) {
+      const { error: personLinkError } = await adminClient
+        .from("pessoas")
+        .update({ profile_legacy_id: requestedPersonId, papel: role, ativo: status === "ativo", visivel_diretorio: true })
+        .eq("id", requestedPersonId);
+      if (personLinkError) throw personLinkError;
+    } else if (role === "ALUNO") {
+      const { error: personCreateError } = await adminClient
+        .from("pessoas")
+        .insert({
+          id: legacyId,
+          nome: nomeCompleto,
+          cpf,
+          papel: role,
+          ativo: status === "ativo",
+          visivel_diretorio: true,
+          profile_legacy_id: legacyId,
+        });
+      if (personCreateError) throw personCreateError;
     }
 
     const { data: profile, error: createdProfileError } = await adminClient

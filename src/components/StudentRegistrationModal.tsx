@@ -10,6 +10,7 @@ import { DocumentStatus, UserRole } from '../types';
 
 interface StudentRegistrationModalProps {
   initialData?: any;
+  personId?: string;
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: (result: { studentId: string; status: 'ativo' | 'pendente' }) => void;
@@ -158,7 +159,7 @@ const createFormDataFromInitialData = (initialData?: any): FormData => {
     email: initialData.email || '',
     telefone: initialData.telefone || '',
     empresa_id: initialData.empresa_id || '',
-    nome_completo: initialData.nome_completo || '',
+    nome_completo: initialData.nome_completo || initialData.nome || '',
     data_nascimento: dateToDisplay(initialData.data_nascimento || ''),
     nome_mae: initialData.nome_mae || '',
     nome_pai: initialData.nome_pai || '',
@@ -300,7 +301,7 @@ const saveDraft = (formData: FormData, files: FilesState, step: number, fileName
   }
 };
 
-export function StudentRegistrationModal({ isOpen, onClose, onSuccess, initialData }: StudentRegistrationModalProps) {
+export function StudentRegistrationModal({ isOpen, onClose, onSuccess, initialData, personId }: StudentRegistrationModalProps) {
   const { createUser, updateUser } = useUsers();
   const { companies } = useCompanies();
   const [step, setStep] = useState(1);
@@ -606,34 +607,42 @@ export function StudentRegistrationModal({ isOpen, onClose, onSuccess, initialDa
     try {
       setIsLoading(true);
       let userId = createdUserId;
-      if (!userId) {
+      const isEditingExisting = Boolean(initialData?.id && !personId);
+      const profileFields = {
+        nome_completo: formData.nome_completo,
+        cpf: formData.cpf,
+        email: formData.email,
+        telefone: formData.telefone,
+        empresa_id: formData.empresa_id || undefined,
+        termo_lgpd_aceite: true,
+        data_aceite_lgpd: new Date().toISOString(),
+        data_nascimento: dateToPayload(formData.data_nascimento),
+        nome_mae: formData.nome_mae,
+        nome_pai: formData.nome_pai,
+        rg: formData.rg,
+        orgao_expedicao_rg: formData.orgao_expedicao_rg,
+        grau_ensino: formData.grau_ensino,
+        cep: formData.cep,
+        endereco: formData.endereco,
+        numero: formData.numero,
+        bairro: formData.bairro,
+        cidade: formData.cidade,
+        estado: formData.estado,
+        trabalha_aviacao_civil: formData.trabalha_aviacao_civil,
+        trabalha_seguranca_avsec: formData.trabalha_seguranca_avsec,
+        tipo_documento_selecionado: formData.tipo_documento,
+      };
+      if (!userId && initialData?.id && !personId) {
+        await updateUser({ id: initialData.id, updates: profileFields });
+        userId = initialData.id;
+      } else if (!userId) {
         const newUser = await createUser({
           role: UserRole.ALUNO,
-          nome_completo: formData.nome_completo,
-          cpf: formData.cpf,
-          email: formData.email,
-          telefone: formData.telefone,
+          person_id: personId,
+          ...profileFields,
           password: formData.senha_temporaria,
-          empresa_id: formData.empresa_id || undefined,
-          termo_lgpd_aceite: true,
-          data_aceite_lgpd: new Date().toISOString(),
-          data_nascimento: dateToPayload(formData.data_nascimento),
-          nome_mae: formData.nome_mae,
-          nome_pai: formData.nome_pai,
-          rg: formData.rg,
-          orgao_expedicao_rg: formData.orgao_expedicao_rg,
-          grau_ensino: formData.grau_ensino,
-          cep: formData.cep,
-          endereco: formData.endereco,
-          numero: formData.numero,
-          bairro: formData.bairro,
-          cidade: formData.cidade,
-          estado: formData.estado,
-          trabalha_aviacao_civil: formData.trabalha_aviacao_civil,
-          trabalha_seguranca_avsec: formData.trabalha_seguranca_avsec,
-          status: 'pendente',
+          status: personId ? 'ativo' : 'pendente',
           origem_cadastro: 'interno',
-          tipo_documento_selecionado: formData.tipo_documento
         });
         userId = newUser.id;
         setCreatedUserId(userId);
@@ -649,6 +658,11 @@ export function StudentRegistrationModal({ isOpen, onClose, onSuccess, initialDa
 
       const hasUploadFailure = fileFields.some(field => files[field] && !records[field]);
       if (hasUploadFailure) return;
+
+      if (isEditingExisting) {
+        resetAfterSuccess(userId, 'ativo');
+        return;
+      }
 
       if (await promoteCompleteRegistration(userId, records)) {
         resetAfterSuccess(userId, 'ativo');

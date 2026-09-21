@@ -23,7 +23,7 @@ export interface UserCountOptions extends UserFilters {
 
 type UserFilters = Pick<UserPageOptions, 'role' | 'status' | 'search' | 'empresaId' | 'turmaId'>;
 type ProfileRow = Omit<Usuario, 'id'> & { id?: string; legacy_id: string };
-export type CreateUserInput = Omit<Usuario, 'id'> & { id?: string; password?: string };
+export type CreateUserInput = Omit<Usuario, 'id'> & { id?: string; password?: string; person_id?: string };
 
 function toUsuario(row: ProfileRow | Usuario): Usuario {
   const publicId = 'legacy_id' in row ? row.legacy_id : row.id;

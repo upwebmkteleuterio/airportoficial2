@@ -44,6 +44,7 @@ import {
 } from 'lucide-react';
 import { useClassDetails } from '../hooks/useClasses';
 import { useUsers } from '../hooks/useUsers';
+import { usePeople } from '../hooks/usePeople';
 import { useCourses } from '../hooks/useCourses';
 import { useCompanies } from '../hooks/useCompanies';
 import { useDocuments } from '../hooks/useDocuments';
@@ -243,8 +244,24 @@ function ClassDetails() {
 
   const { courses } = useCourses();
   const { users } = useUsers();
+  const { people: studentPeople } = usePeople({ studentOnly: true, activeOnly: true });
   const { companies } = useCompanies();
   const { documents, updateDocument, isLoading: isLoadingDocuments } = useDocuments();
+  const directoryStudents = useMemo(() => studentPeople.map((person) => {
+    const profile = users.find((user) => user.id === person.id || user.id === person.profile_legacy_id);
+    return profile ?? {
+      id: person.id,
+      nome_completo: person.nome,
+      cpf: person.cpf ?? '',
+      email: '',
+      telefone: '',
+      role: 'ALUNO' as const,
+      termo_lgpd_aceite: false,
+      data_aceite_lgpd: null,
+      status: 'ativo' as const,
+    };
+  }), [studentPeople, users]);
+  const findStudent = (studentId: string) => users.find((user) => user.id === studentId) ?? directoryStudents.find((student) => student.id === studentId);
 
   useEffect(() => {
     if (isInstructor && selectedClassId && !isLoadingClass && !classData) {
@@ -450,7 +467,7 @@ function ClassDetails() {
 
     const visitStudents = allMatriculas.length > 0
       ? allMatriculas.slice(0, 7).map((m, idx) => {
-          const student = users.find((u) => u.id === m.aluno_id);
+          const student = findStudent(m.aluno_id);
           const codeAnac = m.anac_codigo || student?.cpf?.substring(0, 7) || '123.456-7';
           const isPending = m.percentual_presenca < 75 || idx === 2;
           return {
@@ -534,8 +551,8 @@ function ClassDetails() {
 
   // Alunos candidates for adding
   const availableStudents = useMemo(() => {
-    return users.filter((u) => u.role === 'ALUNO' && u.status === 'ativo' && !matriculatedAlunoIds.includes(u.id));
-  }, [users, matriculatedAlunoIds]);
+    return directoryStudents.filter((student) => !matriculatedAlunoIds.includes(student.id));
+  }, [directoryStudents, matriculatedAlunoIds]);
 
   // Dates list for frequency table based on start and end dates
   const classDates = useMemo(() => {
@@ -725,6 +742,8 @@ function ClassDetails() {
       (highest, nota) => highest === null ? nota : Math.max(highest, nota),
       null,
     );
+    const resultado = maxNota === null ? (matricula.percentual_presenca === 0 ? 'Falta' : null) : maxNota >= 7 ? 'Aprovado' : 'Reprovado';
+    const resultadoFinal = maxNota === null ? (matricula.percentual_presenca === 0 ? 'Reprovado' : null) : maxNota >= 7 && matricula.percentual_presenca >= 80 ? 'Aprovado' : 'Reprovado';
 
     try {
       await updateMatricula({
@@ -733,7 +752,8 @@ function ClassDetails() {
           nota_1_chamada: draft.nota1,
           nota_2_chamada: draft.nota2,
           resultado_final: maxNota,
-          status_resultado_final: maxNota === null ? null : maxNota >= 7 ? 'Aprovado' : 'Reprovado',
+          status_resultado: resultado,
+          status_resultado_final: resultadoFinal,
         } as Partial<Matricula>,
       });
       setPendingGrades((current) => {
@@ -944,13 +964,15 @@ function ClassDetails() {
                       <th className="px-4 py-3 text-center">%</th>
                       <th className="px-4 py-3 text-center w-24">1ª CH</th>
                       <th className="px-4 py-3 text-center w-24">2ª CH</th>
-                      <th className="px-4 py-3 text-center">Média / Resultado</th>
+                      <th className="px-4 py-3 text-center">Resultado</th>
+                      <th className="px-4 py-3 text-center">Resultado final</th>
+                      <th className="px-4 py-3 text-center">Média / Nota</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-150 dark:divide-slate-800 font-mono text-gray-700 dark:text-slate-200">
                     {isLoadingMatriculas ? (
                       <tr>
-                        <td colSpan={10} className="px-4 py-8">
+                        <td colSpan={13} className="px-4 py-8">
                           <div className="flex flex-col items-center justify-center gap-2">
                             <div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin"></div>
                             <p className="text-gray-500 text-sm font-sans">Carregando matrículas...</p>
@@ -959,7 +981,7 @@ function ClassDetails() {
                       </tr>
                     ) : matriculas.length === 0 ? (
                       <tr>
-                        <td colSpan={10} className="px-4 py-12 text-center text-gray-500 font-sans">
+                        <td colSpan={13} className="px-4 py-12 text-center text-gray-500 font-sans">
                           <div className="flex flex-col items-center justify-center gap-2 max-w-sm mx-auto">
                             <div className="p-3 bg-teal-500/10 rounded-full text-teal-500">
                               <Users className="w-6 h-6" />
@@ -974,7 +996,17 @@ function ClassDetails() {
                         </td>
                       </tr>
                     ) : matriculas.map((m) => {
-                      const student = users.find((u) => u.id === m.aluno_id);
+                      const student = findStudent(m.aluno_id) ?? {
+                        id: m.aluno_id,
+                        role: 'ALUNO' as const,
+                        nome_completo: m.aluno_nome || 'Aluno desconhecido',
+                        cpf: m.aluno_cpf || '',
+                        email: '',
+                        telefone: '',
+                        termo_lgpd_aceite: false,
+                        data_aceite_lgpd: null,
+                        status: 'ativo' as const,
+                      };
                       const studentName = typeof m.aluno_nome === 'string' && m.aluno_nome.trim()
                         ? m.aluno_nome
                         : typeof student?.nome_completo === 'string' && student.nome_completo.trim()
@@ -990,6 +1022,7 @@ function ClassDetails() {
                         : 0;
                       const finalResult = parseFinalResult(m.resultado_final);
                       const b2b = companies.find((c) => c.id === m.empresa_b2b_id);
+                      const hasLogin = users.some((user) => user.id === m.aluno_id);
 
                       return (
                         <tr
@@ -1019,7 +1052,7 @@ function ClassDetails() {
                                 
                                 {openMenuStudentId === m.id && (
                                   <div className="absolute left-full top-0 ml-2 w-48 bg-white dark:bg-slate-850 rounded-lg shadow-lg border border-gray-200 dark:border-slate-700 py-1 z-50">
-                                    <button
+                                    {hasLogin && <button
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         setOpenMenuStudentId(null);
@@ -1030,7 +1063,7 @@ function ClassDetails() {
                                     >
                                       <Edit2 className="w-4 h-4" />
                                       Editar
-                                    </button>
+                                    </button>}
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation();
@@ -1045,7 +1078,7 @@ function ClassDetails() {
                                   </div>
                                 )}
                               </div>
-                              {student && <FolderIcon onClick={(e) => { e.stopPropagation(); handleOpenDocuments(student); }} />}
+                              {hasLogin && <FolderIcon onClick={(e) => { e.stopPropagation(); handleOpenDocuments(student); }} />}
                             </div>
                           </td>)}
                           {/* RE Clickable to open GED */}
@@ -1074,6 +1107,12 @@ function ClassDetails() {
                           </td>
                           <td className="px-4 py-2 text-center font-semibold">
                             {typeof m.nota_2_chamada === 'number' ? m.nota_2_chamada.toFixed(1).replace('.', ',') : '—'}
+                          </td>
+                          <td className="px-4 py-2 text-center font-semibold">
+                            {m.status_resultado || (attendancePercentage === 0 ? 'Falta' : '—')}
+                          </td>
+                          <td className="px-4 py-2 text-center font-semibold">
+                            {m.status_resultado_final || '—'}
                           </td>
                           <td className="px-4 py-2 text-center">
                             <div className="font-bold">
@@ -1232,7 +1271,7 @@ function ClassDetails() {
                         </td>
                       </tr>
                     ) : allMatriculas.map((m) => {
-                      const student = users.find((u) => u.id === m.aluno_id);
+                      const student = findStudent(m.aluno_id);
                       if (!student) return null;
                       const studentName = typeof student.nome_completo === 'string' && student.nome_completo.trim()
                         ? student.nome_completo
@@ -1399,7 +1438,7 @@ function ClassDetails() {
                         </td>
                       </tr>
                     ) : allMatriculas.map((m) => {
-                      const student = users.find((u) => u.id === m.aluno_id);
+                      const student = findStudent(m.aluno_id);
                       if (!student) return null;
                       const studentName = typeof student.nome_completo === 'string' && student.nome_completo.trim()
                         ? student.nome_completo
@@ -1491,7 +1530,7 @@ function ClassDetails() {
           ];
 
           const visitStudents = allMatriculas.map((m, idx) => {
-                const student = users.find((u) => u.id === m.aluno_id);
+                const student = findStudent(m.aluno_id);
                 const codeAnac = m.anac_codigo || student?.cpf?.substring(0, 7) || '---';
                 const isPending = m.percentual_presenca < 75;
                 return {

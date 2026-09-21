@@ -102,6 +102,8 @@ export interface Pessoa {
   cpf?: string | null;
   ativo: boolean;
   visivel_diretorio: boolean;
+  /** Papel usado para separar diretórios sem criar um perfil de login. */
+  papel?: UserRole | null;
   profile_legacy_id?: string | null;
   created_at?: string;
 }
@@ -200,8 +202,9 @@ export interface Matricula {
   percentual_presenca: number; // Coluna "%"
   nota_1_chamada?: number; // Coluna "1ª CH"
   nota_2_chamada?: number; // Coluna "2ª CH"
-  resultado_final?: number; // Coluna "RESULTADO"
-  status_resultado_final?: string; // Coluna "RES FINAL" (Aprovado/Reprovado/Pendente)
+  resultado_final?: number | null; // Média/nota numérica histórica da coluna "RESULTADO"
+  status_resultado?: 'Aprovado' | 'Reprovado' | 'Falta' | string | null; // Resultado acadêmico textual
+  status_resultado_final?: 'Aprovado' | 'Reprovado' | 'Falta' | string | null; // Resultado final textual
   status_matricula: 'Ativo' | 'Cancelado' | 'Concluido';
 }
 

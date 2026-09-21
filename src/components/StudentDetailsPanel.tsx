@@ -249,12 +249,32 @@ export function StudentDetailsPanel({ isOpen, onClose, student }: StudentDetails
                             <span className="font-medium text-slate-700 dark:text-slate-200">{turma.cidade}/{turma.uf}</span>
                           </div>
                           <div>
-                            <span className="block text-gray-500 dark:text-slate-400 mb-0.5">Vínculo na Matrícula</span>
+                            <span className="block text-gray-500 dark:text-slate-400 mb-0.5">Empresa na Matrícula</span>
                             <span className="font-medium text-slate-700 dark:text-slate-200">
-                              {matricula.empresa_b2b_id 
+                              {matricula.empresa_b2b_id
                                 ? (companies.find(c => c.id === matricula.empresa_b2b_id)?.nome_fantasia || companies.find(c => c.id === matricula.empresa_b2b_id)?.razao_social || 'Empresa B2B')
                                 : 'Avulso'}
                             </span>
+                          </div>
+                          <div>
+                            <span className="block text-gray-500 dark:text-slate-400 mb-0.5">Presença</span>
+                            <span className="font-medium text-slate-700 dark:text-slate-200">{matricula.percentual_presenca ?? 0}%</span>
+                          </div>
+                          <div>
+                            <span className="block text-gray-500 dark:text-slate-400 mb-0.5">Notas</span>
+                            <span className="font-medium text-slate-700 dark:text-slate-200">{matricula.nota_1_chamada ?? '-'} / {matricula.nota_2_chamada ?? '-'}</span>
+                          </div>
+                          <div>
+                            <span className="block text-gray-500 dark:text-slate-400 mb-0.5">Resultado</span>
+                            <span className="font-medium text-slate-700 dark:text-slate-200">{matricula.status_resultado ?? matricula.status_resultado_final ?? '-'}</span>
+                          </div>
+                          <div>
+                            <span className="block text-gray-500 dark:text-slate-400 mb-0.5">Resultado final</span>
+                            <span className="font-medium text-slate-700 dark:text-slate-200">{matricula.status_resultado_final ?? '-'}</span>
+                          </div>
+                          <div>
+                            <span className="block text-gray-500 dark:text-slate-400 mb-0.5">Situação</span>
+                            <span className="font-medium text-slate-700 dark:text-slate-200">{matricula.status_matricula || '-'}</span>
                           </div>
                         </div>
                       </div>

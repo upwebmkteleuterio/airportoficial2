@@ -1,17 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { personService, type Pessoa } from '../services/personService';
 
-export function usePeople(options: { activeOnly?: boolean; directoryOnly?: boolean; search?: string } = {}) {
+export function usePeople(options: { activeOnly?: boolean; directoryOnly?: boolean; studentOnly?: boolean; search?: string } = {}) {
   const queryClient = useQueryClient();
   const search = options.search ?? '';
   const directoryOnly = options.directoryOnly ?? false;
+  const studentOnly = options.studentOnly ?? false;
   const peopleQuery = useQuery<Pessoa[]>({
-    queryKey: ['people', { search, directoryOnly }],
-    queryFn: () => personService.getAll(search, directoryOnly),
+    queryKey: ['people', { search, directoryOnly, studentOnly }],
+    queryFn: () => studentOnly ? personService.getStudents(search) : personService.getAll(search, directoryOnly),
   });
 
   const createMutation = useMutation({
-    mutationFn: (input: { nome: string; cpf?: string | null }) => personService.create(input),
+    mutationFn: (input: { nome: string; cpf?: string | null; papel?: import('../types').UserRole | null }) => personService.create(input),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['people'] }),
   });
 
