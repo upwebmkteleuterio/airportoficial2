@@ -1,6 +1,8 @@
 import { useMemo, useState, type ChangeEvent } from 'react';
 import { CheckCircle2, Clipboard, FileSpreadsheet, LoaderCircle, Play, TriangleAlert, UploadCloud } from 'lucide-react';
 import {
+  createStudentMigrationCompany,
+  normalizeStudentComparison,
   parseStudentMigrationFile,
   previewStudentMigrationBatch,
   runStudentMigrationBatch,
@@ -17,6 +19,12 @@ import {
 
 const MAX_BATCH_SIZE = 1000;
 
+type CompanyRegistrationForm = {
+  nome_fantasia: string;
+  razao_social: string;
+  cnpj: string;
+};
+
 export default function StudentMigrationPanel() {
   const [parsed, setParsed] = useState<StudentMigrationParseResult | null>(null);
   const [fileName, setFileName] = useState('');
@@ -29,6 +37,9 @@ export default function StudentMigrationPanel() {
   const [result, setResult] = useState<StudentMigrationRunResult | null>(null);
   const [parseError, setParseError] = useState('');
   const [clipboardMessage, setClipboardMessage] = useState('');
+  const [companyForms, setCompanyForms] = useState<Record<string, CompanyRegistrationForm>>({});
+  const [creatingCompany, setCreatingCompany] = useState('');
+  const [companyMessage, setCompanyMessage] = useState('');
 
   const selectedRows = useMemo(() => {
     const sourceRows = referencePreview?.rows.filter((row) => row.valid) ?? parsed?.validRows ?? [];
@@ -45,6 +56,8 @@ export default function StudentMigrationPanel() {
     setResult(null);
     setConfirming(false);
     setReferencePreview(null);
+    setCompanyForms({});
+    setCompanyMessage('');
     try {
       const next = await parseStudentMigrationFile(file);
       setParsed(next);
@@ -74,11 +87,34 @@ export default function StudentMigrationPanel() {
     try {
       const preview = await previewStudentMigrationBatch(parsed.validRows.slice(0, Math.min(MAX_BATCH_SIZE, batchSize)));
       setReferencePreview(preview);
+      setCompanyForms((current) => Object.fromEntries(preview.missingCompanies.map((name) => {
+        const key = normalizeStudentComparison(name);
+        return [key, current[key] ?? { nome_fantasia: name, razao_social: '', cnpj: '' }];
+      })));
+      setCompanyMessage('');
       setConfirming(true);
     } catch (error) {
       setParseError(error instanceof Error ? error.message : 'Não foi possível validar as referências da migração.');
     } finally {
       setPreviewing(false);
+    }
+  };
+
+  const registerCompany = async (companyName: string) => {
+    const key = normalizeStudentComparison(companyName);
+    const form = companyForms[key];
+    if (!form || !form.nome_fantasia.trim() || !form.razao_social.trim() || !form.cnpj.trim() || creatingCompany) return;
+    setCreatingCompany(key);
+    setCompanyMessage('');
+    try {
+      await createStudentMigrationCompany(form);
+      setCompanyMessage(`Empresa "${form.nome_fantasia}" cadastrada. Refaça a prévia antes de confirmar o lote.`);
+      setReferencePreview(null);
+      setConfirming(false);
+    } catch (error) {
+      setCompanyMessage(error instanceof Error ? error.message : 'Não foi possível cadastrar a empresa.');
+    } finally {
+      setCreatingCompany('');
     }
   };
 
@@ -154,6 +190,20 @@ export default function StudentMigrationPanel() {
           {confirming && <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/20"><p className="font-bold text-amber-900 dark:text-amber-200">Confirme o lote antes de gravar</p><p className="mt-1 text-sm text-amber-800 dark:text-amber-300">Serão processadas {selectedRows.length} linha(s) válidas após a conciliação. Linhas descartadas ou com conflito bloqueante não entram no lote, e cada linha terá resultado individual.</p>{referencePreview && <div className="mt-3 rounded-md border border-slate-200 bg-white/70 p-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-950/30 dark:text-slate-200"><strong>Prévia das referências:</strong> {referencePreview.blockingCount} problema(s) bloqueante(s) e {referencePreview.warningCount} aviso(s) não bloqueante(s). Empresas sem correspondência não serão criadas e ficam pendentes de cadastro manual.{referencePreview.blockingCount > 0 && <ul className="mt-2 max-h-36 list-disc overflow-y-auto pl-5 text-rose-700 dark:text-rose-300">{referencePreview.rows.filter((row) => row.problems.length > 0).map((row) => <li key={row.line}>Linha {row.line}: {row.problems.join(' ')}</li>)}</ul>}{referencePreview.warningCount > 0 && <ul className="mt-2 max-h-36 list-disc overflow-y-auto pl-5 text-amber-700 dark:text-amber-300">{referencePreview.rows.filter((row) => row.warnings.length > 0).map((row) => <li key={`warning-${row.line}`}>Linha {row.line}: {row.warnings.join(' ')}</li>)}</ul>}</div>}<div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => void execute()} disabled={!selectedRows.length} className="inline-flex items-center gap-2 rounded-md bg-teal-700 px-4 py-2 text-sm font-bold text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-teal-500"><CheckCircle2 className="h-4 w-4" aria-hidden="true" /> Confirmar e iniciar lote</button><button type="button" onClick={() => { setReferencePreview(null); setConfirming(false); }} className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold dark:border-slate-700">Voltar</button></div></div>}
           <button type="button" onClick={() => void prepare()} disabled={running || previewing || !parsed.validRows.length || hasFileProblem} className="mt-4 inline-flex items-center gap-2 rounded-md bg-slate-900 px-4 py-2 text-sm font-bold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-teal-700 dark:hover:bg-teal-600"><Play className="h-4 w-4" aria-hidden="true" /> {previewing ? 'Validando referências…' : 'Revisar e confirmar lote'}</button>
         </section>
+        {companyMessage && !confirming && <p role="status" className="rounded-md border border-teal-200 bg-teal-50 p-3 text-sm text-teal-800 dark:border-teal-900 dark:bg-teal-950/30 dark:text-teal-300">{companyMessage}</p>}
+
+        {confirming && referencePreview?.missingCompanies.length ? <section className="rounded-xl border border-amber-300 bg-amber-50 p-5 shadow-sm dark:border-amber-800 dark:bg-amber-950/20">
+          <h2 className="text-sm font-bold uppercase tracking-wide text-amber-900 dark:text-amber-200">Empresas ausentes: cadastro antes do vínculo</h2>
+          <p className="mt-2 text-sm text-amber-800 dark:text-amber-300">Cadastre cada empresa ausente com nome fantasia, razão social e CNPJ. A matrícula permanecerá sem empresa enquanto o cadastro não existir. Depois, refaça a prévia para conciliar a empresa antes da gravação.</p>
+          <div className="mt-4 space-y-4">
+            {referencePreview.missingCompanies.map((companyName) => {
+              const key = normalizeStudentComparison(companyName);
+              const form = companyForms[key] ?? { nome_fantasia: companyName, razao_social: '', cnpj: '' };
+              return <fieldset key={key} className="rounded-md border border-amber-200 bg-white/70 p-3 dark:border-amber-900 dark:bg-slate-950/30"><legend className="px-1 text-sm font-bold text-slate-800 dark:text-slate-100">Empresa informada: {companyName}</legend><div className="grid gap-3 md:grid-cols-3"><label className="text-xs font-semibold text-slate-700 dark:text-slate-200">Nome fantasia<input value={form.nome_fantasia} onChange={(event) => setCompanyForms((current) => ({ ...current, [key]: { ...form, nome_fantasia: event.target.value } }))} disabled={creatingCompany === key} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 dark:border-slate-700 dark:bg-slate-950" /></label><label className="text-xs font-semibold text-slate-700 dark:text-slate-200">Razão social<input value={form.razao_social} onChange={(event) => setCompanyForms((current) => ({ ...current, [key]: { ...form, razao_social: event.target.value } }))} disabled={creatingCompany === key} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 dark:border-slate-700 dark:bg-slate-950" /></label><label className="text-xs font-semibold text-slate-700 dark:text-slate-200">CNPJ<input value={form.cnpj} onChange={(event) => setCompanyForms((current) => ({ ...current, [key]: { ...form, cnpj: event.target.value } }))} disabled={creatingCompany === key} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 dark:border-slate-700 dark:bg-slate-950" /></label></div><button type="button" onClick={() => void registerCompany(companyName)} disabled={creatingCompany !== '' || !form.nome_fantasia.trim() || !form.razao_social.trim() || !form.cnpj.trim()} className="mt-3 inline-flex items-center gap-2 rounded-md border border-teal-700 px-3 py-2 text-sm font-bold text-teal-800 disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-teal-500 dark:border-teal-500 dark:text-teal-300">{creatingCompany === key && <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" />} {creatingCompany === key ? 'Cadastrando…' : 'Cadastrar empresa'}</button></fieldset>;
+            })}
+          </div>
+          {companyMessage && <p role="status" className="mt-3 text-sm text-teal-800 dark:text-teal-300">{companyMessage}</p>}
+        </section> : null}
 
         {(running || progress || result) && <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-700 dark:text-slate-200">4. Acompanhamento e logs</h2>

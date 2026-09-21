@@ -1,6 +1,7 @@
 import * as XLSX from 'xlsx';
 import { supabase } from '../integrations/supabase/client';
 import { UserRole } from '../types';
+import { companyService } from './companyService';
 import { newServiceId } from './supabaseErrors';
 
 export const STUDENT_MIGRATION_COLUMNS = [
@@ -79,6 +80,7 @@ export type StudentMigrationPreviewResult = {
   rows: StudentMigrationRow[];
   blockingCount: number;
   warningCount: number;
+  missingCompanies: string[];
 };
 
 type StudentTurma = { id: string; id_interno_escola: number; id_anac: string; data_termino: string | null };
@@ -294,15 +296,16 @@ function classForRow(row: StudentMigrationRow, byInternal: Map<number, StudentTu
 export async function previewStudentMigrationBatch(rows: StudentMigrationRow[]): Promise<StudentMigrationPreviewResult> {
   await assertStudentMigrationAccess();
   const selectedRows = rows.filter((row) => row.valid);
-  if (!selectedRows.length) return { rows: [], blockingCount: 0, warningCount: 0 };
+  if (!selectedRows.length) return { rows: [], blockingCount: 0, warningCount: 0, missingCompanies: [] };
   const internals = uniqueBy(selectedRows.map((row) => Number(row.normalized.turma)), String);
   const anacs = uniqueBy(selectedRows.map((row) => row.normalized.anac), (value) => normalizeStudentComparison(value));
-  const [internalQuery, anacQuery, peopleQuery] = await Promise.all([
+  const [internalQuery, anacQuery, peopleQuery, companiesQuery] = await Promise.all([
     supabase.from('turmas').select('id,id_interno_escola,id_anac,data_termino').in('id_interno_escola', internals),
     supabase.from('turmas').select('id,id_interno_escola,id_anac,data_termino').in('id_anac', anacs),
     supabase.from('pessoas').select('id,nome,cpf,papel,ativo'),
+    supabase.from('empresas').select('id,nome_fantasia,razao_social'),
   ]);
-  if (internalQuery.error || anacQuery.error || peopleQuery.error) throw safeError('Não foi possível validar as referências da migração.');
+  if (internalQuery.error || anacQuery.error || peopleQuery.error || companiesQuery.error) throw safeError('Não foi possível validar as referências da migração.');
   const byInternal = new Map(((internalQuery.data ?? []) as StudentTurma[]).map((turma) => [turma.id_interno_escola, turma]));
   const byAnac = new Map(((anacQuery.data ?? []) as StudentTurma[]).map((turma) => [normalizeStudentComparison(turma.id_anac), turma]));
   const peopleByCpf = new Map<string, StudentPerson>();
@@ -313,6 +316,7 @@ export async function previewStudentMigrationBatch(rows: StudentMigrationRow[]):
     if (peopleByCpf.has(cpf)) duplicatePeopleCpfs.add(cpf);
     peopleByCpf.set(cpf, person);
   });
+  const companies = (companiesQuery.data ?? []) as StudentCompany[];
   const previewRows = selectedRows.map((row) => {
     const previewRow: StudentMigrationRow = { ...row, problems: [...row.problems], warnings: [...row.warnings] };
     try {
@@ -325,9 +329,17 @@ export async function previewStudentMigrationBatch(rows: StudentMigrationRow[]):
     if (person?.papel && person.papel !== UserRole.ALUNO) previewRow.problems.push('CPF já pertence a uma pessoa com outro papel; revisão manual necessária.');
     if (person && !person.ativo) previewRow.problems.push('A pessoa encontrada pelo CPF está inativa.');
     if (person && !person.papel) previewRow.warnings.push('Pessoa histórica sem papel; será classificada como ALUNO antes da matrícula.');
+    if (person && normalizeStudentComparison(person.nome) !== normalizeStudentComparison(previewRow.normalized.nome)) {
+      previewRow.warnings.push(`Nome da planilha "${previewRow.normalized.nome}" diverge do nome canônico cadastrado para o CPF ("${person.nome}").`);
+    }
     const companyName = clean(previewRow.values.Empresa);
     if (companyName) {
-      const warning = `Empresa "${companyName}" informada; a correspondência será verificada na execução. Se não for encontrada, o cadastro manual ficará pendente.`;
+      const match = companyMatches(companies, companyName);
+      const warning = match.company
+        ? `Empresa "${companyName}" encontrada e poderá ser vinculada à matrícula.`
+        : match.ambiguous
+          ? `Empresa "${companyName}" corresponde a mais de um cadastro; cadastro manual pendente.`
+          : `Empresa "${companyName}" não encontrada; cadastre-a antes de refazer a prévia para vinculá-la.`;
       if (!previewRow.warnings.includes(warning)) previewRow.warnings.push(warning);
     }
     previewRow.valid = previewRow.problems.length === 0;
@@ -337,7 +349,25 @@ export async function previewStudentMigrationBatch(rows: StudentMigrationRow[]):
     rows: previewRows,
     blockingCount: previewRows.reduce((total, row) => total + row.problems.length, 0),
     warningCount: previewRows.reduce((total, row) => total + row.warnings.length, 0),
+    missingCompanies: uniqueBy(
+      previewRows
+        .map((row) => clean(row.values.Empresa))
+        .filter((name) => name && !companyMatches(companies, name).company && !companyMatches(companies, name).ambiguous),
+      (name) => normalizeStudentComparison(name),
+    ),
   };
+}
+
+export async function createStudentMigrationCompany(company: { nome_fantasia: string; razao_social: string; cnpj: string }): Promise<void> {
+  await assertStudentMigrationAccess();
+  if (!company.nome_fantasia.trim() || !company.razao_social.trim() || !company.cnpj.trim()) {
+    throw safeError('Nome fantasia, razão social e CNPJ são obrigatórios para cadastrar a empresa.');
+  }
+  await companyService.createMigrationCompany({
+    nome_fantasia: company.nome_fantasia.trim(),
+    razao_social: company.razao_social.trim(),
+    cnpj: company.cnpj.trim(),
+  });
 }
 
 function statusForClass(turma: StudentTurma): 'Ativo' | 'Concluido' {
@@ -401,6 +431,10 @@ export async function runStudentMigrationBatch(rows: StudentMigrationRow[], onPr
       let person = peopleByCpf.get(row.normalized.cpf);
       if (person && person.papel && person.papel !== UserRole.ALUNO) throw safeError('CPF já pertence a uma pessoa com outro papel; revisão manual necessária.');
       if (person && !person.ativo) throw safeError('A pessoa encontrada pelo CPF está inativa.');
+      if (person && normalizeStudentComparison(person.nome) !== normalizeStudentComparison(row.normalized.nome)) {
+        const warning = `Nome da planilha "${row.normalized.nome}" diverge do nome canônico cadastrado para o CPF ("${person.nome}").`;
+        if (!row.warnings.includes(warning)) row.warnings = [...row.warnings, warning];
+      }
       if (person && !person.papel) {
         const { data, error } = await supabase.from('pessoas').update({ papel: UserRole.ALUNO }).eq('id', person.id).select('id,nome,cpf,papel,ativo').single();
         if (error || !data || data.id !== person.id || data.papel !== UserRole.ALUNO) throw safeError('Não foi possível classificar a pessoa histórica como aluno.');

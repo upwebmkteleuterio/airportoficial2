@@ -130,6 +130,17 @@ export const companyService = {
     return data as Empresa;
   },
 
+  createMigrationCompany: async (company: Pick<Empresa, 'nome_fantasia' | 'razao_social' | 'cnpj'>): Promise<Empresa> => {
+    const uniqueValue = crypto.randomUUID();
+    return companyService.create({
+      ...company,
+      hash_link_inscricao: `migracao-${uniqueValue}`,
+      token_registro_b2b: `tk_migracao_${uniqueValue}`,
+      limite_vagas_corporativo: 0,
+      status_ativo: true,
+    });
+  },
+
   update: async (id: string, updates: Partial<Empresa>): Promise<Empresa> => {
     const { data, error } = await supabase
       .from('empresas')
