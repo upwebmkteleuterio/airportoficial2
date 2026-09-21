@@ -181,6 +181,17 @@ function rowValues(row: unknown[], headerMap: Map<StudentMigrationColumn, number
   return values;
 }
 
+function hasStudentIdentifier(values: Record<StudentMigrationColumn, string>): boolean {
+  const turma = clean(values.TURMA);
+  const anac = clean(values.ANAC);
+  return Boolean(
+    (turma && !/^0+$/.test(turma))
+    || (anac && !/^0+$/.test(anac))
+    || clean(values.NOMES)
+    || clean(values.CPF),
+  );
+}
+
 function validateRow(values: Record<StudentMigrationColumn, string>) {
   const problems: string[] = [];
   const turma = clean(values.TURMA);
@@ -239,16 +250,16 @@ export async function parseStudentMigrationFile(file: File): Promise<StudentMigr
   const rows: StudentMigrationRow[] = matrix.slice(1).map((row, index) => {
     const values = rowValues(row, headerMap);
     const validation = validateRow(values);
-    const hasSourceValue = Object.values(values).some(Boolean);
+    const hasIdentifier = hasStudentIdentifier(values);
     return {
       line: index + 2,
       values,
       normalized: validation.normalized,
-      problems: hasSourceValue ? validation.problems : ['Linha vazia.'],
+      problems: hasIdentifier ? validation.problems : ['Linha vazia.'],
       warnings: clean(values.Empresa) ? [`Empresa "${clean(values.Empresa)}" informada; a correspondência será verificada na execução. Se não for encontrada, o cadastro manual ficará pendente.`] : [],
-      valid: hasSourceValue && validation.problems.length === 0,
+      valid: hasIdentifier && validation.problems.length === 0,
     };
-  }).filter((row) => Object.values(row.values).some(Boolean));
+  }).filter((row) => hasStudentIdentifier(row.values));
 
   const cpfLines = new Map<string, number>();
   rows.forEach((row) => {
