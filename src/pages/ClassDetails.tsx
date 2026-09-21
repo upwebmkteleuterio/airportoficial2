@@ -220,6 +220,7 @@ function ClassDetails() {
     classData,
     isLoadingClass,
     isLoadingMatriculas,
+    isFetchingMatriculas,
     isLoadingDiario,
     isLoadingInstructors,
     matriculas,
@@ -904,7 +905,7 @@ function ClassDetails() {
           <div className="flex-1 flex flex-col gap-4 min-h-0">
             {/* Actions Panel inside Tab */}
             <div className="flex flex-wrap items-center justify-between gap-4 shrink-0 font-sans">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-4">
                 {!isInstructor && (<CreateMenu
                   onSelect={(label) => {
                     if (label === 'Adicionar aluno existente') {
@@ -921,7 +922,7 @@ function ClassDetails() {
                     type="search"
                     value={studentSearch}
                     onChange={(event) => setStudentSearch(event.target.value)}
-                    placeholder="Buscar aluno, CPF, RE ou ANAC..."
+                    placeholder="Buscar aluno por nome ou CPF..."
                     className="w-56 pl-8 pr-3 py-2 border border-gray-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-850 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500"
                   />
                 </label>
@@ -970,15 +971,14 @@ function ClassDetails() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-150 dark:divide-slate-800 font-mono text-gray-700 dark:text-slate-200">
-                    {isLoadingMatriculas ? (
-                      <tr>
-                        <td colSpan={13} className="px-4 py-8">
-                          <div className="flex flex-col items-center justify-center gap-2">
-                            <div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin"></div>
-                            <p className="text-gray-500 text-sm font-sans">Carregando matrículas...</p>
-                          </div>
-                        </td>
-                      </tr>
+                    {isLoadingMatriculas || isFetchingMatriculas ? (
+                      Array.from({ length: 5 }, (_, index) => (
+                        <tr key={`student-skeleton-${index}`} aria-hidden="true" className="h-[40px]">
+                          <td colSpan={13} className="px-4 py-2">
+                            <div className="h-4 w-full rounded bg-slate-200 dark:bg-slate-700 animate-pulse" />
+                          </td>
+                        </tr>
+                      ))
                     ) : matriculas.length === 0 ? (
                       <tr>
                         <td colSpan={13} className="px-4 py-12 text-center text-gray-500 font-sans">

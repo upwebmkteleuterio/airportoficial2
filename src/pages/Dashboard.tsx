@@ -281,6 +281,7 @@ export function Dashboard() {
         getClassEditability,
         saveInstrutoresForTurma,
         isLoading,
+        isFetching,
         isCreating,
         isUpdating
     } = useClasses({
@@ -1292,17 +1293,15 @@ export function Dashboard() {
                         </thead>
                         <tbody
                             className="divide-y divide-gray-150 dark:divide-slate-800 text-gray-700 dark:text-slate-200 font-mono">
-                            {isLoading ? (<tr>
-                                <td
-                                    colSpan={Object.values(visibleColumns).filter(Boolean).length + (isInstructor ? 0 : 1)}
-                                    className="px-4 py-8 text-center">
-                                    <div className="flex flex-col items-center justify-center gap-2 text-gray-500">
-                                        <div
-                                            className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin"></div>
-                                        <p className="font-sans text-sm">Buscando informações do servidor...</p>
-                                    </div>
-                                </td>
-                            </tr>) : paginatedClasses.length === 0 ? (<tr>
+                            {isLoading || isFetching ? Array.from({ length: 5 }, (_, index) => (
+                                <tr key={`class-skeleton-${index}`} aria-hidden="true" className="h-[38px]">
+                                    <td
+                                        colSpan={Object.values(visibleColumns).filter(Boolean).length + (isInstructor ? 0 : 1)}
+                                        className="px-4 py-2">
+                                        <div className="h-4 w-full rounded bg-slate-200 dark:bg-slate-700 animate-pulse" />
+                                    </td>
+                                </tr>
+                            )) : paginatedClasses.length === 0 ? (<tr>
                                 <td
                                     colSpan={Object.values(visibleColumns).filter(Boolean).length + (isInstructor ? 0 : 1)}
                                     className="px-4 py-12 text-center text-gray-500 font-sans">

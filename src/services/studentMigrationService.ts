@@ -221,7 +221,7 @@ export async function parseStudentMigrationFile(file: File): Promise<StudentMigr
   const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
   const firstSheet = workbook.SheetNames[0];
   if (!firstSheet) throw new Error('O arquivo não contém uma planilha.');
-  const matrix = XLSX.utils.sheet_to_json<unknown[]>(workbook.Sheets[firstSheet], { header: 1, defval: '', raw: true });
+  const matrix = XLSX.utils.sheet_to_json<unknown[]>(workbook.Sheets[firstSheet], { header: 1, defval: '', raw: false });
   const headers = (matrix[0] ?? []).map(displayCell);
   if (headers.every((header) => !header)) throw new Error('A primeira linha precisa conter os nomes das colunas.');
   const recognized: StudentMigrationColumn[] = [];
