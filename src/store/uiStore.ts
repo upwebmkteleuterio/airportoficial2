@@ -11,6 +11,7 @@ interface UIState {
   userLogged: Usuario | null;
   activeRoute: string; // 'login' | 'dashboard' | 'class-details' | 'central-ged' | 'empresas' | 'relatorios' | 'aluno-inicio' | 'aluno-docs' | 'cursos' | 'instrutores' | 'coordenadores' | 'enderecos'
   selectedClassId: string | null;
+  classListPage: number;
   themeMode: 'light' | 'dark';
   sidebarCollapsed: boolean;
   modals: {
@@ -41,6 +42,7 @@ interface UIState {
   logout: () => void;
   setRoute: (route: string) => void;
   setSelectedClassId: (id: string | null) => void;
+  setClassListPage: (page: number) => void;
   toggleTheme: () => void;
   setTheme: (theme: 'light' | 'dark') => void;
   toggleSidebar: () => void;
@@ -57,6 +59,7 @@ export const useUIStore = create<UIState>()(
       userLogged: null,
       activeRoute: 'login',
       selectedClassId: null,
+      classListPage: 1,
       themeMode: 'light',
       sidebarCollapsed: false,
       modals: {
@@ -79,9 +82,10 @@ export const useUIStore = create<UIState>()(
         userLogged: user,
         activeRoute: state.activeRoute === 'login' ? (user.role === 'ALUNO' ? 'aluno-inicio' : 'dashboard') : state.activeRoute,
       })),
-      logout: () => set({ userLogged: null, activeRoute: 'login', selectedClassId: null }),
+      logout: () => set({ userLogged: null, activeRoute: 'login', selectedClassId: null, classListPage: 1 }),
       setRoute: (route) => set({ activeRoute: route }),
       setSelectedClassId: (id) => set({ selectedClassId: id }),
+      setClassListPage: (page) => set({ classListPage: page }),
       toggleTheme: () => set((state) => ({ themeMode: state.themeMode === 'light' ? 'dark' : 'light' })),
       setTheme: (theme) => set({ themeMode: theme }),
       toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
@@ -106,6 +110,7 @@ export const useUIStore = create<UIState>()(
           userLogged: null,
           activeRoute: 'login',
           selectedClassId: null,
+          classListPage: 1,
           modals: {
             newClassOpen: false,
             newCompanyOpen: false,

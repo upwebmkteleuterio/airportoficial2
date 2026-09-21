@@ -251,11 +251,13 @@ export function Dashboard() {
         setModalOpen,
         setRoute,
         setSelectedClassId,
+        classListPage,
+        setClassListPage,
         userLogged
     } = useUIStore();
     const isInstructor = userLogged?.role === 'INSTRUTOR';
 
-    const [currentPage, setCurrentPage] = useState(1);
+    const [currentPage, setCurrentPage] = useState(() => classListPage);
     const [activeDeadlineAlert, setActiveDeadlineAlert] = useState<ClassDeadlineAlertType | null>(null);
     const [isDeadlineAlertModalOpen, setIsDeadlineAlertModalOpen] = useState(false);
     const [turmaInstructorsMap, setTurmaInstructorsMap] = useState<Record<string, { instrutor_id: string; funcao: string }[]>>({});
@@ -828,9 +830,24 @@ export function Dashboard() {
     const visibleTotal = activeDeadlineAlert ? filteredClasses.length : total;
     const totalPages = Math.ceil(visibleTotal / itemsPerPage) || 1;
 
+    const classListFiltersKey = JSON.stringify({
+        search: filters.classSearchTerm,
+        course: filters.classCourseFilter,
+        advanced: advancedFilters,
+        alert: activeDeadlineAlert,
+    });
+    const previousClassListFiltersKeyRef = useRef(classListFiltersKey);
+
     useEffect(() => {
-        setCurrentPage(1);
-    }, [filters.classSearchTerm, filters.classCourseFilter, advancedFilters, activeDeadlineAlert]);
+        setClassListPage(currentPage);
+    }, [currentPage, setClassListPage]);
+
+    useEffect(() => {
+        if (previousClassListFiltersKeyRef.current !== classListFiltersKey) {
+            previousClassListFiltersKeyRef.current = classListFiltersKey;
+            setCurrentPage(1);
+        }
+    }, [classListFiltersKey]);
 
     useEffect(() => {
         if (activeDeadlineAlert && deadlineAlertCounts[activeDeadlineAlert] === 0) {
