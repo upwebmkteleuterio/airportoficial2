@@ -259,7 +259,13 @@ export const classService = {
     if (term) {
       const internalMatch = term.match(/^(?:t-(?:op-)?)?(\d+)$/i);
       if (internalMatch) {
-        query = query.eq('id_interno_escola', Number(internalMatch[1]));
+        const internalId = Number(internalMatch[1]);
+        if (!Number.isSafeInteger(internalId)) return { data: [], total: 0 };
+        if (/^\d+$/.test(term)) {
+          query = query.or(`id_interno_escola.eq.${internalId},id_anac.eq.${internalId}`);
+        } else {
+          query = query.eq('id_interno_escola', internalId);
+        }
       } else if (/^t-/i.test(term)) {
         return { data: [], total: 0 };
       } else {

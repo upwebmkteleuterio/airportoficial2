@@ -72,7 +72,7 @@ export function ClassDeadlineAlertModal({ isOpen, classes, onClose }: ClassDeadl
                         type="button"
                         onClick={onClose}
                         aria-label="Ciente, ir para o painel"
-                        className="w-full rounded-lg bg-[#1A1C2C] px-4 py-2.5 font-medium text-white shadow-sm transition-colors hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:bg-teal-600 dark:hover:bg-teal-500"
+                        className="w-full cursor-pointer rounded-lg bg-[#1A1C2C] px-4 py-2.5 font-medium text-white shadow-sm transition-colors hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:bg-teal-600 dark:hover:bg-teal-500"
                     >
                         Ciente, ir para o painel
                     </button>
