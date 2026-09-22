@@ -969,16 +969,22 @@ function ClassDetails() {
                   </thead>
                   <tbody className="divide-y divide-gray-150 dark:divide-slate-800 font-mono text-gray-700 dark:text-slate-200">
                     {isLoadingMatriculas || isFetchingMatriculas ? (
-                      Array.from({ length: 5 }, (_, index) => (
+                      Array.from({ length: 8 }, (_, index) => (
                         <tr key={`student-skeleton-${index}`} aria-hidden="true" className="h-[40px]">
-                          <td colSpan={10} className="px-4 py-2">
-                            <div className="h-4 w-full rounded bg-slate-200 dark:bg-slate-700 animate-pulse" />
-                          </td>
+                          <td className="px-4 py-2"><div className="mx-auto h-4 w-5 animate-pulse rounded bg-slate-200 dark:bg-slate-700" /></td>
+                          <td className="px-4 py-2"><div className="h-4 w-28 animate-pulse rounded bg-slate-200 dark:bg-slate-700" /></td>
+                          <td className="px-4 py-2"><div className="h-4 w-48 animate-pulse rounded bg-slate-200 dark:bg-slate-700" /></td>
+                          <td className="px-4 py-2 text-center"><div className="mx-auto h-4 w-10 animate-pulse rounded bg-slate-200 dark:bg-slate-700" /></td>
+                          <td className="px-4 py-2"><div className="mx-auto h-4 w-12 animate-pulse rounded bg-slate-200 dark:bg-slate-700" /></td>
+                          <td className="px-4 py-2"><div className="mx-auto h-4 w-12 animate-pulse rounded bg-slate-200 dark:bg-slate-700" /></td>
+                          <td className="px-4 py-2"><div className="mx-auto h-4 w-20 animate-pulse rounded bg-slate-200 dark:bg-slate-700" /></td>
+                          <td className="px-4 py-2"><div className="mx-auto h-4 w-24 animate-pulse rounded bg-slate-200 dark:bg-slate-700" /></td>
+                          <td className="px-4 py-2"><div className="mx-auto h-4 w-20 animate-pulse rounded bg-slate-200 dark:bg-slate-700" /></td>
                         </tr>
                       ))
                     ) : matriculas.length === 0 ? (
                       <tr>
-                        <td colSpan={10} className="px-4 py-12 text-center text-gray-500 font-sans">
+                        <td colSpan={9} className="px-4 py-12 text-center text-gray-500 font-sans">
                           <div className="flex flex-col items-center justify-center gap-2 max-w-sm mx-auto">
                             <div className="p-3 bg-teal-500/10 rounded-full text-teal-500">
                               <Users className="w-6 h-6" />
