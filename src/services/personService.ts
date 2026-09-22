@@ -39,8 +39,10 @@ export const personService = {
     search?: string;
     onlyActive: boolean;
   }): Promise<{ data: DirectoryPerson[]; total: number }> => {
-    const page = Math.max(1, Math.floor(options.page));
-    const pageSize = Math.min(300, Math.max(1, Math.floor(options.pageSize)));
+    const page = Number.isFinite(options.page) ? Math.max(1, Math.floor(options.page)) : 1;
+    const pageSize = Number.isFinite(options.pageSize)
+      ? Math.min(300, Math.max(1, Math.floor(options.pageSize)))
+      : 300;
     const search = normalizeDirectorySearch(options.search ?? '');
     const { data, error } = await supabase.rpc('get_directory_people_page', {
       p_role: options.role,

@@ -1,4 +1,5 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { personService, type DirectoryPerson, type Pessoa } from '../services/personService';
 import { userService } from '../services/userService';
 import { UserRole } from '../types';
@@ -11,13 +12,45 @@ interface DirectoryPeopleOptions {
   onlyActive: boolean;
 }
 
+export const directoryPeopleQueryKey = (options: DirectoryPeopleOptions) => [
+  'directory-people',
+  options.role,
+  options.page,
+  options.pageSize,
+  options.search ?? '',
+  options.onlyActive,
+] as const;
+
+const directoryStaleTime = 30_000;
+
 export function useDirectoryPeople(options: DirectoryPeopleOptions) {
   const queryClient = useQueryClient();
+  const { role, page, pageSize, onlyActive } = options;
   const search = options.search ?? '';
+  const queryKey = directoryPeopleQueryKey({ ...options, search });
   const directoryQuery = useQuery({
-    queryKey: ['directory-people', options.role, options.page, options.pageSize, search, options.onlyActive],
-    queryFn: () => personService.getDirectoryPage(options),
+    queryKey,
+    queryFn: () => personService.getDirectoryPage({ ...options, search }),
+    placeholderData: keepPreviousData,
+    staleTime: directoryStaleTime,
   });
+
+  useEffect(() => {
+    if (directoryQuery.isPlaceholderData || !directoryQuery.data?.total) return;
+
+    const totalPages = Math.ceil(directoryQuery.data.total / pageSize);
+    const adjacentPages = [page - 1, page + 1]
+      .filter((adjacentPage) => adjacentPage >= 1 && adjacentPage <= totalPages);
+
+    adjacentPages.forEach((adjacentPage) => {
+      const adjacentOptions = { role, page: adjacentPage, pageSize, search, onlyActive };
+      void queryClient.prefetchQuery({
+        queryKey: directoryPeopleQueryKey(adjacentOptions),
+        queryFn: () => personService.getDirectoryPage(adjacentOptions),
+        staleTime: directoryStaleTime,
+      });
+    });
+  }, [directoryQuery.data, directoryQuery.isPlaceholderData, onlyActive, page, pageSize, queryClient, role, search]);
 
   const createMutation = useMutation({
     mutationFn: (input: { nome: string; cpf?: string | null; papel?: UserRole | null }) => personService.create(input),
