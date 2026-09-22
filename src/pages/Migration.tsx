@@ -13,7 +13,7 @@ import {
 } from '../services/migrationService';
 import StudentMigrationPanel from '../components/StudentMigrationPanel';
 
-const MAX_BATCH_SIZE = 1000;
+const MAX_BATCH_SIZE = 3000;
 
 function formatBrazilianDate(date: string): string {
   const [year, month, day] = date.split('-');
