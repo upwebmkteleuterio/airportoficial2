@@ -55,7 +55,7 @@ export function useStudentDocuments(userId: string | null) {
 
   const studentDocsQuery = useQuery({
     queryKey: ['documents', 'student', userId],
-    queryFn: () => userId ? documentService.getByUserId(userId) : Promise.resolve([]),
+    queryFn: () => userId ? documentService.getByPersonId(userId, userId) : Promise.resolve([]),
     enabled: !!userId,
   });
 
@@ -64,6 +64,7 @@ export function useStudentDocuments(userId: string | null) {
       if (!userId) throw new Error('No user logged in');
       return documentService.create({
         ...newDoc,
+        pessoa_id: userId,
         usuario_id: userId,
       });
     },
@@ -74,9 +75,9 @@ export function useStudentDocuments(userId: string | null) {
   });
 
   const uploadFileMutation = useMutation({
-    mutationFn: (input: Omit<Parameters<typeof documentService.uploadFile>[0], 'usuario_id'>) => {
+    mutationFn: (input: Omit<Parameters<typeof documentService.uploadFile>[0], 'pessoa_id' | 'usuario_id'>) => {
       if (!userId) throw new Error('No user logged in');
-      return documentService.uploadFile({ ...input, usuario_id: userId });
+      return documentService.uploadFile({ ...input, pessoa_id: userId, usuario_id: userId });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['documents', 'student', userId] });

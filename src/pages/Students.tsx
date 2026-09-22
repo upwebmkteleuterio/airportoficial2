@@ -159,7 +159,7 @@ export function Students() {
                     {aluno.is_directory_person && <button type="button" onClick={(event) => { event.stopPropagation(); setOpenMenuId(null); setSelectedStudentForEdit(aluno); setSelectedPersonForAccess(aluno.id); setRegistrationModalOpen(true); }} className="w-full text-left px-4 py-2 text-xs font-semibold text-teal-700 dark:text-teal-300 hover:bg-teal-50 dark:hover:bg-slate-800 flex items-center gap-2"><UserPlus className="w-4 h-4" />Dar acesso ao sistema</button>}
                     <button type="button" onClick={(event) => { event.stopPropagation(); setOpenMenuId(null); setStudentToDelete(aluno); }} className="w-full text-left px-4 py-2 text-xs font-semibold text-red-500 hover:bg-red-50 dark:hover:bg-slate-800 flex items-center gap-2"><Trash2 className="w-4 h-4" />Excluir</button>
                   </div>}
-                  {!aluno.is_directory_person && <FolderIcon onClick={(event) => { event.stopPropagation(); handleOpenDocuments(aluno); }} />}
+                  <FolderIcon onClick={(event) => { event.stopPropagation(); handleOpenDocuments(aluno); }} />
                 </div></td>
                 <td className="px-5 py-2.5"><div className="font-bold text-slate-900 dark:text-white">{aluno.nome_completo}</div></td>
                 <td className="px-5 py-2.5 font-mono text-xs">{aluno.cpf || '-'}</td>

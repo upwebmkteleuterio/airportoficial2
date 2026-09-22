@@ -219,7 +219,10 @@ export interface DiarioClasse {
 // 3. Entidades de Segurança e GED
 export interface Documento {
   id: string;
-  usuario_id: string;
+  /** Identidade canônica da pessoa; novos documentos devem usar este campo. */
+  pessoa_id?: string | null;
+  /** Legado: permanece para leitura e compatibilidade com documentos antigos. */
+  usuario_id?: string | null;
   tipo_documento: string;
   url_armazenamento?: string;
   arquivo_nome: string;

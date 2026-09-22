@@ -45,6 +45,7 @@ export function Instructors() {
   const [selectedPersonForEdit, setSelectedPersonForEdit] = useState<any | null>(null);
 
   const [selectedStaffForEdit, setSelectedStaffForEdit] = useState<any | null>(null);
+  const [selectedPersonForAccess, setSelectedPersonForAccess] = useState<string | null>(null);
   const [staffToDelete, setStaffToDelete] = useState<any | null>(null);
 
 
@@ -255,6 +256,19 @@ export function Instructors() {
                               <Edit2 className="w-4 h-4" />
                               Editar
                             </button>
+                            {instrutor.is_directory_person && <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOpenMenuId(null);
+                                setSelectedStaffForEdit(instrutor);
+                                setSelectedPersonForAccess(instrutor.id);
+                                setRegistrationModalOpen(true);
+                              }}
+                              className="w-full text-left px-4 py-2 text-xs font-semibold text-teal-700 dark:text-teal-300 hover:bg-teal-50 dark:hover:bg-slate-800 flex items-center gap-2"
+                            >
+                              <UserPlus className="w-4 h-4" />
+                              Dar acesso ao sistema
+                            </button>}
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -380,13 +394,15 @@ export function Instructors() {
         }}
       />
       <StaffRegistrationModal role={UserRole.INSTRUTOR}
+        personId={selectedPersonForAccess ?? undefined}
         initialData={selectedStaffForEdit}
         isOpen={registrationModalOpen}
-        onClose={() => { setRegistrationModalOpen(false); setSelectedStaffForEdit(null); }}
+        onClose={() => { setRegistrationModalOpen(false); setSelectedStaffForEdit(null); setSelectedPersonForAccess(null); }}
         onSuccess={() => {
           const wasEditing = Boolean(selectedStaffForEdit);
           setRegistrationModalOpen(false);
           setSelectedStaffForEdit(null);
+          setSelectedPersonForAccess(null);
           setToast({
             type: 'success',
             message: wasEditing

@@ -278,7 +278,7 @@ export async function parseStudentMigrationFile(file: File): Promise<StudentMigr
   rows.forEach((row) => {
     if (!row.normalized.cpf) return;
     const previous = cpfLines.get(row.normalized.cpf);
-    if (previous) row.warnings.push(`CPF repetido no arquivo (também aparece na linha ${previous}); será conciliado com a mesma pessoa.`);
+    if (previous) row.warnings.push(`CPF repetido no arquivo (também aparece na linha ${previous}); a mesma pessoa será reutilizada e a matrícula será vinculada à turma desta linha.`);
     else cpfLines.set(row.normalized.cpf, row.line);
   });
   const validRows = rows.filter((row) => row.valid);

@@ -11,7 +11,8 @@ export interface DocumentAccessItem {
 
 export interface DocumentAccessGrant {
   id: string;
-  target_user_id: string;
+  target_person_id: string;
+  target_user_id?: string | null;
   expires_at: string;
 }
 
@@ -94,14 +95,14 @@ export const documentAccessService = {
     }
   },
 
-  getCurrentByUserId: async (userId: string): Promise<Documento[]> => {
-    const documents = await documentService.getByUserId(userId);
+  getCurrentByPersonId: async (personId: string, profileLegacyId?: string | null): Promise<Documento[]> => {
+    const documents = await documentService.getByPersonId(personId, profileLegacyId);
     const currentByGroup = new Map<string, Documento>();
 
     documents
       .filter((document) => document.esta_atual !== false)
       .forEach((document) => {
-        const group = document.grupo_documento_id || `${document.usuario_id}:${document.tipo_documento}`;
+        const group = document.grupo_documento_id || `${document.pessoa_id || document.usuario_id}:${document.tipo_documento}`;
         const current = currentByGroup.get(group);
         if (!current || isNewer(document, current)) currentByGroup.set(group, document);
       });
@@ -124,8 +125,16 @@ export const documentAccessService = {
     signedUrl: await documentAccessService.createSignedUrl(document, expiresIn),
   }),
 
-  getCurrentItemsByUserId: async (userId: string, expiresIn = 300): Promise<DocumentAccessItem[]> => {
-    const documents = await documentAccessService.getCurrentByUserId(userId);
+  getCurrentItemsByPersonId: async (personId: string, profileLegacyId?: string | null, expiresIn = 300): Promise<DocumentAccessItem[]> => {
+    const documents = await documentAccessService.getCurrentByPersonId(personId, profileLegacyId);
     return Promise.all(documents.map((document) => documentAccessService.toItem(document, expiresIn)));
+  },
+
+  getCurrentByUserId: async (userId: string): Promise<Documento[]> => {
+    return documentAccessService.getCurrentByPersonId(userId, userId);
+  },
+
+  getCurrentItemsByUserId: async (userId: string, expiresIn = 300): Promise<DocumentAccessItem[]> => {
+    return documentAccessService.getCurrentItemsByPersonId(userId, userId, expiresIn);
   },
 };

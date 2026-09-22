@@ -772,7 +772,7 @@ function ClassDetails() {
   // Filter documents that belong to students in this class
   const classDocuments = useMemo(() => {
     const studentIds = allMatriculas.map((m) => m.aluno_id);
-    return documents.filter((doc) => studentIds.includes(doc.usuario_id));
+    return documents.filter((doc) => studentIds.includes(doc.pessoa_id || doc.usuario_id || ''));
   }, [documents, allMatriculas]);
 
 
@@ -1081,7 +1081,7 @@ function ClassDetails() {
                                   </div>
                                 )}
                               </div>
-                              {hasLogin && <FolderIcon onClick={(e) => { e.stopPropagation(); handleOpenDocuments(student); }} />}
+                              <FolderIcon onClick={(e) => { e.stopPropagation(); handleOpenDocuments(student); }} />
                             </div>
                           </td>)}
                           <td className="px-4 py-2 text-gray-500 dark:text-slate-400">
@@ -1968,7 +1968,7 @@ Equipe Airport`;
       {/* --- DRAWERS / OVERLAYS: DETALHES DOCUMENTOS DO ALUNO (Tela Documentos do Aluno - Airport) --- */}
       <SlidePanel isOpen={false} onClose={() => setSelectedStudentForDocs(null)}>
         {selectedStudentForDocs && (() => {
-          const studentDocs = documents.filter(doc => doc.usuario_id === selectedStudentForDocs.id);
+          const studentDocs = documents.filter(doc => (doc.pessoa_id || doc.usuario_id) === selectedStudentForDocs.id);
         
         // Find documents or prepare fallback mock status
         const rgDoc = studentDocs.find(doc => doc.tipo_documento === 'RG');
@@ -2076,7 +2076,7 @@ Equipe Airport`;
                 <button
                   onClick={async () => {
                     // Quick state validation simulator
-                    const docsToValidate = documents.filter(d => d.usuario_id === selectedStudentForDocs.id);
+                    const docsToValidate = documents.filter(d => (d.pessoa_id || d.usuario_id) === selectedStudentForDocs.id);
                     if (docsToValidate.length > 0) {
                       for (const d of docsToValidate) {
                         await updateDocument({ id: d.id, updates: { status: 'Aprovado' as any } });

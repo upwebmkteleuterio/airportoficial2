@@ -6,10 +6,12 @@ import { avatarService } from '../services/avatarService';
 import { documentAccessService, DocumentAccessGrant, DocumentAccessItem, DocumentAuditAction } from '../services/documentAccessService';
 import { DocumentStatus, Usuario, UserRole } from '../types';
 
+type DocumentPerson = Usuario & { profile_legacy_id?: string | null };
+
 interface SharedDocumentsPanelProps {
   isOpen: boolean;
   onClose: () => void;
-  student: Usuario | null;
+  student: DocumentPerson | null;
   accessGrant?: DocumentAccessGrant | null;
 }
 
@@ -47,7 +49,7 @@ export function SharedDocumentsPanel({ isOpen, onClose, student, accessGrant }: 
 
   const documentsQuery = useQuery({
     queryKey: ['document-access', targetUserId, grantId],
-    queryFn: () => documentAccessService.getCurrentItemsByUserId(targetUserId),
+    queryFn: () => documentAccessService.getCurrentItemsByPersonId(targetUserId, student?.profile_legacy_id ?? targetUserId),
     enabled: isOpen && Boolean(targetUserId) && Boolean(grantId),
     retry: 1,
   });

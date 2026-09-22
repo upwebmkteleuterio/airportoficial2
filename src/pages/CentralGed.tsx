@@ -123,7 +123,7 @@ export function CentralGed() {
   useEffect(() => {
     const pendingUsers = users.filter(u => u.role === UserRole.ALUNO && u.status === 'pendente');
     const mapped = pendingUsers.map(u => {
-      const userDocuments = documents.filter(document => document.usuario_id === u.id);
+      const userDocuments = documents.filter(document => (document.pessoa_id || document.usuario_id) === u.id);
       const missing = approvalService.getMissingDocuments(u, userDocuments);
       return {
         id: u.id,
@@ -286,6 +286,7 @@ export function CentralGed() {
     try {
       const uploaded = await documentService.uploadFile({
         file,
+        pessoa_id: item.profile.id,
         usuario_id: item.profile.id,
         tipo_documento: documentType,
         status: DocumentStatus.PENDENTE,

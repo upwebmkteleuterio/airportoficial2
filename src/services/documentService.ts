@@ -2,9 +2,10 @@ import { supabase } from '../integrations/supabase/client';
 import { DocumentStatus, Documento } from '../types';
 import { newServiceId, serviceError } from './supabaseErrors';
 
-type UploadDocumentInput = Omit<Documento, 'id' | 'data_criacao' | 'url_armazenamento' | 'hash_sha256' | 'usuario_id' | 'arquivo_nome'> & {
+type UploadDocumentInput = Omit<Documento, 'id' | 'data_criacao' | 'url_armazenamento' | 'hash_sha256' | 'usuario_id' | 'pessoa_id' | 'arquivo_nome'> & {
   file: File;
-  usuario_id: string;
+  pessoa_id: string;
+  usuario_id?: string | null;
   onProgress?: (progress: number) => void;
 };
 
@@ -78,14 +79,26 @@ export const documentService = {
     return (data ?? []) as Documento[];
   },
 
+  getByPersonId: async (personId: string, profileLegacyId?: string | null): Promise<Documento[]> => {
+    const personQuery = supabase.from('documentos').select('*').eq('pessoa_id', personId);
+    const legacyQuery = profileLegacyId
+      ? supabase.from('documentos').select('*').eq('usuario_id', profileLegacyId)
+      : Promise.resolve({ data: [], error: null });
+    const [{ data: personDocuments, error: personError }, { data: legacyDocuments, error: legacyError }] = await Promise.all([personQuery, legacyQuery]);
+    if (personError || legacyError) throw serviceError(`Não foi possível carregar os documentos da pessoa ${personId}`, personError || legacyError);
+    const documents = [...((personDocuments ?? []) as Documento[]), ...((legacyDocuments ?? []) as Documento[])];
+    return Array.from(new Map(documents.map((document) => [document.id, document])).values());
+  },
+
   getByUserIds: async (userIds: string[]): Promise<Documento[]> => {
     if (userIds.length === 0) return [];
-    const { data, error } = await supabase
-      .from('documentos')
-      .select('*')
-      .in('usuario_id', userIds);
-    if (error) throw serviceError('Não foi possível carregar os documentos da fila', error);
-    return (data ?? []) as Documento[];
+    const [{ data: personDocuments, error: personError }, { data: legacyDocuments, error: legacyError }] = await Promise.all([
+      supabase.from('documentos').select('*').in('pessoa_id', userIds),
+      supabase.from('documentos').select('*').in('usuario_id', userIds),
+    ]);
+    if (personError || legacyError) throw serviceError('Não foi possível carregar os documentos da fila', personError || legacyError);
+    const documents = [...((personDocuments ?? []) as Documento[]), ...((legacyDocuments ?? []) as Documento[])];
+    return Array.from(new Map(documents.map((document) => [document.id, document])).values());
   },
 
   getById: async (id: string): Promise<Documento | undefined> => {
@@ -139,11 +152,11 @@ export const documentService = {
     return data as Documento;
   },
 
-  uploadFile: async ({ file, usuario_id, onProgress, ...metadata }: UploadDocumentInput): Promise<Documento> => {
+  uploadFile: async ({ file, pessoa_id, usuario_id, onProgress, ...metadata }: UploadDocumentInput): Promise<Documento> => {
     validateUploadType(file);
     const documentId = newServiceId('doc');
     const storageArea = metadata.storage_area || 'temporarios';
-    const storagePath = `${usuario_id}/${storageArea}/${documentId}-${safeFileName(file.name)}`;
+    const storagePath = `${pessoa_id}/${storageArea}/${documentId}-${safeFileName(file.name)}`;
     const hash = await sha256(file);
     try {
       await uploadWithProgress(storagePath, file, onProgress);
@@ -156,7 +169,8 @@ export const documentService = {
       .insert({
         ...metadata,
         id: documentId,
-        usuario_id,
+        pessoa_id,
+        usuario_id: usuario_id ?? null,
         url_armazenamento: storagePath,
         arquivo_nome: file.name,
         hash_sha256: hash,
@@ -184,12 +198,14 @@ export const documentService = {
 
     try {
       const documentId = newServiceId('doc');
-    const version = (source.versao ?? 1) + 1;
-    const groupId = source.grupo_documento_id || `${source.usuario_id}:${source.tipo_documento}`;
-    const storageArea = options.storage_area || 'temporarios';
-    const storagePath = `${source.usuario_id}/${storageArea}/${documentId}-${safeFileName(file.name)}`;
-    const hash = await sha256(file);
-    try {
+      const version = (source.versao ?? 1) + 1;
+      const personId = source.pessoa_id || source.usuario_id;
+      if (!personId) throw new Error('Documento sem pessoa proprietária.');
+      const groupId = source.grupo_documento_id || `${personId}:${source.tipo_documento}`;
+      const storageArea = options.storage_area || 'temporarios';
+      const storagePath = `${personId}/${storageArea}/${documentId}-${safeFileName(file.name)}`;
+      const hash = await sha256(file);
+      try {
       await uploadWithProgress(storagePath, file, onProgress);
     } catch (uploadError) {
       throw serviceError('Não foi possível enviar o documento substituto', uploadError);
@@ -199,7 +215,8 @@ export const documentService = {
       .from('documentos')
       .insert({
         id: documentId,
-        usuario_id: source.usuario_id,
+        pessoa_id: personId,
+        usuario_id: source.usuario_id ?? null,
         tipo_documento: source.tipo_documento,
         url_armazenamento: storagePath,
         arquivo_nome: file.name,

@@ -135,35 +135,55 @@ Deno.serve(async (req) => {
     }
 
     const requestedPersonId = optionalText(body.person_id);
-    let legacyId = typeof body.id === "string" && body.id.trim() ? body.id.trim() : `user-${crypto.randomUUID()}`;
-    if (requestedPersonId) {
-      const { data: canonicalPerson, error: canonicalPersonError } = await adminClient
-        .from("pessoas")
-        .select("id, profile_legacy_id, papel, ativo")
-        .eq("id", requestedPersonId)
-        .maybeSingle();
-      if (canonicalPersonError || !canonicalPerson || !canonicalPerson.ativo) {
-        return new Response(JSON.stringify({ error: "Pessoa canônica não encontrada" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (role === "ALUNO" && canonicalPerson.papel && canonicalPerson.papel !== "ALUNO") {
-        return new Response(JSON.stringify({ error: "A pessoa canônica pertence a outro papel" }), {
-          status: 409,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (canonicalPerson.profile_legacy_id && canonicalPerson.profile_legacy_id !== requestedPersonId) {
-        return new Response(JSON.stringify({ error: "A pessoa já está associada a outro usuário" }), {
-          status: 409,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      legacyId = requestedPersonId;
+    const { data: people, error: peopleError } = await adminClient
+      .from("pessoas")
+      .select("id, cpf, profile_legacy_id, papel, ativo")
+      .limit(5000);
+    if (peopleError) throw peopleError;
+    const normalizedPeople = cpf ? (people ?? []).filter((person) => normalizeCpf(person.cpf) === cpf) : [];
+    if (normalizedPeople.length > 1) {
+      return new Response(JSON.stringify({ error: "CPF corresponde a mais de uma pessoa; revisão manual necessária" }), {
+        status: 409,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
+    const canonicalPerson = requestedPersonId
+      ? (people ?? []).find((person) => person.id === requestedPersonId)
+      : normalizedPeople[0];
+    if (requestedPersonId && normalizedPeople.length === 1 && normalizedPeople[0].id !== requestedPersonId) {
+      return new Response(JSON.stringify({ error: "O CPF já está associado a outra pessoa" }), {
+        status: 409,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (requestedPersonId && (!canonicalPerson || !canonicalPerson.ativo)) {
+      return new Response(JSON.stringify({ error: "Pessoa canônica não encontrada" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (canonicalPerson && canonicalPerson.cpf && cpf && normalizeCpf(canonicalPerson.cpf) !== cpf) {
+      return new Response(JSON.stringify({ error: "O CPF informado não corresponde à pessoa canônica" }), {
+        status: 409,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (canonicalPerson && canonicalPerson.papel && canonicalPerson.papel !== role) {
+      return new Response(JSON.stringify({ error: "A pessoa canônica pertence a outro papel" }), {
+        status: 409,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (canonicalPerson?.profile_legacy_id) {
+      return new Response(JSON.stringify({ error: "A pessoa já está associada a outro usuário" }), {
+        status: 409,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const canonicalPersonId = canonicalPerson?.id ?? null;
+    let legacyId = canonicalPersonId ?? (typeof body.id === "string" && body.id.trim() ? body.id.trim() : `user-${crypto.randomUUID()}`);
     const origin = requestedOrigin ?? "interno";
-    const status = role === "ALUNO" ? (requestedPersonId ? "ativo" : "pendente") : "ativo";
+    const status = role === "ALUNO" ? (canonicalPersonId ? "ativo" : "pendente") : "ativo";
     const companyId = optionalText(body.empresa_id);
     const pendingClassId = origin === "b2b" ? optionalText(body.turma_id_pendente) : null;
     const fotoPath = typeof body.foto_url === "string" && body.foto_url.trim().startsWith(`avatars/${legacyId}/`)
@@ -232,13 +252,13 @@ Deno.serve(async (req) => {
       throw profileUpdateError;
     }
 
-    if (requestedPersonId) {
+    if (canonicalPersonId) {
       const { error: personLinkError } = await adminClient
         .from("pessoas")
-        .update({ profile_legacy_id: requestedPersonId, papel: role, ativo: status === "ativo", visivel_diretorio: true })
-        .eq("id", requestedPersonId);
+        .update({ profile_legacy_id: canonicalPersonId, cpf: cpf ?? canonicalPerson?.cpf ?? null, papel: role, ativo: status === "ativo", visivel_diretorio: true })
+        .eq("id", canonicalPersonId);
       if (personLinkError) throw personLinkError;
-    } else if (role === "ALUNO") {
+    } else if (role === "ALUNO" || role === "INSTRUTOR") {
       const { error: personCreateError } = await adminClient
         .from("pessoas")
         .insert({

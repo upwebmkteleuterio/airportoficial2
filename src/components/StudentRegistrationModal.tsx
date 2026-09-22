@@ -534,6 +534,7 @@ export function StudentRegistrationModal({ isOpen, onClose, onSuccess, initialDa
         ? await documentService.createReplacement(existing, file)
         : await documentService.uploadFile({
           file,
+          pessoa_id: personId || userId,
           usuario_id: userId,
           tipo_documento: documentTypes[field],
           status: DocumentStatus.PENDENTE,

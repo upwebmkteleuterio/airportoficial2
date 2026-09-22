@@ -12,6 +12,7 @@ import { newServiceId } from '../services/supabaseErrors';
 
 interface StaffRegistrationModalProps {
   initialData?: any;
+  personId?: string;
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: (studentId: string) => void;
@@ -103,7 +104,7 @@ const createEmptyUploadStates = (): Record<FileField, FileUploadState> => ({
   antecedentes_estaduais: { status: 'idle', progress: 0 }
 });
 
-export function StaffRegistrationModal({ isOpen, onClose, onSuccess, onError, initialData, role }: StaffRegistrationModalProps & { role: UserRole }) {
+export function StaffRegistrationModal({ isOpen, onClose, onSuccess, onError, initialData, personId, role }: StaffRegistrationModalProps & { role: UserRole }) {
   const { createUser, updateUser } = useUsers({ enabled: false });
   const { companies } = useCompanies();
   const [step, setStep] = useState(1);
@@ -376,6 +377,7 @@ export function StaffRegistrationModal({ isOpen, onClose, onSuccess, onError, in
         } : undefined)
         : await documentService.uploadFile({
           file,
+          pessoa_id: personId || userId,
           usuario_id: userId,
           tipo_documento: documentTypes[field],
           status: isInstructorRegistration ? DocumentStatus.APROVADO : DocumentStatus.PENDENTE,
@@ -407,7 +409,7 @@ export function StaffRegistrationModal({ isOpen, onClose, onSuccess, onError, in
     const loadDocuments = async () => {
       console.debug('[staff-docs] edição aberta, buscando documentos no banco', { userId });
       try {
-        const documents = await documentService.getByUserId(userId);
+        const documents = await documentService.getByPersonId(personId || userId, userId);
         const byField: Partial<Record<FileField, DocumentRecord>> = {};
         for (const document of documents) {
           const field = (Object.keys(documentTypes) as FileField[]).find(key => documentTypes[key] === document.tipo_documento);
@@ -500,7 +502,7 @@ export function StaffRegistrationModal({ isOpen, onClose, onSuccess, onError, in
           const uploadedAvatar = await avatarService.upload(avatarFile, userId);
           avatarPath = uploadedAvatar.path;
         }
-        if (initialData) {
+        if (initialData && !personId) {
           const editableValues = {
             nome_completo: formData.nome_completo,
             cpf: formData.cpf,
@@ -539,6 +541,7 @@ export function StaffRegistrationModal({ isOpen, onClose, onSuccess, onError, in
         } else {
           savedUser = await createUser({
             id: userId,
+            person_id: personId,
             role,
             status: 'ativo',
             origem_cadastro: 'interno',
