@@ -163,7 +163,7 @@ function parsePercentage(value: string): { value: number | null; problem?: strin
 function parseGrade(value: string, label: string): { value: number | null; problem?: string } {
   const parsed = parseNumber(value);
   if (parsed === null) return { value: null };
-  const normalized = parsed === 100 ? 10 : parsed;
+  const normalized = parsed > 10 ? parsed / 10 : parsed;
   if (normalized < 0 || normalized > 10) return { value: null, problem: `${label} deve estar entre 0 e 10.` };
   return { value: normalized };
 }
@@ -184,6 +184,10 @@ function rowValues(row: unknown[], headerMap: Map<StudentMigrationColumn, number
 
 function hasStudentIdentifier(values: Record<StudentMigrationColumn, string>): boolean {
   return Boolean(clean(values.NOMES) || clean(values.CPF));
+}
+
+function hasStudentAcademicData(values: Record<StudentMigrationColumn, string>): boolean {
+  return Boolean(clean(values['%']) || clean(values['1º CH']) || clean(values['2º CH']));
 }
 
 function isIgnoredStudentMigrationName(value: string): boolean {
@@ -247,7 +251,7 @@ export async function parseStudentMigrationFile(file: File): Promise<StudentMigr
   const missing = STUDENT_MIGRATION_COLUMNS.filter((column) => !headerMap.has(column) && !STUDENT_MIGRATION_IGNORED.includes(column));
   const rows: StudentMigrationRow[] = matrix.slice(1).map((row, index) => {
     const values = rowValues(row, headerMap);
-    if (isIgnoredStudentMigrationName(values.NOMES)) return null;
+    if (isIgnoredStudentMigrationName(values.NOMES) || !hasStudentAcademicData(values)) return null;
     const validation = validateRow(values);
     const hasIdentifier = hasStudentIdentifier(values);
     return {
