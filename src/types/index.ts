@@ -199,7 +199,7 @@ export interface Matricula {
   turma_id: string;
   empresa_b2b_id?: string;
   software_utilizado?: string; // Coluna "Softw"
-  percentual_presenca: number; // Coluna "%"
+  percentual_presenca: number | null; // Coluna "%"
   nota_1_chamada?: number; // Coluna "1ª CH"
   nota_2_chamada?: number; // Coluna "2ª CH"
   resultado_final?: number | null; // Média/nota numérica histórica da coluna "RESULTADO"

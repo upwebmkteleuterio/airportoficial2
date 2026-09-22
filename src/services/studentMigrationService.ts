@@ -166,6 +166,7 @@ function parseNumber(value: string): number | null {
 function parsePercentage(value: string): { value: number | null; problem?: string } {
   const parsed = parseNumber(value);
   if (parsed === null) return { value: null };
+  if (parsed === 1000) return { value: 100 };
   if (parsed < 0 || parsed > 100) return { value: null, problem: 'Percentual de presença deve estar entre 0 e 100.' };
   return { value: parsed };
 }
@@ -194,10 +195,6 @@ function rowValues(row: unknown[], headerMap: Map<StudentMigrationColumn, number
 
 function hasStudentIdentifier(values: Record<StudentMigrationColumn, string>): boolean {
   return Boolean(clean(values.NOMES) || clean(values.CPF));
-}
-
-function hasStudentAcademicData(values: Record<StudentMigrationColumn, string>): boolean {
-  return Boolean(clean(values['%']) || clean(values['1º CH']) || clean(values['2º CH']));
 }
 
 function isIgnoredStudentMigrationName(value: string): boolean {
@@ -234,7 +231,7 @@ function validateRow(values: Record<StudentMigrationColumn, string>) {
       percentualPresenca: percentage.value,
       nota1Chamada: grade1.value,
       nota2Chamada: grade2.value,
-      statusResultado: result.value,
+      statusResultado: result.value ?? (clean(values.RESULTADO) ? null : 'Aprovado'),
       statusResultadoFinal: finalResult.value,
     },
   };
@@ -261,7 +258,7 @@ export async function parseStudentMigrationFile(file: File): Promise<StudentMigr
   const missing = STUDENT_MIGRATION_COLUMNS.filter((column) => !headerMap.has(column) && !STUDENT_MIGRATION_IGNORED.includes(column));
   const rows: StudentMigrationRow[] = matrix.slice(1).map((row, index) => {
     const values = rowValues(row, headerMap);
-    if (isIgnoredStudentMigrationName(values.NOMES) || !hasStudentAcademicData(values)) return null;
+    if (isIgnoredStudentMigrationName(values.NOMES)) return null;
     const validation = validateRow(values);
     const hasIdentifier = hasStudentIdentifier(values);
     return {
@@ -557,7 +554,7 @@ export async function runStudentMigrationBatch(rows: StudentMigrationRow[], onPr
       }
       const key = `${person.id}|${turma.id}`;
       const academic = {
-        percentual_presenca: row.normalized.percentualPresenca ?? 0,
+        percentual_presenca: row.normalized.percentualPresenca,
         nota_1_chamada: row.normalized.nota1Chamada,
         nota_2_chamada: row.normalized.nota2Chamada,
         status_resultado: row.normalized.statusResultado,

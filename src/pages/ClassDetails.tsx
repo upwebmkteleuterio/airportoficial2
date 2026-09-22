@@ -470,7 +470,7 @@ function ClassDetails() {
       ? allMatriculas.slice(0, 7).map((m, idx) => {
           const student = findStudent(m.aluno_id);
           const codeAnac = m.anac_codigo || student?.cpf?.substring(0, 7) || '123.456-7';
-          const isPending = m.percentual_presenca < 75 || idx === 2;
+          const isPending = (typeof m.percentual_presenca === 'number' && m.percentual_presenca < 75) || idx === 2;
           return {
             num: String(idx + 1).padStart(2, '0'),
             name: student?.nome_completo || 'Aluno ' + (idx + 1),
@@ -744,7 +744,11 @@ function ClassDetails() {
       null,
     );
     const resultado = maxNota === null ? (matricula.percentual_presenca === 0 ? 'Falta' : null) : maxNota >= 7 ? 'Aprovado' : 'Reprovado';
-    const resultadoFinal = maxNota === null ? (matricula.percentual_presenca === 0 ? 'Reprovado' : null) : maxNota >= 7 && matricula.percentual_presenca >= 80 ? 'Aprovado' : 'Reprovado';
+    const resultadoFinal = maxNota === null
+      ? (matricula.percentual_presenca === 0 ? 'Reprovado' : null)
+      : matricula.percentual_presenca === null
+        ? null
+        : maxNota >= 7 && matricula.percentual_presenca >= 80 ? 'Aprovado' : 'Reprovado';
 
     try {
       await updateMatricula({
@@ -1022,7 +1026,7 @@ function ClassDetails() {
                           : 'CPF não informado';
                       const attendancePercentage = typeof m.percentual_presenca === 'number' && Number.isFinite(m.percentual_presenca)
                         ? m.percentual_presenca
-                        : 0;
+                        : null;
                       const finalResult = parseFinalResult(m.resultado_final);
                       const b2b = companies.find((c) => c.id === m.empresa_b2b_id);
                       const hasLogin = users.some((user) => user.id === m.aluno_id);
@@ -1091,8 +1095,8 @@ function ClassDetails() {
                             {studentName}
                           </td>
                           <td className="px-4 py-2 text-center font-bold">
-                            <span className={attendancePercentage < 75 ? 'text-red-500' : 'text-slate-900 dark:text-slate-200'}>
-                              {attendancePercentage}%
+                            <span className={attendancePercentage !== null && attendancePercentage < 75 ? 'text-red-500' : 'text-slate-900 dark:text-slate-200'}>
+                              {attendancePercentage === null ? '—' : `${attendancePercentage}%`}
                             </span>
                           </td>
                           <td className="px-4 py-2 text-center font-semibold">
@@ -1271,7 +1275,7 @@ function ClassDetails() {
                         : 'Aluno desconhecido';
                       const attendancePercentage = typeof m.percentual_presenca === 'number' && Number.isFinite(m.percentual_presenca)
                         ? m.percentual_presenca
-                        : 0;
+                        : null;
 
                       // Generate Initials
                       const parts = studentName.trim().split(/\s+/);
@@ -1298,14 +1302,16 @@ function ClassDetails() {
                           <td className="px-4 py-2 border-r border-gray-150 dark:border-slate-800/80 text-center">
                             <span
                               className={`inline-block px-2.5 py-1 rounded-lg text-[11px] font-bold border ${
-                                attendancePercentage === 100
+                                attendancePercentage === null
+                                  ? 'text-gray-400 dark:text-slate-600 border-transparent'
+                                  : attendancePercentage === 100
                                   ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-450 border-emerald-150 dark:border-emerald-900/30'
                                   : attendancePercentage >= 75
                                   ? 'bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-450 border-amber-150 dark:border-amber-900/30'
                                   : 'bg-rose-50 dark:bg-rose-950/20 text-rose-700 dark:text-rose-450 border-rose-150 dark:border-rose-900/30'
                               }`}
                             >
-                              {attendancePercentage}%
+                              {attendancePercentage === null ? '—' : `${attendancePercentage}%`}
                             </span>
                           </td>
 
@@ -1525,7 +1531,7 @@ function ClassDetails() {
           const visitStudents = allMatriculas.map((m, idx) => {
                 const student = findStudent(m.aluno_id);
                 const codeAnac = m.anac_codigo || student?.cpf?.substring(0, 7) || '---';
-                const isPending = m.percentual_presenca < 75;
+                const isPending = typeof m.percentual_presenca === 'number' && m.percentual_presenca < 75;
                 return {
                   num: String(idx + 1).padStart(2, '0'),
                   name: student?.nome_completo || 'Sem Nome',
