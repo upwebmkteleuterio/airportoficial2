@@ -20,7 +20,7 @@ import {
   type StudentMigrationRow,
 } from '../services/studentMigrationService';
 
-const MAX_BATCH_SIZE = 5000;
+const MAX_BATCH_SIZE = 7000;
 
 type CompanyRegistrationForm = {
   nome_fantasia: string;
