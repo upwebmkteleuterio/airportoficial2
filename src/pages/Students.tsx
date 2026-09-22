@@ -46,7 +46,7 @@ export function Students() {
   const [selectedStudentForDocs, setSelectedStudentForDocs] = useState<StudentRow | null>(null);
   const [accessGrant, setAccessGrant] = useState<DocumentAccessGrant | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 100;
+  const itemsPerPage = 300;
   const { people, total, isLoading, createPerson, updatePerson, deleteUser } = useDirectoryPeople({
     role: UserRole.ALUNO,
     page: currentPage,
