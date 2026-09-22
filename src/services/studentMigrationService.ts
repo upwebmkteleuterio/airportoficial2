@@ -179,9 +179,13 @@ function parseGrade(value: string, label: string): { value: number | null; probl
   return { value: normalized };
 }
 
+function isMissingStatus(value: string): boolean {
+  return !clean(value) || parseNumber(value) === 0;
+}
+
 function parseStatus(value: string, label: string): { value: StudentStatus | null; problem?: string } {
   const source = normalizeStudentComparison(value);
-  if (!source) return { value: null };
+  if (isMissingStatus(value)) return { value: null };
   const statuses: Record<string, StudentStatus> = { APROVADO: 'Aprovado', REPROVADO: 'Reprovado', FALTA: 'Falta' };
   if (!statuses[source]) return { value: null, problem: `${label} deve ser APROVADO, REPROVADO ou FALTA.` };
   return { value: statuses[source] };
@@ -231,7 +235,7 @@ function validateRow(values: Record<StudentMigrationColumn, string>) {
       percentualPresenca: percentage.value,
       nota1Chamada: grade1.value,
       nota2Chamada: grade2.value,
-      statusResultado: result.value ?? (clean(values.RESULTADO) ? null : 'Aprovado'),
+      statusResultado: result.value ?? (isMissingStatus(values.RESULTADO) ? 'Aprovado' : null),
       statusResultadoFinal: finalResult.value,
     },
   };
