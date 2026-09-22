@@ -957,9 +957,6 @@ function ClassDetails() {
                   <thead className="sticky top-0 bg-slate-50 dark:bg-slate-850 z-10 border-b border-gray-250 dark:border-slate-800 font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
                     <tr>
                       <th className="px-4 py-3 w-10 text-center"></th>
-                      <th className="px-4 py-3">RE</th>
-                      <th className="px-4 py-3">TUF</th>
-                      <th className="px-4 py-3">ANAC</th>
                       <th className="px-4 py-3">CPF</th>
                       <th className="px-4 py-3">Nome</th>
                       <th className="px-4 py-3 text-center">%</th>
@@ -974,14 +971,14 @@ function ClassDetails() {
                     {isLoadingMatriculas || isFetchingMatriculas ? (
                       Array.from({ length: 5 }, (_, index) => (
                         <tr key={`student-skeleton-${index}`} aria-hidden="true" className="h-[40px]">
-                          <td colSpan={13} className="px-4 py-2">
+                          <td colSpan={10} className="px-4 py-2">
                             <div className="h-4 w-full rounded bg-slate-200 dark:bg-slate-700 animate-pulse" />
                           </td>
                         </tr>
                       ))
                     ) : matriculas.length === 0 ? (
                       <tr>
-                        <td colSpan={13} className="px-4 py-12 text-center text-gray-500 font-sans">
+                        <td colSpan={10} className="px-4 py-12 text-center text-gray-500 font-sans">
                           <div className="flex flex-col items-center justify-center gap-2 max-w-sm mx-auto">
                             <div className="p-3 bg-teal-500/10 rounded-full text-teal-500">
                               <Users className="w-6 h-6" />
@@ -1081,16 +1078,6 @@ function ClassDetails() {
                               {hasLogin && <FolderIcon onClick={(e) => { e.stopPropagation(); handleOpenDocuments(student); }} />}
                             </div>
                           </td>)}
-                          {/* RE Clickable to open GED */}
-                          <td className="px-4 py-2 font-bold text-teal-600 dark:text-teal-400 hover:underline">
-                            {m.codigo_re}
-                          </td>
-                          <td className="px-4 py-2 font-sans">
-                            {m.tuf || 'TUF-A'}
-                          </td>
-                          <td className="px-4 py-2">
-                            {m.anac_codigo || '123456'}
-                          </td>
                           <td className="px-4 py-2 text-gray-500 dark:text-slate-400">
                             {studentCpf}
                           </td>
