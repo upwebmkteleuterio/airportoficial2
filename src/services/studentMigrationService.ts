@@ -86,11 +86,17 @@ export type StudentMigrationRunResult = {
   errorCount: number;
 };
 
+export type StudentMigrationMissingCompany = {
+  name: string;
+  studentCount: number;
+};
+
 export type StudentMigrationPreviewResult = {
   rows: StudentMigrationRow[];
   blockingCount: number;
   warningCount: number;
-  missingCompanies: string[];
+  missingCompanies: StudentMigrationMissingCompany[];
+  missingCompanyStudentCount: number;
 };
 
 type StudentTurma = { id: string; id_interno_escola: number; id_anac: string; data_termino: string | null };
@@ -363,7 +369,7 @@ function classForRow(row: StudentMigrationRow, byInternal: Map<number, StudentTu
 export async function previewStudentMigrationBatch(rows: StudentMigrationRow[]): Promise<StudentMigrationPreviewResult> {
   await assertStudentMigrationAccess();
   const selectedRows = rows.filter((row) => row.valid);
-  if (!selectedRows.length) return { rows: [], blockingCount: 0, warningCount: 0, missingCompanies: [] };
+  if (!selectedRows.length) return { rows: [], blockingCount: 0, warningCount: 0, missingCompanies: [], missingCompanyStudentCount: 0 };
   const internals = uniqueBy(selectedRows.map((row) => Number(row.normalized.turma)), String);
   const anacs = uniqueBy(selectedRows.map((row) => row.normalized.anac), (value) => normalizeStudentComparison(value));
   const [internalQuery, anacQuery, people, companiesQuery] = await Promise.all([
@@ -412,28 +418,46 @@ export async function previewStudentMigrationBatch(rows: StudentMigrationRow[]):
     previewRow.valid = previewRow.problems.length === 0;
     return previewRow;
   });
+  const missingCompanyStudents = new Map<string, Set<string>>();
+  const missingCompanyNames = new Map<string, string>();
+  previewRows.filter((row) => row.valid).forEach((row) => {
+    const companyName = clean(row.values.Empresa);
+    if (!companyName) return;
+    const match = companyMatches(companies, companyName);
+    if (match.company || match.ambiguous) return;
+    const companyKey = normalizeStudentComparison(companyName);
+    missingCompanyNames.set(companyKey, companyName);
+    const cpf = normalizeStudentCpf(row.normalized.cpf);
+    if (!cpf) return;
+    const students = missingCompanyStudents.get(companyKey) ?? new Set<string>();
+    students.add(cpf);
+    missingCompanyStudents.set(companyKey, students);
+  });
+  const missingCompanies = Array.from(missingCompanyNames.entries()).map(([key, name]) => ({
+    name,
+    studentCount: missingCompanyStudents.get(key)?.size ?? 0,
+  }));
+  const missingCompanyStudentIds = new Set<string>();
+  missingCompanyStudents.forEach((students) => students.forEach((cpf) => missingCompanyStudentIds.add(cpf)));
+
   return {
     rows: previewRows,
     blockingCount: previewRows.reduce((total, row) => total + row.problems.length, 0),
     warningCount: previewRows.reduce((total, row) => total + row.warnings.length, 0),
-    missingCompanies: uniqueBy(
-      previewRows
-        .map((row) => clean(row.values.Empresa))
-        .filter((name) => name && !companyMatches(companies, name).company && !companyMatches(companies, name).ambiguous),
-      (name) => normalizeStudentComparison(name),
-    ),
+    missingCompanies,
+    missingCompanyStudentCount: missingCompanyStudentIds.size,
   };
 }
 
-export async function createStudentMigrationCompany(company: { nome_fantasia: string; razao_social: string; cnpj: string }): Promise<void> {
+export async function createStudentMigrationCompany(company: { nome_fantasia: string; razao_social?: string; cnpj?: string }): Promise<void> {
   await assertStudentMigrationAccess();
-  if (!company.nome_fantasia.trim() || !company.razao_social.trim() || !company.cnpj.trim()) {
-    throw safeError('Nome fantasia, razão social e CNPJ são obrigatórios para cadastrar a empresa.');
+  if (!company.nome_fantasia.trim()) {
+    throw safeError('Nome fantasia é obrigatório para cadastrar a empresa.');
   }
   await companyService.createMigrationCompany({
     nome_fantasia: company.nome_fantasia.trim(),
-    razao_social: company.razao_social.trim(),
-    cnpj: company.cnpj.trim(),
+    razao_social: company.razao_social?.trim() || '',
+    cnpj: company.cnpj?.trim() || '',
   });
 }
 
@@ -568,7 +592,7 @@ export async function runStudentMigrationBatch(rows: StudentMigrationRow[], onPr
       const existing = matriculasByKey.get(key);
       progress('matrícula', current, `${subject}: ${existing ? 'atualizando matrícula existente' : 'criando matrícula histórica'}.`);
       if (existing) {
-        const updatePayload = companyName ? { ...academic, empresa_b2b_id: companyId } : academic;
+        const updatePayload = companyId ? { ...academic, empresa_b2b_id: companyId } : academic;
         const { error } = await supabase.from('matriculas').update(updatePayload).eq('id', existing.id);
         if (error) throw safeError('Não foi possível atualizar a matrícula histórica.');
         results.push(resultMessage(row, turma, `${personMessage} Matrícula reutilizada e dados acadêmicos atualizados. Não foi criado diário de classe.${row.warnings.length ? ` ${row.warnings.join(' ')}` : ''}`));

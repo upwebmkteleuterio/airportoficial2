@@ -130,10 +130,12 @@ export const companyService = {
     return data as Empresa;
   },
 
-  createMigrationCompany: async (company: Pick<Empresa, 'nome_fantasia' | 'razao_social' | 'cnpj'>): Promise<Empresa> => {
+  createMigrationCompany: async (company: Pick<Empresa, 'nome_fantasia'> & Partial<Pick<Empresa, 'razao_social' | 'cnpj'>>): Promise<Empresa> => {
     const uniqueValue = crypto.randomUUID();
     return companyService.create({
-      ...company,
+      nome_fantasia: company.nome_fantasia.trim(),
+      razao_social: company.razao_social?.trim() || '',
+      cnpj: company.cnpj?.trim() || '',
       hash_link_inscricao: `migracao-${uniqueValue}`,
       token_registro_b2b: `tk_migracao_${uniqueValue}`,
       limite_vagas_corporativo: 0,

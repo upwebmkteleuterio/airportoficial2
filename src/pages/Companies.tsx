@@ -27,7 +27,8 @@ import {
   Users,
   TrendingUp,
   Briefcase,
-  Edit2
+  Edit2,
+  TriangleAlert
 } from 'lucide-react';
 
 import { useCompanies } from '../hooks/useCompanies';
@@ -142,8 +143,12 @@ export function Companies() {
 
   const handleSaveCompany = async () => {
     if (companySubmitRef.current || isCreating || isUpdating) return;
-    if (!formCnpj || !formRazao || !formFantasia) {
-      alert('Por favor, preencha todos os campos obrigatórios: Razão Social, Nome Fantasia e CNPJ.');
+    const editingCompany = editingCompanyId ? companies.find((company) => company.id === editingCompanyId) : undefined;
+    const isMigrationCompany = Boolean(editingCompany?.hash_link_inscricao?.startsWith('migracao-'));
+    if ((!isMigrationCompany && (!formCnpj || !formRazao || !formFantasia)) || (isMigrationCompany && !formFantasia.trim())) {
+      alert(isMigrationCompany
+        ? 'Informe pelo menos o nome fantasia da empresa de migração.'
+        : 'Por favor, preencha todos os campos obrigatórios: Razão Social, Nome Fantasia e CNPJ.');
       return;
     }
     companySubmitRef.current = true;
@@ -405,6 +410,8 @@ export function Companies() {
               ) : (
                 filteredCompanies.map((comp) => {
                   const isAtivo = comp.status_ativo;
+                  const isMigrationCompany = comp.hash_link_inscricao?.startsWith('migracao-');
+                  const isIncompleteMigration = isMigrationCompany && (!comp.cnpj?.trim() || !comp.razao_social?.trim());
 
                   return (
                     <tr
@@ -439,18 +446,19 @@ export function Companies() {
 
                       {/* CNPJ Column */}
                       <td className="px-5 py-2.5 border-r border-gray-100/50 dark:border-slate-800/30 font-mono text-[11px] text-gray-500 dark:text-slate-400">
-                        {comp.cnpj}
+                        {comp.cnpj || (isIncompleteMigration ? <span className="font-sans font-semibold text-amber-700 dark:text-amber-300">Pendente</span> : '—')}
                       </td>
 
                       {/* Razao Social Column */}
                       <td className="px-5 py-2.5 border-r border-gray-100/50 dark:border-slate-800/30">
                         <div className="flex flex-col">
                           <span className="font-bold text-slate-950 dark:text-white text-sm">
-                            {comp.razao_social}
+                            {comp.razao_social || (isIncompleteMigration ? 'Dados fiscais pendentes' : '—')}
                           </span>
                           <span className="text-[10px] text-gray-400 font-semibold mt-0.5">
-                            {comp.nome_fantasia || 'Sem nome fantasia'} | {comp.email_corporativo}
+                            {comp.nome_fantasia || 'Sem nome fantasia'} | {comp.email_corporativo || 'Sem e-mail'}
                           </span>
+                          {isIncompleteMigration && <span className="mt-1 inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 dark:text-amber-300"><TriangleAlert className="h-3 w-3" aria-hidden="true" /> Migração · completar dados fiscais</span>}
                         </div>
                       </td>
 
@@ -594,7 +602,9 @@ export function Companies() {
                 {editingCompanyId ? 'Editar Empresa Parceira' : 'Cadastro de Empresa Parceira'}
               </h3>
               <p className="text-[11px] text-gray-500 dark:text-slate-400 mt-0.5">
-                Adicione os dados fiscais básicos para habilitar faturamento em lote.
+                {editingCompanyId && companies.find((company) => company.id === editingCompanyId)?.hash_link_inscricao?.startsWith('migracao-')
+                  ? 'Complete os dados fiscais pendentes da migração quando estiverem disponíveis.'
+                  : 'Adicione os dados fiscais básicos para habilitar faturamento em lote.'}
               </p>
             </div>
           </div>
@@ -613,7 +623,7 @@ export function Companies() {
             {/* Razao Social Input */}
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-gray-700 dark:text-slate-300 uppercase tracking-wide">
-                Razão Social *
+                Razão Social {editingCompanyId && companies.find((company) => company.id === editingCompanyId)?.hash_link_inscricao?.startsWith('migracao-') ? '(opcional para migração)' : '*'}
               </label>
               <input
                 id="company-razao-input"
@@ -646,7 +656,7 @@ export function Companies() {
             {/* CNPJ Input */}
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-gray-700 dark:text-slate-300 uppercase tracking-wide">
-                CNPJ *
+                CNPJ {editingCompanyId && companies.find((company) => company.id === editingCompanyId)?.hash_link_inscricao?.startsWith('migracao-') ? '(opcional para migração)' : '*'}
               </label>
               <div className="relative">
                 <Building2 className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
