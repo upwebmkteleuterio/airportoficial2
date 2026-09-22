@@ -187,16 +187,17 @@ export function Instructors() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-slate-800 text-gray-700 dark:text-slate-300">
-              {isLoading ? (
-                <tr>
-                  <td colSpan={7} className="px-5 py-12 text-center">
-                    <div className="flex flex-col items-center justify-center gap-2 text-gray-500">
-                      <div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin"></div>
-                      <p className="font-sans text-sm">Carregando instrutors...</p>
-                    </div>
-                  </td>
+              {isLoading ? Array.from({ length: 8 }, (_, index) => (
+                <tr key={`instructor-skeleton-${index}`} aria-hidden="true" className="h-[52px]">
+                  <td className="px-5 py-2.5"><div className="mx-auto h-5 w-5 animate-pulse rounded bg-slate-200 dark:bg-slate-700" /></td>
+                  <td className="px-5 py-2.5"><div className="h-4 w-56 animate-pulse rounded bg-slate-200 dark:bg-slate-700" /></td>
+                  <td className="px-5 py-2.5"><div className="h-4 w-28 animate-pulse rounded bg-slate-200 dark:bg-slate-700" /></td>
+                  <td className="px-5 py-2.5"><div className="h-4 w-44 animate-pulse rounded bg-slate-200 dark:bg-slate-700" /></td>
+                  <td className="px-5 py-2.5"><div className="h-4 w-32 animate-pulse rounded bg-slate-200 dark:bg-slate-700" /></td>
+                  <td className="px-5 py-2.5"><div className="h-4 w-24 animate-pulse rounded bg-slate-200 dark:bg-slate-700" /></td>
+                  <td className="px-5 py-2.5"><div className="h-4 w-20 animate-pulse rounded bg-slate-200 dark:bg-slate-700" /></td>
                 </tr>
-              ) : paginatedInstructors.length === 0 ? (
+              )) : paginatedInstructors.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-6 py-12 text-center text-gray-500 dark:text-slate-400 font-sans">
                     <div className="flex flex-col items-center justify-center gap-2.5 max-w-sm mx-auto">
