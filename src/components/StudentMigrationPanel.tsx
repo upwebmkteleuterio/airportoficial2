@@ -1,5 +1,8 @@
 import { useMemo, useState, type ChangeEvent } from 'react';
-import { CheckCircle2, Clipboard, FileSpreadsheet, LoaderCircle, Play, TriangleAlert, UploadCloud } from 'lucide-react';
+import { CheckCircle2, Clipboard, FileSpreadsheet, History, LoaderCircle, Play, TriangleAlert, UploadCloud } from 'lucide-react';
+import { useStudentMigrationHistory } from '../hooks/useStudentMigrationHistory';
+import StudentMigrationHistoryPanel from './StudentMigrationHistoryPanel';
+import { useUIStore } from '../store/uiStore';
 import {
   createStudentMigrationCompany,
   normalizeStudentComparison,
@@ -29,6 +32,8 @@ export default function StudentMigrationPanel() {
   const [parsed, setParsed] = useState<StudentMigrationParseResult | null>(null);
   const [fileName, setFileName] = useState('');
   const [batchSize, setBatchSize] = useState(0);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historySaveError, setHistorySaveError] = useState('');
   const [confirming, setConfirming] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const [referencePreview, setReferencePreview] = useState<StudentMigrationPreviewResult | null>(null);
@@ -40,6 +45,8 @@ export default function StudentMigrationPanel() {
   const [companyForms, setCompanyForms] = useState<Record<string, CompanyRegistrationForm>>({});
   const [creatingCompany, setCreatingCompany] = useState('');
   const [companyMessage, setCompanyMessage] = useState('');
+  const { saveHistory } = useStudentMigrationHistory(false);
+  const { setRoute, setSelectedClassId } = useUIStore();
 
   const selectedRows = useMemo(() => {
     const sourceRows = referencePreview?.rows.filter((row) => row.valid) ?? parsed?.validRows ?? [];
@@ -137,10 +144,17 @@ export default function StudentMigrationPanel() {
     setRunning(true);
     setConfirming(false);
     setClipboardMessage('');
+    setHistorySaveError('');
     try {
-      setResult(await runStudentMigrationBatch(selectedRows, setProgress));
+      const migrationResult = await runStudentMigrationBatch(selectedRows, setProgress);
+      setResult(migrationResult);
+      if (migrationResult.successfulClasses.length > 0) {
+        void saveHistory({ successfulClasses: migrationResult.successfulClasses, sourceFile: fileName }).catch(() => {
+          setHistorySaveError('A migração foi concluída, mas não foi possível salvar o histórico. Tente abrir o histórico novamente mais tarde.');
+        });
+      }
     } catch (error) {
-      setResult({ results: [{ line: 0, status: 'erro', message: error instanceof Error ? error.message : 'Não foi possível iniciar o lote.' }], successCount: 0, errorCount: selectedRows.length });
+      setResult({ results: [{ line: 0, status: 'erro', message: error instanceof Error ? error.message : 'Não foi possível iniciar o lote.' }], successfulClasses: [], successCount: 0, errorCount: selectedRows.length });
     } finally {
       setRunning(false);
     }
@@ -148,10 +162,15 @@ export default function StudentMigrationPanel() {
 
   return (
     <div className="space-y-6">
-      <header>
-        <p className="text-xs font-bold uppercase tracking-[0.2em] text-teal-600 dark:text-teal-400">Importação histórica</p>
-        <h1 className="mt-1 text-2xl font-extrabold text-slate-900 dark:text-white">Migração de alunos</h1>
-        <p className="mt-2 max-w-3xl text-sm text-slate-600 dark:text-slate-400">Leia a planilha em memória, valide CPF e concilie TURMA + ANAC antes de gravar. A leitura e a prévia não alteram o banco.</p>
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-teal-600 dark:text-teal-400">Importação histórica</p>
+          <h1 className="mt-1 text-2xl font-extrabold text-slate-900 dark:text-white">Migração de alunos</h1>
+          <p className="mt-2 max-w-3xl text-sm text-slate-600 dark:text-slate-400">Leia a planilha em memória, valide CPF e concilie TURMA + ANAC antes de gravar. A leitura e a prévia não alteram o banco.</p>
+        </div>
+        <button type="button" onClick={() => setHistoryOpen(true)} className="inline-flex items-center gap-2 rounded-md border border-teal-700 px-4 py-2 text-sm font-bold text-teal-800 hover:bg-teal-50 focus:outline-none focus:ring-2 focus:ring-teal-500 dark:border-teal-500 dark:text-teal-300 dark:hover:bg-teal-950/30">
+          <History className="h-4 w-4" aria-hidden="true" /> Histórico
+        </button>
       </header>
 
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -226,6 +245,7 @@ export default function StudentMigrationPanel() {
 
         {(running || progress || result) && <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-700 dark:text-slate-200">4. Acompanhamento e logs</h2>
+          {historySaveError && <p role="alert" className="mb-4 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">{historySaveError}</p>}
           {progress && <div aria-live="polite"><div className="mb-2 flex justify-between text-sm font-semibold"><span>{progress.stage}: {progress.message}</span><span>{progress.current}/{progress.total} ({progress.percent}%)</span></div><div className="h-3 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800"><div className={`h-full transition-all ${progress.stage === 'erro' ? 'bg-rose-600' : 'bg-teal-600'}`} style={{ width: `${progress.percent}%` }} /></div></div>}
           {running && <p className="mt-4 flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300"><LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> Processando linha a linha; o botão permanece desabilitado.</p>}
           {result && <div className="mt-4"><div className="grid gap-3 sm:grid-cols-3"><Summary label="Sucessos" value={String(result.successCount)} tone="success" /><Summary label="Erros/pendências" value={String(result.errorCount)} tone={result.errorCount ? 'warning' : 'success'} /><Summary label="Total processado" value={String(result.results.length)} /></div><div className="mt-4 flex flex-wrap gap-2"><button type="button" onClick={() => void copy(studentMigrationLogText(result), 'Log completo copiado para a área de transferência.')} className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-xs font-bold dark:border-slate-700"><Clipboard className="h-4 w-4" aria-hidden="true" /> Copiar log completo</button><button type="button" disabled={result.errorCount === 0} onClick={() => void copy(studentMigrationIssuesLogText(result), 'Log de erros copiado para a área de transferência.')} className="inline-flex items-center gap-2 rounded-md border border-rose-300 px-3 py-2 text-xs font-bold text-rose-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-rose-800 dark:text-rose-300"><Clipboard className="h-4 w-4" aria-hidden="true" /> Copiar erros/pendências</button></div><pre className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap rounded-md bg-slate-950 p-4 text-xs text-slate-200">{studentMigrationLogText(result)}</pre>{result.errorCount > 0 && <pre className="mt-3 max-h-56 overflow-auto whitespace-pre-wrap rounded-md bg-rose-950 p-4 text-xs text-rose-100">{studentMigrationIssuesLogText(result)}</pre>}{clipboardMessage && <p role="status" className="mt-2 text-sm text-slate-600 dark:text-slate-300">{clipboardMessage}</p>}</div>}
@@ -233,6 +253,15 @@ export default function StudentMigrationPanel() {
       </>}
 
       {!parsed && <div className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300"><TriangleAlert className="mb-2 h-5 w-5 text-amber-500" aria-hidden="true" />Nenhum dado é gravado durante a leitura ou a prévia. Escolha um arquivo para começar.</div>}
+      <StudentMigrationHistoryPanel
+        isOpen={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        onSelectClass={(turmaId) => {
+          setHistoryOpen(false);
+          setSelectedClassId(turmaId);
+          setRoute('class-details');
+        }}
+      />
     </div>
   );
 }

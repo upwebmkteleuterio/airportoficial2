@@ -65,13 +65,23 @@ export type StudentMigrationRowResult = {
   status: 'sucesso' | 'erro';
   message: string;
   turma?: string;
+  turmaId?: string;
+  idInternoEscola?: number;
   anac?: string;
   cpf?: string;
   warnings?: string[];
 };
 
+export type StudentMigrationSuccessfulClass = {
+  turmaId: string;
+  idInternoEscola: number;
+  idAnac: string;
+  alunosImportados: number;
+};
+
 export type StudentMigrationRunResult = {
   results: StudentMigrationRowResult[];
+  successfulClasses: StudentMigrationSuccessfulClass[];
   successCount: number;
   errorCount: number;
 };
@@ -389,8 +399,18 @@ function statusForClass(turma: StudentTurma): 'Ativo' | 'Concluido' {
   return turma.data_termino < new Date().toISOString().slice(0, 10) ? 'Concluido' : 'Ativo';
 }
 
-function resultMessage(row: StudentMigrationRow, details: string): StudentMigrationRowResult {
-  return { line: row.line, status: 'sucesso', turma: row.normalized.turma, anac: row.normalized.anac, cpf: row.normalized.cpf, warnings: row.warnings, message: details };
+function resultMessage(row: StudentMigrationRow, turma: StudentTurma, details: string): StudentMigrationRowResult {
+  return {
+    line: row.line,
+    status: 'sucesso',
+    turma: row.normalized.turma,
+    turmaId: turma.id,
+    idInternoEscola: turma.id_interno_escola,
+    anac: turma.id_anac,
+    cpf: row.normalized.cpf,
+    warnings: row.warnings,
+    message: details,
+  };
 }
 
 export async function runStudentMigrationBatch(rows: StudentMigrationRow[], onProgress?: (progress: StudentMigrationProgress) => void): Promise<StudentMigrationRunResult> {
@@ -399,7 +419,7 @@ export async function runStudentMigrationBatch(rows: StudentMigrationRow[], onPr
   const total = selectedRows.length;
   const results: StudentMigrationRowResult[] = [];
   const progress = (stage: StudentMigrationProgress['stage'], current: number, message: string) => onProgress?.({ stage, current, total, percent: total ? Math.round(current / total * 100) : 100, message });
-  if (!total) return { results: [], successCount: 0, errorCount: 0 };
+  if (!total) return { results: [], successfulClasses: [], successCount: 0, errorCount: 0 };
   progress('validação', 0, 'Validando as linhas selecionadas.');
 
   const internals = uniqueBy(selectedRows.map((row) => Number(row.normalized.turma)), String);
@@ -496,7 +516,7 @@ export async function runStudentMigrationBatch(rows: StudentMigrationRow[], onPr
         const updatePayload = companyName ? { ...academic, empresa_b2b_id: companyId } : academic;
         const { error } = await supabase.from('matriculas').update(updatePayload).eq('id', existing.id);
         if (error) throw safeError('Não foi possível atualizar a matrícula histórica.');
-        results.push(resultMessage(row, `Matrícula reutilizada e dados acadêmicos atualizados. Não foi criado diário de classe.${row.warnings.length ? ` ${row.warnings.join(' ')}` : ''}`));
+        results.push(resultMessage(row, turma, `Matrícula reutilizada e dados acadêmicos atualizados. Não foi criado diário de classe.${row.warnings.length ? ` ${row.warnings.join(' ')}` : ''}`));
       } else {
         const { data, error } = await supabase.rpc('create_matricula', {
           p_aluno_id: person.id,
@@ -514,7 +534,7 @@ export async function runStudentMigrationBatch(rows: StudentMigrationRow[], onPr
         });
         if (error || !data) throw safeError('Não foi possível criar a matrícula histórica.');
         matriculasByKey.set(key, data as ExistingMatricula);
-        results.push(resultMessage(row, `Matrícula criada com sucesso. Não foi criado diário de classe.${row.warnings.length ? ` ${row.warnings.join(' ')}` : ''}`));
+        results.push(resultMessage(row, turma, `Matrícula criada com sucesso. Não foi criado diário de classe.${row.warnings.length ? ` ${row.warnings.join(' ')}` : ''}`));
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Não foi possível concluir a linha.';
@@ -523,7 +543,24 @@ export async function runStudentMigrationBatch(rows: StudentMigrationRow[], onPr
     }
   }
   progress(results.some((result) => result.status === 'erro') ? 'erro' : 'concluído', total, 'Lote finalizado.');
-  return { results, successCount: results.filter((result) => result.status === 'sucesso').length, errorCount: results.filter((result) => result.status === 'erro').length };
+  const successfulClasses = Array.from(results.reduce((classes, result) => {
+    if (result.status !== 'sucesso' || !result.turmaId || result.idInternoEscola === undefined || !result.anac) return classes;
+    const current = classes.get(result.turmaId) ?? {
+      turmaId: result.turmaId,
+      idInternoEscola: result.idInternoEscola,
+      idAnac: result.anac,
+      alunosImportados: 0,
+    };
+    current.alunosImportados += 1;
+    classes.set(result.turmaId, current);
+    return classes;
+  }, new Map<string, StudentMigrationSuccessfulClass>()).values());
+  return {
+    results,
+    successfulClasses,
+    successCount: results.filter((result) => result.status === 'sucesso').length,
+    errorCount: results.filter((result) => result.status === 'erro').length,
+  };
 }
 
 function resultLine(result: StudentMigrationRowResult): string {
