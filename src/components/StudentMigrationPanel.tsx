@@ -46,14 +46,17 @@ export default function StudentMigrationPanel() {
     return sourceRows.slice(0, Math.min(MAX_BATCH_SIZE, batchSize));
   }, [batchSize, parsed, referencePreview]);
   const blockingProblemSummary = useMemo(() => {
-    const counts = new Map<string, number>();
+    const reasons = new Map<string, { count: number; lines: number[] }>();
     parsed?.discardedRows.forEach((row) => row.problems.forEach((problem) => {
-      counts.set(problem, (counts.get(problem) ?? 0) + 1);
+      const current = reasons.get(problem) ?? { count: 0, lines: [] };
+      current.count += 1;
+      current.lines.push(row.line);
+      reasons.set(problem, current);
     }));
     return {
       affectedRows: parsed?.discardedRows.length ?? 0,
-      totalOccurrences: Array.from(counts.values()).reduce((total, count) => total + count, 0),
-      reasons: Array.from(counts.entries()),
+      totalOccurrences: Array.from(reasons.values()).reduce((total, reason) => total + reason.count, 0),
+      reasons: Array.from(reasons.entries()).map(([reason, details]) => ({ reason, ...details })),
     };
   }, [parsed]);
   const problems = blockingProblemSummary.totalOccurrences;
@@ -192,7 +195,7 @@ export default function StudentMigrationPanel() {
           <section aria-labelledby="blocking-problems-title" className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/30">
             <h3 id="blocking-problems-title" className="font-bold text-amber-900 dark:text-amber-200">Problemas bloqueantes</h3>
             <p className="mt-1 text-sm text-amber-800 dark:text-amber-300"><strong>{blockingProblemSummary.totalOccurrences}</strong> ocorrências em <strong>{blockingProblemSummary.affectedRows}</strong> linhas afetadas.</p>
-            {blockingProblemSummary.reasons.length > 0 ? <ul aria-label="Motivos dos problemas bloqueantes" className="mt-3 space-y-1 text-sm text-amber-900 dark:text-amber-200">{blockingProblemSummary.reasons.map(([reason, count]) => <li key={reason} className="flex items-start justify-between gap-4 border-t border-amber-200/70 pt-1 first:border-t-0 first:pt-0 dark:border-amber-800/70"><span>{reason}</span><strong className="shrink-0">{count} {count === 1 ? 'ocorrência' : 'ocorrências'}</strong></li>)}</ul> : <p className="mt-3 text-sm text-emerald-700 dark:text-emerald-300">Nenhum problema bloqueante encontrado.</p>}
+            {blockingProblemSummary.reasons.length > 0 ? <ul aria-label="Motivos dos problemas bloqueantes" className="mt-3 space-y-1 text-sm text-amber-900 dark:text-amber-200">{blockingProblemSummary.reasons.map(({ reason, count, lines }) => <li key={reason} className="flex flex-col gap-1 border-t border-amber-200/70 pt-1 first:border-t-0 first:pt-0 dark:border-amber-800/70 sm:flex-row sm:items-start sm:justify-between sm:gap-4"><span className="min-w-0 break-words">{reason} — {count} {count === 1 ? 'ocorrência' : 'ocorrências'}; {lines.length === 1 ? 'Linha' : 'Linhas'}: {formatLineReferences(lines)}</span></li>)}</ul> : <p className="mt-3 text-sm text-emerald-700 dark:text-emerald-300">Nenhum problema bloqueante encontrado.</p>}
           </section>
           {parsed.discardedRows.length > 0 && <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-4 dark:border-rose-900 dark:bg-rose-950/30"><h3 className="font-bold text-rose-900 dark:text-rose-200">Linhas descartadas</h3><ul className="mt-2 max-h-56 list-disc space-y-1 overflow-y-auto pl-5 text-sm text-rose-800 dark:text-rose-200">{parsed.discardedRows.map((row) => <li key={row.line}>Linha {row.line}: {row.problems.join(' ')}</li>)}</ul></div>}
           {warnings > 0 && <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30"><strong>Avisos não bloqueantes:</strong> CPFs repetidos no arquivo serão conciliados com a mesma pessoa. Empresas sem correspondência ficam pendentes de cadastro manual e não bloqueiam a matrícula.</div>}
@@ -232,6 +235,26 @@ export default function StudentMigrationPanel() {
       {!parsed && <div className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300"><TriangleAlert className="mb-2 h-5 w-5 text-amber-500" aria-hidden="true" />Nenhum dado é gravado durante a leitura ou a prévia. Escolha um arquivo para começar.</div>}
     </div>
   );
+}
+
+function formatLineReferences(lines: readonly number[]) {
+  const sortedLines = Array.from(new Set(lines)).sort((a, b) => a - b);
+  if (!sortedLines.length) return '';
+
+  const references: string[] = [];
+  let rangeStart = sortedLines[0];
+  let rangeEnd = sortedLines[0];
+  sortedLines.slice(1).forEach((line) => {
+    if (line === rangeEnd + 1) {
+      rangeEnd = line;
+      return;
+    }
+    references.push(rangeStart === rangeEnd ? String(rangeStart) : `${rangeStart}-${rangeEnd}`);
+    rangeStart = line;
+    rangeEnd = line;
+  });
+  references.push(rangeStart === rangeEnd ? String(rangeStart) : `${rangeStart}-${rangeEnd}`);
+  return references.join(', ');
 }
 
 function Summary({ label, value, tone = 'default' }: { label: string; value: string; tone?: 'default' | 'success' | 'warning' }) {
