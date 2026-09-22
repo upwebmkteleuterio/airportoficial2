@@ -42,8 +42,10 @@ export function StudentDetailsPanel({ isOpen, onClose, student }: StudentDetails
     onClose();
   };
 
-
   if (!student) return null;
+
+  const enrollmentCompanyId = historyQuery.data?.find((matricula) => matricula.empresa_b2b_id)?.empresa_b2b_id;
+  const linkedCompanyId = student.empresa_id || enrollmentCompanyId;
 
   return (
     <SlidePanel isOpen={isOpen} onClose={onClose} maxWidth="max-w-xl" direction="right" baseZIndex={70}>
@@ -124,7 +126,7 @@ export function StudentDetailsPanel({ isOpen, onClose, student }: StudentDetails
               </div>
               <div>
                 <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1">Empresa Vinculada</label>
-                <div className="text-sm font-medium text-slate-900 dark:text-white">{student.empresa_id ? companies.find(c => c.id === student.empresa_id)?.razao_social || student.empresa_id : 'Nenhuma (Particular)'}</div>
+                <div className="text-sm font-medium text-slate-900 dark:text-white">{linkedCompanyId ? companies.find(c => c.id === linkedCompanyId)?.razao_social || companies.find(c => c.id === linkedCompanyId)?.nome_fantasia || linkedCompanyId : 'Nenhuma (Particular)'}</div>
               </div>
               <div>
                 <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1">Nome do Pai</label>

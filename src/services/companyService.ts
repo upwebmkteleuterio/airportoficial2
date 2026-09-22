@@ -1,16 +1,16 @@
 import { supabase } from '../integrations/supabase/client';
-import { Empresa, Usuario } from '../types';
+import { Empresa, UserRole, Usuario } from '../types';
 import { newServiceId, serviceError } from './supabaseErrors';
 
-type ActiveCompanyEmployeeProfileRow = Omit<Usuario, 'id'> & {
+type ActiveCompanyEmployeeProfileRow = Partial<Usuario> & {
   id: string;
   legacy_id?: string | null;
 };
 
 type ActiveMatriculaRow = {
   aluno_id: string | null;
-
   empresa_b2b_id: string | null;
+  status_matricula: string;
 };
 
 type ActiveProfileRow = {
@@ -19,37 +19,95 @@ type ActiveProfileRow = {
 };
 
 type ActivePersonRow = {
-  id: string | null;
+  id: string;
+  nome: string;
+  cpf: string | null;
+  ativo: boolean;
+  papel: string | null;
+  profile_legacy_id: string | null;
 };
 
-export async function getActiveEmployees(companyId: string): Promise<Usuario[]> {
-  const { data, error } = await supabase.rpc('get_active_company_employees', {
-    target_company_id: companyId,
-  });
+type ActivePersonIdentityRow = {
+  id: string;
+  profile_legacy_id: string | null;
+};
+
+function toProfileUsuario(row: ActiveCompanyEmployeeProfileRow): Usuario {
+  return {
+    id: row.legacy_id || row.id,
+    role: UserRole.ALUNO,
+    nome_completo: row.nome_completo || '',
+    cpf: row.cpf || '',
+    email: row.email || '',
+    telefone: row.telefone || '',
+    termo_lgpd_aceite: Boolean(row.termo_lgpd_aceite),
+    data_aceite_lgpd: row.data_aceite_lgpd || null,
+    foto_url: row.foto_url,
+    status: row.status,
+    origem_cadastro: row.origem_cadastro,
+    data_nascimento: row.data_nascimento,
+    nome_mae: row.nome_mae,
+    nome_pai: row.nome_pai,
+    rg: row.rg,
+    orgao_expedicao_rg: row.orgao_expedicao_rg,
+    grau_ensino: row.grau_ensino,
+    cep: row.cep,
+    endereco: row.endereco,
+    numero: row.numero,
+    bairro: row.bairro,
+    cidade: row.cidade,
+    estado: row.estado,
+    trabalha_aviacao_civil: row.trabalha_aviacao_civil,
+    trabalha_seguranca_avsec: row.trabalha_seguranca_avsec,
+    certificacao_avsec: row.certificacao_avsec,
+    empresa_id: row.empresa_id,
+    tipo_documento_selecionado: row.tipo_documento_selecionado,
+    turma_id_pendente: row.turma_id_pendente,
+  };
+}
+
+function toPersonUsuario(row: ActivePersonRow): Usuario {
+  return {
+    id: row.id,
+    role: UserRole.ALUNO,
+    nome_completo: row.nome,
+    cpf: row.cpf || '',
+    email: '',
+    telefone: '',
+    termo_lgpd_aceite: false,
+    data_aceite_lgpd: null,
+    status: 'ativo',
+    origem_cadastro: 'migracao',
+  };
+}
+
+async function getCompanyEnrollmentIds(companyId: string): Promise<Set<string>> {
+  const { data, error } = await supabase
+    .from('matriculas')
+    .select('aluno_id, empresa_b2b_id, status_matricula')
+    .eq('empresa_b2b_id', companyId)
+    .in('status_matricula', ['Ativo', 'Concluido']);
 
   if (error) {
-    throw serviceError('Não foi possível carregar os colaboradores ativos da empresa', error);
+    throw serviceError('Não foi possível carregar as matrículas da empresa', error);
   }
 
-  return ((data ?? []) as ActiveCompanyEmployeeProfileRow[]).map(({ legacy_id, ...profile }) => ({
-    ...profile,
-    id: legacy_id || profile.id,
-  }));
+  return new Set(
+    ((data ?? []) as ActiveMatriculaRow[])
+      .map((matricula) => matricula.aluno_id)
+      .filter((id): id is string => Boolean(id))
+  );
 }
 
 /**
- * Counts unique students with an active B2B enrollment for each company.
- * The current application stores the enrollment's aluno_id as profiles.legacy_id;
-
- * the auth profile id is also accepted for compatibility with direct profile links.
-
+ * Counts unique active students linked to each company through active or migrated enrollments.
  */
 export async function getActiveEmployeeCounts(): Promise<Record<string, number>> {
   const [{ data: matriculas, error: matriculasError }, { data: profiles, error: profilesError }, { data: people, error: peopleError }] = await Promise.all([
     supabase
       .from('matriculas')
-      .select('aluno_id, empresa_b2b_id')
-      .eq('status_matricula', 'Ativo'),
+      .select('aluno_id, empresa_b2b_id, status_matricula')
+      .in('status_matricula', ['Ativo', 'Concluido']),
     supabase
       .from('profiles')
       .select('id, legacy_id')
@@ -57,13 +115,13 @@ export async function getActiveEmployeeCounts(): Promise<Record<string, number>>
       .eq('status', 'ativo'),
     supabase
       .from('pessoas')
-      .select('id')
+      .select('id, profile_legacy_id')
       .eq('papel', 'ALUNO')
       .eq('ativo', true),
   ]);
 
   if (matriculasError) {
-    throw serviceError('Não foi possível carregar as matrículas ativas das empresas', matriculasError);
+    throw serviceError('Não foi possível carregar as matrículas das empresas', matriculasError);
   }
   if (profilesError) {
     throw serviceError('Não foi possível carregar os perfis ativos dos alunos', profilesError);
@@ -72,27 +130,103 @@ export async function getActiveEmployeeCounts(): Promise<Record<string, number>>
     throw serviceError('Não foi possível carregar as pessoas ativas dos alunos', peopleError);
   }
 
-  const activeStudentIds = new Set([
-    ...((profiles ?? []) as ActiveProfileRow[])
-      .flatMap((profile) => [profile.id, profile.legacy_id])
-      .filter((id): id is string => Boolean(id)),
-    ...((people ?? []) as ActivePersonRow[])
-      .map((person) => person.id)
-      .filter((id): id is string => Boolean(id)),
-  ]);
+  const activeStudentIds = new Map<string, string>();
+  for (const profile of (profiles ?? []) as ActiveProfileRow[]) {
+    const canonicalId = profile.legacy_id || profile.id;
+    if (!canonicalId) continue;
+    for (const alias of [profile.id, profile.legacy_id]) {
+      if (alias) activeStudentIds.set(alias, canonicalId);
+    }
+  }
+  for (const person of (people ?? []) as ActivePersonIdentityRow[]) {
+    activeStudentIds.set(person.id, person.id);
+    if (person.profile_legacy_id) activeStudentIds.set(person.profile_legacy_id, person.id);
+  }
   const counts = new Map<string, Set<string>>();
 
   for (const matricula of (matriculas ?? []) as ActiveMatriculaRow[]) {
-    if (!matricula.empresa_b2b_id || !matricula.aluno_id || !activeStudentIds.has(matricula.aluno_id)) continue;
+    if (!matricula.empresa_b2b_id || !matricula.aluno_id) continue;
+    const studentId = activeStudentIds.get(matricula.aluno_id);
+    if (!studentId) continue;
 
     const companyStudents = counts.get(matricula.empresa_b2b_id) ?? new Set<string>();
-    companyStudents.add(matricula.aluno_id);
+    companyStudents.add(studentId);
     counts.set(matricula.empresa_b2b_id, companyStudents);
   }
 
   return Object.fromEntries(
     Array.from(counts.entries()).map(([companyId, students]) => [companyId, students.size])
   );
+}
+
+/**
+ * Loads active students linked to one company, keeping migrated people and profiles in one list.
+ */
+export async function getActiveEmployees(companyId: string): Promise<Usuario[]> {
+  const enrollmentIds = await getCompanyEnrollmentIds(companyId);
+  if (enrollmentIds.size === 0) return [];
+
+  const ids = Array.from(enrollmentIds);
+  const { data: people, error: peopleError } = await supabase
+    .from('pessoas')
+    .select('id, nome, cpf, ativo, papel, profile_legacy_id')
+    .in('id', ids)
+    .eq('ativo', true)
+    .eq('papel', 'ALUNO');
+
+  if (peopleError) throw serviceError('Não foi possível carregar os alunos migrados da empresa', peopleError);
+
+  const activePeople = (people ?? []) as ActivePersonRow[];
+  const profileIds = Array.from(new Set([
+    ...ids,
+    ...activePeople.map((person) => person.profile_legacy_id).filter((id): id is string => Boolean(id)),
+  ]));
+  const profileSelect = 'id, legacy_id, role, nome_completo, cpf, email, telefone, termo_lgpd_aceite, data_aceite_lgpd, foto_url, status, data_nascimento, nome_mae, nome_pai, rg, orgao_expedicao_rg, grau_ensino, cep, endereco, numero, bairro, cidade, estado, trabalha_aviacao_civil, trabalha_seguranca_avsec, certificacao_avsec, empresa_id, origem_cadastro, tipo_documento_selecionado, turma_id_pendente';
+  const { data: legacyProfiles, error: legacyProfilesError } = await supabase
+    .from('profiles')
+    .select(profileSelect)
+    .in('legacy_id', profileIds)
+    .eq('role', 'ALUNO')
+    .eq('status', 'ativo');
+
+  if (legacyProfilesError) throw serviceError('Não foi possível carregar os perfis ativos da empresa', legacyProfilesError);
+
+  const uuidProfileIds = profileIds.filter((id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id));
+  let profilesById: ActiveCompanyEmployeeProfileRow[] = [];
+  if (uuidProfileIds.length > 0) {
+    const { data: directProfiles, error: directProfilesError } = await supabase
+      .from('profiles')
+      .select(profileSelect)
+      .in('id', uuidProfileIds)
+      .eq('role', 'ALUNO')
+      .eq('status', 'ativo');
+    if (directProfilesError) throw serviceError('Não foi possível carregar os perfis ativos da empresa', directProfilesError);
+    profilesById = (directProfiles ?? []) as ActiveCompanyEmployeeProfileRow[];
+  }
+
+  const employees = new Map<string, Usuario>();
+  const personIdByProfileLegacyId = new Map(
+    activePeople
+      .filter((person) => person.profile_legacy_id)
+      .map((person) => [person.profile_legacy_id as string, person.id])
+  );
+  for (const person of activePeople) {
+    const employee = { ...toPersonUsuario(person), empresa_id: companyId };
+    employees.set(employee.id, employee);
+  }
+  for (const row of [
+    ...((legacyProfiles ?? []) as ActiveCompanyEmployeeProfileRow[]),
+    ...profilesById,
+  ]) {
+    const employeeId = row.legacy_id
+      ? personIdByProfileLegacyId.get(row.legacy_id) || (enrollmentIds.has(row.legacy_id) ? row.legacy_id : row.id)
+      : row.id;
+    const linkedEmployeeId = enrollmentIds.has(row.id) ? row.id : employeeId;
+    const employee = { ...toProfileUsuario(row), id: linkedEmployeeId, empresa_id: companyId };
+    employees.set(employee.id, employee);
+  }
+
+  return Array.from(employees.values()).sort((a, b) => a.nome_completo.localeCompare(b.nome_completo, 'pt-BR'));
 }
 
 export const companyService = {
@@ -109,11 +243,9 @@ export const companyService = {
 
   getById: async (id: string): Promise<Empresa | undefined> => {
     const { data, error } = await supabase
-
       .from('empresas')
       .select('*')
       .eq('id', id)
-
       .maybeSingle();
     if (error) throw serviceError(`Não foi possível carregar a empresa ${id}`, error);
     return (data ?? undefined) as Empresa | undefined;

@@ -376,7 +376,7 @@ export function Companies() {
                 <th className="px-5 py-4 w-10 text-center"></th>
                 <th className="px-5 py-4">CNPJ</th>
                 <th className="px-5 py-4">RAZÃO SOCIAL</th>
-                <th className="px-5 py-4 text-center">TOTAL FUNCIONÁRIOS ATIVOS</th>
+                <th className="px-5 py-4 text-center">TOTAL DE FUNCIONÁRIOS</th>
                 <th className="px-5 py-4 text-center">LINK DE INSCRIÇÃO</th>
                 <th className="px-5 py-4 text-center">STATUS</th>
               </tr>
@@ -558,7 +558,7 @@ export function Companies() {
           },
           {
             title: 'Dados da empresa',
-            description: 'Clique em qualquer linha para abrir o painel lateral com os dados cadastrais, a data de cadastro e os funcionários ativos vinculados à empresa.',
+            description: 'Clique em qualquer linha para abrir o painel lateral com os dados cadastrais, a data de cadastro e os funcionários vinculados à empresa.',
             icon: <Info className="h-4 w-4" aria-hidden="true" />,
           },
           {
@@ -567,8 +567,8 @@ export function Companies() {
             icon: <MoreVertical className="h-4 w-4" aria-hidden="true" />,
           },
           {
-            title: 'Funcionários ativos',
-            description: 'A coluna mostra o total de funcionários ativos vinculados. O vínculo só é considerado quando a matrícula B2B está ativa.',
+            title: 'Funcionários vinculados',
+            description: 'A coluna mostra o total de alunos únicos vinculados nas matrículas B2B ativas ou concluídas, considerando somente alunos ativos.',
             icon: <Users className="h-4 w-4" aria-hidden="true" />,
           },
           {

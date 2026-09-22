@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { companyService } from '../services/companyService';
 import { Empresa, Usuario } from '../types';
+import { AnimatedTab, AnimatedTabs } from './ui/AnimatedTabs';
 import { SlidePanel } from './ui/SlidePanel';
 
 interface CompanyEmployeesPanelProps {
@@ -58,6 +59,10 @@ export function CompanyEmployeesPanel({ isOpen, onClose, company, onEmployeeClic
   }, [company?.id, isOpen]);
 
   const employees = employeesQuery.data ?? [];
+  const tabs: AnimatedTab<CompanyTab>[] = [
+    { id: 'company', label: 'Dados da empresa', icon: <Building2 className="w-4 h-4" aria-hidden="true" /> },
+    { id: 'employees', label: `Colaboradores (${employeesQuery.isLoading ? '…' : employees.length})`, icon: <Users className="w-4 h-4" aria-hidden="true" /> },
+  ];
 
   return (
     <SlidePanel isOpen={isOpen} onClose={onClose} maxWidth="max-w-xl" direction="right">
@@ -84,36 +89,19 @@ export function CompanyEmployeesPanel({ isOpen, onClose, company, onEmployeeClic
           </button>
         </div>
 
-        <div className="flex border-b border-gray-200 dark:border-slate-800 px-6 shrink-0 bg-slate-50 dark:bg-slate-850 overflow-x-auto">
-          <button
-            type="button"
-            onClick={() => setActiveTab('company')}
-            className={`px-4 py-3 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${
-              activeTab === 'company'
-                ? 'border-[#005f5f] text-[#005f5f] dark:text-teal-400'
-                : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-300'
-            }`}
-          >
-            <Building2 className="w-4 h-4" aria-hidden="true" />
-            Dados da empresa
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('employees')}
-            className={`px-4 py-3 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${
-              activeTab === 'employees'
-                ? 'border-[#005f5f] text-[#005f5f] dark:text-teal-400'
-                : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-300'
-            }`}
-          >
-            <Users className="w-4 h-4" aria-hidden="true" />
-            Colaboradores ({employeesQuery.isLoading ? '…' : employees.length})
-          </button>
+        <div className="border-b border-gray-200 dark:border-slate-800 px-6 shrink-0 bg-slate-50 dark:bg-slate-850">
+          <AnimatedTabs
+            tabs={tabs}
+            value={activeTab}
+            onChange={setActiveTab}
+            ariaLabel="Seções da empresa"
+            idPrefix="company-employees-tab"
+          />
         </div>
 
         <div className="flex-1 overflow-y-auto p-6">
           {activeTab === 'company' && company && (
-            <div className="space-y-6">
+            <div id="company-employees-tab-company-panel" role="tabpanel" aria-labelledby="company-employees-tab-company" tabIndex={0} className="space-y-6 focus:outline-none">
               <div className="flex items-center gap-3 rounded-xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
                 <div className="w-11 h-11 rounded-full bg-blue-50 dark:bg-sky-950/30 flex items-center justify-center border border-blue-100 dark:border-sky-900/20 shrink-0">
                   <Building2 className="w-5 h-5 text-sky-600 dark:text-sky-400" aria-hidden="true" />
@@ -154,7 +142,8 @@ export function CompanyEmployeesPanel({ isOpen, onClose, company, onEmployeeClic
           )}
 
           {activeTab === 'employees' && (
-            employeesQuery.isLoading ? (
+            <div id="company-employees-tab-employees-panel" role="tabpanel" aria-labelledby="company-employees-tab-employees" tabIndex={0} className="h-full focus:outline-none">
+            {employeesQuery.isLoading ? (
               <div className="flex flex-col items-center justify-center h-full text-gray-500 dark:text-slate-400 gap-3">
                 <div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin" aria-label="Carregando colaboradores" />
                 <p className="text-sm">Carregando colaboradores...</p>
@@ -173,7 +162,7 @@ export function CompanyEmployeesPanel({ isOpen, onClose, company, onEmployeeClic
                   <Users className="w-8 h-8" aria-hidden="true" />
                 </div>
                 <p className="text-slate-600 dark:text-slate-300 font-medium">Nenhum colaborador encontrado</p>
-                <p className="text-sm text-slate-500 mt-1">Esta empresa ainda não possui funcionários ativos cadastrados.</p>
+                <p className="text-sm text-slate-500 mt-1">Esta empresa ainda não possui funcionários vinculados em matrículas ativas ou concluídas.</p>
               </div>
 
             ) : (
@@ -196,7 +185,8 @@ export function CompanyEmployeesPanel({ isOpen, onClose, company, onEmployeeClic
                   </button>
                 ))}
               </div>
-            )
+            )}
+            </div>
           )}
         </div>
       </div>
