@@ -186,6 +186,11 @@ function hasStudentIdentifier(values: Record<StudentMigrationColumn, string>): b
   return Boolean(clean(values.NOMES) || clean(values.CPF));
 }
 
+function isIgnoredStudentMigrationName(value: string): boolean {
+  const normalized = normalizeStudentComparison(value);
+  return normalized === 'CANCELADO' || normalized === 'CALCELADO' || normalized === 'Z';
+}
+
 function validateRow(values: Record<StudentMigrationColumn, string>) {
   const problems: string[] = [];
   const turma = clean(values.TURMA);
@@ -198,7 +203,6 @@ function validateRow(values: Record<StudentMigrationColumn, string>) {
   else if (/^0+$/.test(anac)) problems.push('ANAC não pode ser 0.');
   if (!nome) problems.push('NOMES obrigatório.');
   if (!clean(values.CPF)) problems.push('CPF obrigatório.');
-  else if (!isValidStudentCpf(values.CPF)) problems.push('CPF inválido: informe 11 dígitos válidos.');
   const percentage = parsePercentage(values['%']);
   if (percentage.problem) problems.push(percentage.problem);
   const grade1 = parseGrade(values['1º CH'], '1º CH');
@@ -243,6 +247,7 @@ export async function parseStudentMigrationFile(file: File): Promise<StudentMigr
   const missing = STUDENT_MIGRATION_COLUMNS.filter((column) => !headerMap.has(column) && !STUDENT_MIGRATION_IGNORED.includes(column));
   const rows: StudentMigrationRow[] = matrix.slice(1).map((row, index) => {
     const values = rowValues(row, headerMap);
+    if (isIgnoredStudentMigrationName(values.NOMES)) return null;
     const validation = validateRow(values);
     const hasIdentifier = hasStudentIdentifier(values);
     return {
@@ -253,7 +258,7 @@ export async function parseStudentMigrationFile(file: File): Promise<StudentMigr
       warnings: clean(values.Empresa) ? [`Empresa "${clean(values.Empresa)}" informada; a correspondência será verificada na execução. Se não for encontrada, o cadastro manual ficará pendente.`] : [],
       valid: hasIdentifier && validation.problems.length === 0,
     };
-  }).filter((row) => hasStudentIdentifier(row.values));
+  }).filter((row): row is StudentMigrationRow => row !== null && hasStudentIdentifier(row.values));
 
   const cpfLines = new Map<string, number>();
   rows.forEach((row) => {
