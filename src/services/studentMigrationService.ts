@@ -291,6 +291,30 @@ export async function parseStudentMigrationFile(file: File): Promise<StudentMigr
 
 function safeError(message: string): Error { return new Error(message.slice(0, 300)); }
 
+const STUDENT_PEOPLE_PAGE_SIZE = 1000;
+
+async function loadAllStudentPeople(): Promise<StudentPerson[]> {
+  const people: StudentPerson[] = [];
+  let offset = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const { data, error } = await supabase
+      .from('pessoas')
+      .select('id,nome,cpf,papel,ativo')
+      .order('id', { ascending: true })
+      .range(offset, offset + STUDENT_PEOPLE_PAGE_SIZE - 1);
+    if (error) throw safeError('Não foi possível carregar as pessoas da migração.');
+
+    const page = (data ?? []) as StudentPerson[];
+    people.push(...page);
+    hasMore = page.length === STUDENT_PEOPLE_PAGE_SIZE;
+    if (hasMore) offset += page.length;
+  }
+
+  return people;
+}
+
 function isUniqueConflict(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
   const candidate = error as { code?: unknown; status?: unknown; statusCode?: unknown };
@@ -298,9 +322,8 @@ function isUniqueConflict(error: unknown): boolean {
 }
 
 async function findStudentPersonByCpf(cpf: string): Promise<{ person: StudentPerson | null; duplicate: boolean }> {
-  const { data, error } = await supabase.from('pessoas').select('id,nome,cpf,papel,ativo');
-  if (error) throw safeError('Não foi possível localizar a pessoa pelo CPF.');
-  const matches = ((data ?? []) as StudentPerson[]).filter((candidate) => normalizeStudentCpf(candidate.cpf) === cpf);
+  const people = await loadAllStudentPeople();
+  const matches = people.filter((candidate) => normalizeStudentCpf(candidate.cpf) === cpf);
   return { person: matches[0] ?? null, duplicate: matches.length > 1 };
 }
 
@@ -342,18 +365,18 @@ export async function previewStudentMigrationBatch(rows: StudentMigrationRow[]):
   if (!selectedRows.length) return { rows: [], blockingCount: 0, warningCount: 0, missingCompanies: [] };
   const internals = uniqueBy(selectedRows.map((row) => Number(row.normalized.turma)), String);
   const anacs = uniqueBy(selectedRows.map((row) => row.normalized.anac), (value) => normalizeStudentComparison(value));
-  const [internalQuery, anacQuery, peopleQuery, companiesQuery] = await Promise.all([
+  const [internalQuery, anacQuery, people, companiesQuery] = await Promise.all([
     supabase.from('turmas').select('id,id_interno_escola,id_anac,data_termino').in('id_interno_escola', internals),
     supabase.from('turmas').select('id,id_interno_escola,id_anac,data_termino').in('id_anac', anacs),
-    supabase.from('pessoas').select('id,nome,cpf,papel,ativo'),
+    loadAllStudentPeople(),
     supabase.from('empresas').select('id,nome_fantasia,razao_social'),
   ]);
-  if (internalQuery.error || anacQuery.error || peopleQuery.error || companiesQuery.error) throw safeError('Não foi possível validar as referências da migração.');
+  if (internalQuery.error || anacQuery.error || companiesQuery.error) throw safeError('Não foi possível validar as referências da migração.');
   const byInternal = new Map(((internalQuery.data ?? []) as StudentTurma[]).map((turma) => [turma.id_interno_escola, turma]));
   const byAnac = new Map(((anacQuery.data ?? []) as StudentTurma[]).map((turma) => [normalizeStudentComparison(turma.id_anac), turma]));
   const peopleByCpf = new Map<string, StudentPerson>();
   const duplicatePeopleCpfs = new Set<string>();
-  ((peopleQuery.data ?? []) as StudentPerson[]).forEach((person) => {
+  people.forEach((person) => {
     const cpf = normalizeStudentCpf(person.cpf);
     if (!cpf) return;
     if (peopleByCpf.has(cpf)) duplicatePeopleCpfs.add(cpf);
@@ -443,21 +466,21 @@ export async function runStudentMigrationBatch(rows: StudentMigrationRow[], onPr
 
   const internals = uniqueBy(selectedRows.map((row) => Number(row.normalized.turma)), String);
   const anacs = uniqueBy(selectedRows.map((row) => row.normalized.anac), (value) => normalizeStudentComparison(value));
-  const [internalQuery, anacQuery, peopleQuery, companiesQuery] = await Promise.all([
+  const [internalQuery, anacQuery, people, companiesQuery] = await Promise.all([
     supabase.from('turmas').select('id,id_interno_escola,id_anac,data_termino').in('id_interno_escola', internals),
     supabase.from('turmas').select('id,id_interno_escola,id_anac,data_termino').in('id_anac', anacs),
     // O CPF legado pode estar pontuado; a normalização acontece abaixo, após a leitura autorizada.
-    supabase.from('pessoas').select('id,nome,cpf,papel,ativo'),
+    loadAllStudentPeople(),
     supabase.from('empresas').select('id,nome_fantasia,razao_social'),
   ]);
-  if (internalQuery.error || anacQuery.error || peopleQuery.error || companiesQuery.error) throw safeError('Não foi possível carregar as referências da migração.');
+  if (internalQuery.error || anacQuery.error || companiesQuery.error) throw safeError('Não foi possível carregar as referências da migração.');
   const internalClasses = (internalQuery.data ?? []) as StudentTurma[];
   const anacClasses = (anacQuery.data ?? []) as StudentTurma[];
   const byInternal = new Map(internalClasses.map((turma) => [turma.id_interno_escola, turma]));
   const byAnac = new Map(anacClasses.map((turma) => [normalizeStudentComparison(turma.id_anac), turma]));
   const peopleByCpf = new Map<string, StudentPerson>();
   const duplicatePeopleCpfs = new Set<string>();
-  ((peopleQuery.data ?? []) as StudentPerson[]).forEach((person) => {
+  people.forEach((person) => {
     const cpf = normalizeStudentCpf(person.cpf);
     if (!cpf) return;
     if (peopleByCpf.has(cpf)) duplicatePeopleCpfs.add(cpf);
@@ -595,7 +618,7 @@ export async function runStudentMigrationBatch(rows: StudentMigrationRow[], onPr
 }
 
 function resultLine(result: StudentMigrationRowResult): string {
-  return `[${result.status.toUpperCase()}] Linha ${result.line} · TURMA ${result.turma ?? '—'} · ANAC ${result.anac ?? '—'}: ${result.message}`;
+  return `[${result.status.toUpperCase()}] Linha ${result.line} · TURMA ${result.turma ?? '—'} · ANAC ${result.anac ?? '—'} · CPF ${result.cpf ?? '—'}: ${result.message}`;
 }
 
 export function studentMigrationLogText(result: StudentMigrationRunResult): string { return result.results.map(resultLine).join('\n'); }
