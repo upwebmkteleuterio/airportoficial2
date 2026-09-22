@@ -14,8 +14,7 @@ import {
   AlertCircle,
   X
 } from 'lucide-react';
-import { useUsers } from '../hooks/useUsers';
-import { usePeople } from '../hooks/usePeople';
+import { useDirectoryPeople } from '../hooks/useDirectoryPeople';
 import { UserRole } from '../types';
 import { Modal } from '../components/ui/Modal';
 import { StaffRegistrationModal } from '../components/StaffRegistrationModal';
@@ -26,6 +25,7 @@ import { StaffDetailsPanel } from '../components/StaffDetailsPanel';
 import { CreateMenu } from '../components/ui/CreateMenu';
 import { PersonRegistrationModal } from '../components/PersonRegistrationModal';
 import { DocumentAccessGrant } from '../services/documentAccessService';
+import { PaginationFooter } from '../components/ui/PaginationFooter';
 
 
 type ToastState = {
@@ -82,32 +82,30 @@ export function Instructors() {
   // Pagination is performed by Supabase; only the current page is kept in memory.
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 50;
-  const { users, isLoading: isUsersLoading } = useUsers({
+  const { people, total, createPerson, updatePerson, isLoading, deleteUser } = useDirectoryPeople({
     role: UserRole.INSTRUTOR,
-    search: searchQuery
-  });
-  const { people, createPerson, updatePerson, isLoading: isPeopleLoading } = usePeople({
+    page: currentPage,
+    pageSize: itemsPerPage,
     search: searchQuery,
-    directoryOnly: true,
+    onlyActive: false,
   });
 
   useEffect(() => {
     setCurrentPage(1);
   }, [searchQuery]);
+  useEffect(() => {
+    if (!isLoading && currentPage > 1 && people.length === 0) setCurrentPage((page) => page - 1);
+  }, [currentPage, isLoading, people.length]);
 
-  const instructorRows: any[] = [
-    ...people.map((person) => {
-      const profile = users.find((user) => user.id === person.id || user.id === person.profile_legacy_id);
-      return profile
-        ? { ...person, ...profile, id: profile.id, is_directory_person: false }
-        : { ...person, nome_completo: person.nome, cpf: person.cpf ?? '', email: '', telefone: '', certificacao_avsec: '', is_directory_person: true };
-    }),
-    ...users.filter((user) => !people.some((person) => person.id === user.id || person.profile_legacy_id === user.id)),
-  ];
-  const total = instructorRows.length;
-  const paginatedInstructors = instructorRows.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
-  const totalPages = Math.ceil(total / itemsPerPage) || 1;
-  const isLoading = isUsersLoading || isPeopleLoading;
+  const instructorRows: any[] = people.map((person) => ({
+    ...person,
+    nome_completo: person.nome_completo || person.nome || '',
+    cpf: person.cpf || '',
+    email: person.email || '',
+    telefone: person.telefone || '',
+    is_directory_person: person.is_directory_person,
+  }));
+  const paginatedInstructors = instructorRows;
   const getErrorMessage = (error: unknown) => {
     if (error instanceof Error && error.message.trim()) return error.message;
     if (error && typeof error === 'object' && 'message' in error) {
@@ -300,29 +298,7 @@ export function Instructors() {
           </table>
         </div>
 
-        {/* Pagination Footer */}
-        {totalPages > 1 && (
-          <div className="px-4 py-3 border-t border-gray-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 flex items-center justify-between">
-            <span className="text-xs font-semibold text-gray-500 dark:text-slate-400">
-              Mostrando {(currentPage - 1) * itemsPerPage + 1} a {Math.min(currentPage * itemsPerPage, total)} de {total}
-            </span>
-            <div className="flex gap-1">
-              {Array.from({ length: totalPages }).map((_, i) => (
-                <button
-                  key={i}
-                  onClick={() => setCurrentPage(i + 1)}
-                  className={`w-8 h-8 flex items-center justify-center rounded-md text-xs font-bold transition-colors ${
-                    currentPage === i + 1
-                      ? 'bg-slate-900 dark:bg-teal-600 text-white shadow-sm'
-                      : 'text-gray-600 dark:text-slate-400 hover:bg-gray-200 dark:hover:bg-slate-700'
-                  }`}
-                >
-                  {i + 1}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+        <PaginationFooter page={currentPage} pageSize={itemsPerPage} total={total} onPageChange={setCurrentPage} />
       </div>
 
       {/* Modals */}

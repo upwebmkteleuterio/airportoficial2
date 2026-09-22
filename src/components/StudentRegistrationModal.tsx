@@ -302,7 +302,7 @@ const saveDraft = (formData: FormData, files: FilesState, step: number, fileName
 };
 
 export function StudentRegistrationModal({ isOpen, onClose, onSuccess, initialData, personId }: StudentRegistrationModalProps) {
-  const { createUser, updateUser } = useUsers();
+  const { createUser, updateUser } = useUsers({ enabled: false });
   const { companies } = useCompanies();
   const [step, setStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);

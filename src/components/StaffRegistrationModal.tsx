@@ -104,7 +104,7 @@ const createEmptyUploadStates = (): Record<FileField, FileUploadState> => ({
 });
 
 export function StaffRegistrationModal({ isOpen, onClose, onSuccess, onError, initialData, role }: StaffRegistrationModalProps & { role: UserRole }) {
-  const { createUser, updateUser } = useUsers();
+  const { createUser, updateUser } = useUsers({ enabled: false });
   const { companies } = useCompanies();
   const [step, setStep] = useState(1);
   const [isEditMode, setIsEditMode] = useState(false);

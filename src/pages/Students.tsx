@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Search, Filter, MoreVertical, UserPlus, Mail, Phone, User, Edit2, Trash2 } from 'lucide-react';
-import { useUsers } from '../hooks/useUsers';
-import { usePeople } from '../hooks/usePeople';
+import { useDirectoryPeople } from '../hooks/useDirectoryPeople';
 import { UserRole } from '../types';
 import { Modal } from '../components/ui/Modal';
 import { StudentRegistrationModal } from '../components/StudentRegistrationModal';
@@ -13,6 +12,7 @@ import { PasswordModal } from '../components/ui/PasswordModal';
 import { SharedDocumentsPanel } from '../components/SharedDocumentsPanel';
 import { StudentDetailsPanel } from '../components/StudentDetailsPanel';
 import { DocumentAccessGrant } from '../services/documentAccessService';
+import { PaginationFooter } from '../components/ui/PaginationFooter';
 
 const formatStudentDate = (value: unknown) => {
   if (typeof value !== 'string' || !value.trim()) return '-';
@@ -46,36 +46,28 @@ export function Students() {
   const [selectedStudentForDocs, setSelectedStudentForDocs] = useState<StudentRow | null>(null);
   const [accessGrant, setAccessGrant] = useState<DocumentAccessGrant | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 50;
-
-  const { users, isLoading: isUsersLoading, deleteUser } = useUsers({
+  const itemsPerPage = 100;
+  const { people, total, isLoading, createPerson, updatePerson, deleteUser } = useDirectoryPeople({
     role: UserRole.ALUNO,
-    status: 'ativo',
+    page: currentPage,
+    pageSize: itemsPerPage,
     search: searchQuery,
+    onlyActive: true,
   });
-  const { people, isLoading: isPeopleLoading, createPerson, updatePerson } = usePeople({ search: searchQuery, studentOnly: true, activeOnly: true });
 
-  const studentRows: StudentRow[] = [
-    ...people.map((person) => {
-      const profile = users.find((user) => user.id === person.id || user.id === person.profile_legacy_id);
-      return profile
-        ? { ...person, ...profile, id: profile.id, is_directory_person: false }
-        : {
-            ...person,
-            nome_completo: person.nome,
-            cpf: person.cpf ?? '',
-            email: '',
-            telefone: '',
-            status: 'ativo',
-            is_directory_person: true,
-          };
-    }),
-    ...users
-      .filter((user) => !people.some((person) => person.id === user.id || person.profile_legacy_id === user.id))
-      .map((user) => ({ ...user, is_directory_person: false })),
-  ];
+  const studentRows: StudentRow[] = people.map((person) => ({
+    ...person,
+    nome_completo: person.nome_completo || person.nome || '',
+    cpf: person.cpf || '',
+    email: person.email || '',
+    telefone: person.telefone || '',
+    is_directory_person: person.is_directory_person,
+  }));
 
   useEffect(() => setCurrentPage(1), [searchQuery]);
+  useEffect(() => {
+    if (!isLoading && currentPage > 1 && people.length === 0) setCurrentPage((page) => page - 1);
+  }, [currentPage, isLoading, people.length]);
   useEffect(() => {
     const handleGlobalClick = () => setOpenMenuId(null);
     if (!openMenuId) return;
@@ -88,9 +80,7 @@ export function Students() {
     return () => window.clearTimeout(timeoutId);
   }, [toast]);
 
-  const paginatedStudents = studentRows.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
-  const totalPages = Math.ceil(studentRows.length / itemsPerPage) || 1;
-  const isLoading = isUsersLoading || isPeopleLoading;
+  const paginatedStudents = studentRows;
 
   const handleOpenDocuments = (student: StudentRow) => {
     setAccessGrant(null);
@@ -138,7 +128,7 @@ export function Students() {
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-750 px-3 py-1.5 rounded-lg font-bold text-xs text-slate-800 dark:text-white shadow-sm"><Filter className="w-3.5 h-3.5 text-gray-500" /><span>Filtros</span></div>
           <div className="h-5 w-px bg-gray-300 dark:bg-slate-750" />
-          <span className="text-xs text-gray-500 dark:text-slate-400 font-semibold">{studentRows.length} alunos cadastrados</span>
+          <span className="text-xs text-gray-500 dark:text-slate-400 font-semibold">{total} alunos cadastrados</span>
         </div>
         <div className="relative w-full sm:w-72">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -173,7 +163,7 @@ export function Students() {
             </tbody>
           </table>
         </div>
-        {totalPages > 1 && <div className="px-4 py-3 border-t border-gray-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 flex items-center justify-between"><span className="text-xs font-semibold text-gray-500 dark:text-slate-400">Mostrando {(currentPage - 1) * itemsPerPage + 1} a {Math.min(currentPage * itemsPerPage, studentRows.length)} de {studentRows.length}</span><div className="flex gap-1">{Array.from({ length: totalPages }).map((_, index) => <button type="button" key={index} onClick={() => setCurrentPage(index + 1)} className={`w-8 h-8 flex items-center justify-center rounded-md text-xs font-bold ${currentPage === index + 1 ? 'bg-slate-900 dark:bg-teal-600 text-white' : 'text-gray-600 dark:text-slate-400 hover:bg-gray-200 dark:hover:bg-slate-700'}`}>{index + 1}</button>)}</div></div>}
+        <PaginationFooter page={currentPage} pageSize={itemsPerPage} total={total} onPageChange={setCurrentPage} />
       </div>
 
       <StudentDetailsPanel isOpen={detailsPanelOpen} onClose={() => { setDetailsPanelOpen(false); setSelectedStudentForDetails(null); }} student={selectedStudentForDetails} />

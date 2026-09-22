@@ -44,8 +44,6 @@ import {
     Columns,
     Download,
     X,
-    ChevronLeft,
-    ChevronRight,
     Calendar,
     AlertCircle,
     Edit,
@@ -77,6 +75,7 @@ import { ConfirmDeleteModal } from "../components/ui/ConfirmDeleteModal";
 import { TruncatedInfoTooltip } from "../components/ui/TruncatedInfoTooltip";
 import { ClassDeadlineAlertModal } from "../components/classes/ClassDeadlineAlertModal";
 import { ClassDeadlineAlertTags } from "../components/classes/ClassDeadlineAlertTags";
+import { PaginationFooter } from "../components/ui/PaginationFooter";
 import {
     ClassDeadlineAlertType,
     classifyClassDeadlineAlert,
@@ -828,7 +827,6 @@ export function Dashboard() {
         : classes;
     const paginatedClasses = filteredClasses;
     const visibleTotal = activeDeadlineAlert ? filteredClasses.length : total;
-    const totalPages = Math.ceil(visibleTotal / itemsPerPage) || 1;
 
     const classListFiltersKey = JSON.stringify({
         search: filters.classSearchTerm,
@@ -1631,47 +1629,7 @@ export function Dashboard() {
                     </table>
                 </div>
                 {}
-                <div className="px-5 py-4 border-t border-gray-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4 font-sans text-xs bg-slate-50 dark:bg-slate-850">
-                    <span className="text-gray-500 dark:text-slate-400 font-medium">
-                        {visibleTotal === 0
-                            ? 'Exibindo 0 de 0 turmas'
-                            : `Exibindo ${(currentPage - 1) * itemsPerPage + 1}-${Math.min(currentPage * itemsPerPage, visibleTotal)} de ${visibleTotal} turmas`}
-                    </span>
-
-                    <div className="flex items-center border border-gray-300 dark:border-slate-750 rounded-lg bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
-                        <button
-                            id="pagination-prev"
-                            type="button"
-                            disabled={currentPage === 1}
-                            onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
-                            className="p-2 hover:bg-gray-50 dark:hover:bg-slate-850 text-gray-500 dark:text-slate-400 border-r border-gray-300 dark:border-slate-750 transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
-                            aria-label="Página anterior"
-                        >
-                            <ChevronLeft className="w-4 h-4" />
-                        </button>
-                        {Array.from({ length: totalPages }).map((_, index) => (
-                            <button
-                                id={`pagination-page-${index + 1}`}
-                                type="button"
-                                key={index}
-                                onClick={() => setCurrentPage(index + 1)}
-                                className={`px-3 py-2 font-bold border-r border-gray-300 dark:border-slate-750 transition-colors cursor-pointer ${currentPage === index + 1 ? 'bg-[#005f5f]/10 dark:bg-teal-950/30 text-[#005f5f] dark:text-teal-400' : 'text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-850'}`}
-                            >
-                                {index + 1}
-                            </button>
-                        ))}
-                        <button
-                            id="pagination-next"
-                            type="button"
-                            disabled={currentPage === totalPages}
-                            onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
-                            className="p-2 hover:bg-gray-50 dark:hover:bg-slate-850 text-gray-500 dark:text-slate-400 transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
-                            aria-label="Próxima página"
-                        >
-                            <ChevronRight className="w-4 h-4" />
-                        </button>
-                    </div>
-                </div>
+                <PaginationFooter page={currentPage} pageSize={itemsPerPage} total={visibleTotal} onPageChange={setCurrentPage} itemLabel="turmas" />
             </div>
             {}
             <SlidePanel isOpen={modals.newClassOpen && !isInstructor} onClose={handleCloseClassModal}>

@@ -15,6 +15,7 @@ interface UsersOptions {
   search?: string;
   empresaId?: string;
   turmaId?: string;
+  enabled?: boolean;
 }
 
 interface UsersQueryData {
@@ -32,6 +33,7 @@ export function useUsers(options: UsersOptions = {}) {
   const search = options.search ?? '';
   const empresaId = options.empresaId;
   const turmaId = options.turmaId;
+  const enabled = options.enabled ?? true;
 
   const usersQuery = useQuery<UsersQueryData>({
     queryKey: isPaginated
@@ -44,12 +46,14 @@ export function useUsers(options: UsersOptions = {}) {
       }
       return userService.getPage({ page, pageSize, role, status, search, empresaId, turmaId });
     },
+    enabled,
   });
 
   const createUserMutation = useMutation({
     mutationFn: (newUser: CreateUserInput) => userService.create(newUser),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.invalidateQueries({ queryKey: ['directory-people'] });
     }
   });
 
@@ -57,6 +61,7 @@ export function useUsers(options: UsersOptions = {}) {
     mutationFn: ({ id, updates }: { id: string; updates: Partial<Usuario> }) => userService.update(id, updates),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.invalidateQueries({ queryKey: ['directory-people'] });
     }
   });
 
@@ -64,6 +69,7 @@ export function useUsers(options: UsersOptions = {}) {
     mutationFn: (id: string) => userService.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.invalidateQueries({ queryKey: ['directory-people'] });
     }
   });
 

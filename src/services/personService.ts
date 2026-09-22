@@ -1,11 +1,30 @@
 import { supabase } from '../integrations/supabase/client';
 import { newServiceId, serviceError } from './supabaseErrors';
-import type { Pessoa, UserRole } from '../types';
+import type { Pessoa, UserRole, Usuario } from '../types';
 
 export type { Pessoa } from '../types';
 
+export type DirectoryPerson = Usuario & {
+  is_directory_person: boolean;
+  total_count?: number;
+  nome?: string;
+  profile_legacy_id?: string | null;
+};
+
 const sanitizeSearch = (value: string) => value.replace(/[^0-9A-Za-zÀ-ÿ .@-]/g, ' ').slice(0, 100);
 const normalizeCpf = (value: string | null | undefined) => value?.replace(/\D/g, '').slice(0, 11) || null;
+
+const normalizeDirectorySearch = (value: string) => sanitizeSearch(value.trim()).slice(0, 100);
+
+function toDirectoryPerson(row: DirectoryPerson): DirectoryPerson {
+  const isDirectoryPerson = Boolean(row.is_directory_person);
+  return {
+    ...row,
+    cpf: normalizeCpf(row.cpf) ?? '',
+    nome: isDirectoryPerson ? row.nome_completo : row.nome,
+    profile_legacy_id: isDirectoryPerson ? row.id : row.profile_legacy_id ?? null,
+  };
+}
 
 const toPerson = (row: Pessoa): Pessoa => ({
   ...row,
@@ -13,6 +32,28 @@ const toPerson = (row: Pessoa): Pessoa => ({
 });
 
 export const personService = {
+  getDirectoryPage: async (options: {
+    role: UserRole;
+    page: number;
+    pageSize: number;
+    search?: string;
+    onlyActive: boolean;
+  }): Promise<{ data: DirectoryPerson[]; total: number }> => {
+    const page = Math.max(1, Math.floor(options.page));
+    const pageSize = Math.min(100, Math.max(1, Math.floor(options.pageSize)));
+    const search = normalizeDirectorySearch(options.search ?? '');
+    const { data, error } = await supabase.rpc('get_directory_people_page', {
+      p_role: options.role,
+      p_page: page,
+      p_page_size: pageSize,
+      p_search: search || null,
+      p_only_active: options.onlyActive,
+    });
+    if (error) throw serviceError('Não foi possível carregar o diretório de pessoas', error);
+    const rows = ((data ?? []) as DirectoryPerson[]).map(toDirectoryPerson);
+    return { data: rows, total: rows[0]?.total_count ?? 0 };
+  },
+
   getAll: async (search = '', directoryOnly = false): Promise<Pessoa[]> => {
     let query = supabase.from('pessoas').select('*').order('nome', { ascending: true });
     if (directoryOnly) query = query.eq('visivel_diretorio', true);

@@ -291,6 +291,25 @@ export async function parseStudentMigrationFile(file: File): Promise<StudentMigr
 
 function safeError(message: string): Error { return new Error(message.slice(0, 300)); }
 
+function isUniqueConflict(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const candidate = error as { code?: unknown; status?: unknown; statusCode?: unknown };
+  return candidate.code === '23505' || candidate.status === 409 || candidate.statusCode === 409;
+}
+
+async function findStudentPersonByCpf(cpf: string): Promise<{ person: StudentPerson | null; duplicate: boolean }> {
+  const { data, error } = await supabase.from('pessoas').select('id,nome,cpf,papel,ativo');
+  if (error) throw safeError('Não foi possível localizar a pessoa pelo CPF.');
+  const matches = ((data ?? []) as StudentPerson[]).filter((candidate) => normalizeStudentCpf(candidate.cpf) === cpf);
+  return { person: matches[0] ?? null, duplicate: matches.length > 1 };
+}
+
+function assertUsableStudentPerson(person: StudentPerson, duplicate: boolean): void {
+  if (duplicate) throw safeError('CPF corresponde a mais de uma pessoa; revisão manual necessária.');
+  if (person.papel && person.papel !== UserRole.ALUNO) throw safeError('CPF já pertence a uma pessoa com outro papel; revisão manual necessária.');
+  if (!person.ativo) throw safeError('A pessoa encontrada pelo CPF está inativa.');
+}
+
 async function assertStudentMigrationAccess(): Promise<void> {
   const { data, error } = await supabase.auth.getUser();
   if (error || !data.user) throw safeError('Sessão não autenticada.');
@@ -461,30 +480,42 @@ export async function runStudentMigrationBatch(rows: StudentMigrationRow[], onPr
       progress('validação', current, `Validando ${subject}.`);
       const turma = classForRow(row, byInternal, byAnac);
       progress('conciliação', current, `${subject}: turma conciliada.`);
-      if (duplicatePeopleCpfs.has(row.normalized.cpf)) throw safeError('CPF corresponde a mais de uma pessoa; revisão manual necessária.');
       let person = peopleByCpf.get(row.normalized.cpf);
-      if (person && person.papel && person.papel !== UserRole.ALUNO) throw safeError('CPF já pertence a uma pessoa com outro papel; revisão manual necessária.');
-      if (person && !person.ativo) throw safeError('A pessoa encontrada pelo CPF está inativa.');
-      if (person && normalizeStudentComparison(person.nome) !== normalizeStudentComparison(row.normalized.nome)) {
+      let personStatus: 'criada' | 'reutilizada' | 'reutilizada após conflito' = person ? 'reutilizada' : 'criada';
+      let duplicatePerson = duplicatePeopleCpfs.has(row.normalized.cpf);
+      if (!person) {
+        const { data, error } = await supabase.from('pessoas').insert({ id: newServiceId('pessoa'), nome: row.normalized.nome, cpf: row.normalized.cpf, papel: UserRole.ALUNO, ativo: true, visivel_diretorio: true }).select('id,nome,cpf,papel,ativo').single();
+        if (error) {
+          if (!isUniqueConflict(error)) throw safeError('Não foi possível criar o cadastro do aluno.');
+          const existingPerson = await findStudentPersonByCpf(row.normalized.cpf);
+          if (!existingPerson.person || existingPerson.duplicate) throw safeError('Não foi possível localizar uma pessoa única pelo CPF.');
+          person = existingPerson.person;
+          personStatus = 'reutilizada após conflito';
+          duplicatePerson = existingPerson.duplicate;
+        } else if (!data) {
+          throw safeError('Não foi possível criar o cadastro do aluno.');
+        } else {
+          person = data as StudentPerson;
+        }
+        peopleByCpf.set(row.normalized.cpf, person);
+      }
+      assertUsableStudentPerson(person, duplicatePerson);
+      if (normalizeStudentComparison(person.nome) !== normalizeStudentComparison(row.normalized.nome)) {
         const warning = `Nome da planilha "${row.normalized.nome}" diverge do nome canônico cadastrado para o CPF ("${person.nome}").`;
         if (!row.warnings.includes(warning)) row.warnings = [...row.warnings, warning];
       }
-      if (person && !person.papel) {
+      if (!person.papel) {
         const { data, error } = await supabase.from('pessoas').update({ papel: UserRole.ALUNO }).eq('id', person.id).select('id,nome,cpf,papel,ativo').single();
         if (error || !data || data.id !== person.id || data.papel !== UserRole.ALUNO) throw safeError('Não foi possível classificar a pessoa histórica como aluno.');
         person = { ...person, papel: data.papel };
         peopleByCpf.set(row.normalized.cpf, person);
-        progress('pessoa', current, `${subject}: pessoa histórica classificada como aluno.`);
       }
-      if (!person) {
-        const { data, error } = await supabase.from('pessoas').insert({ id: newServiceId('pessoa'), nome: row.normalized.nome, cpf: row.normalized.cpf, papel: UserRole.ALUNO, ativo: true, visivel_diretorio: true }).select('id,nome,cpf,papel,ativo').single();
-        if (error || !data) throw safeError('Não foi possível criar o cadastro do aluno.');
-        person = data as StudentPerson;
-        peopleByCpf.set(row.normalized.cpf, person);
-        progress('pessoa', current, `${subject}: pessoa criada por CPF.`);
-      } else if (person.papel === UserRole.ALUNO) {
-        progress('pessoa', current, `${subject}: pessoa reutilizada por CPF.`);
-      }
+      const personMessage = personStatus === 'criada'
+        ? 'Pessoa criada.'
+        : personStatus === 'reutilizada após conflito'
+          ? 'Pessoa reutilizada após conflito de CPF.'
+          : 'Pessoa reutilizada por CPF.';
+      progress('pessoa', current, `${subject}: ${personMessage}`);
 
       const companyName = clean(row.values.Empresa);
       let companyId: string | null = null;
@@ -516,7 +547,7 @@ export async function runStudentMigrationBatch(rows: StudentMigrationRow[], onPr
         const updatePayload = companyName ? { ...academic, empresa_b2b_id: companyId } : academic;
         const { error } = await supabase.from('matriculas').update(updatePayload).eq('id', existing.id);
         if (error) throw safeError('Não foi possível atualizar a matrícula histórica.');
-        results.push(resultMessage(row, turma, `Matrícula reutilizada e dados acadêmicos atualizados. Não foi criado diário de classe.${row.warnings.length ? ` ${row.warnings.join(' ')}` : ''}`));
+        results.push(resultMessage(row, turma, `${personMessage} Matrícula reutilizada e dados acadêmicos atualizados. Não foi criado diário de classe.${row.warnings.length ? ` ${row.warnings.join(' ')}` : ''}`));
       } else {
         const { data, error } = await supabase.rpc('create_matricula', {
           p_aluno_id: person.id,
@@ -534,7 +565,7 @@ export async function runStudentMigrationBatch(rows: StudentMigrationRow[], onPr
         });
         if (error || !data) throw safeError('Não foi possível criar a matrícula histórica.');
         matriculasByKey.set(key, data as ExistingMatricula);
-        results.push(resultMessage(row, turma, `Matrícula criada com sucesso. Não foi criado diário de classe.${row.warnings.length ? ` ${row.warnings.join(' ')}` : ''}`));
+        results.push(resultMessage(row, turma, `${personMessage} Vínculo de matrícula criado com sucesso. Não foi criado diário de classe.${row.warnings.length ? ` ${row.warnings.join(' ')}` : ''}`));
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Não foi possível concluir a linha.';
