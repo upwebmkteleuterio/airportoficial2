@@ -4,8 +4,6 @@ import { useStudentMigrationHistory } from '../hooks/useStudentMigrationHistory'
 import StudentMigrationHistoryPanel from './StudentMigrationHistoryPanel';
 import { useUIStore } from '../store/uiStore';
 import {
-  createStudentMigrationCompany,
-  normalizeStudentComparison,
   parseStudentMigrationFile,
   previewStudentMigrationBatch,
   runStudentMigrationBatch,
@@ -22,12 +20,6 @@ import {
 
 const MAX_BATCH_SIZE = 10000;
 
-type CompanyRegistrationForm = {
-  nome_fantasia: string;
-  razao_social: string;
-  cnpj: string;
-};
-
 export default function StudentMigrationPanel() {
   const [parsed, setParsed] = useState<StudentMigrationParseResult | null>(null);
   const [fileName, setFileName] = useState('');
@@ -42,9 +34,6 @@ export default function StudentMigrationPanel() {
   const [result, setResult] = useState<StudentMigrationRunResult | null>(null);
   const [parseError, setParseError] = useState('');
   const [clipboardMessage, setClipboardMessage] = useState('');
-  const [companyForms, setCompanyForms] = useState<Record<string, CompanyRegistrationForm>>({});
-  const [creatingCompany, setCreatingCompany] = useState('');
-  const [companyMessage, setCompanyMessage] = useState('');
   const { saveHistory } = useStudentMigrationHistory(false);
   const { setRoute, setSelectedClassId } = useUIStore();
 
@@ -77,8 +66,6 @@ export default function StudentMigrationPanel() {
     setResult(null);
     setConfirming(false);
     setReferencePreview(null);
-    setCompanyForms({});
-    setCompanyMessage('');
     try {
       const next = await parseStudentMigrationFile(file);
       setParsed(next);
@@ -108,34 +95,11 @@ export default function StudentMigrationPanel() {
     try {
       const preview = await previewStudentMigrationBatch(parsed.validRows.slice(0, Math.min(MAX_BATCH_SIZE, batchSize)));
       setReferencePreview(preview);
-      setCompanyForms((current) => Object.fromEntries(preview.missingCompanies.map(({ name }) => {
-        const key = normalizeStudentComparison(name);
-        return [key, current[key] ?? { nome_fantasia: name, razao_social: '', cnpj: '' }];
-      })));
-      setCompanyMessage('');
       setConfirming(true);
     } catch (error) {
       setParseError(error instanceof Error ? error.message : 'Não foi possível validar as referências da migração.');
     } finally {
       setPreviewing(false);
-    }
-  };
-
-  const registerCompany = async (companyName: string) => {
-    const key = normalizeStudentComparison(companyName);
-    const form = companyForms[key];
-    if (!form || !form.nome_fantasia.trim() || creatingCompany) return;
-    setCreatingCompany(key);
-    setCompanyMessage('');
-    try {
-      await createStudentMigrationCompany(form);
-      setCompanyMessage(`Empresa "${form.nome_fantasia}" cadastrada. Refaça a prévia antes de confirmar o lote.`);
-      setReferencePreview(null);
-      setConfirming(false);
-    } catch (error) {
-      setCompanyMessage(error instanceof Error ? error.message : 'Não foi possível cadastrar a empresa.');
-    } finally {
-      setCreatingCompany('');
     }
   };
 
@@ -217,7 +181,7 @@ export default function StudentMigrationPanel() {
             {blockingProblemSummary.reasons.length > 0 ? <ul aria-label="Motivos dos problemas bloqueantes" className="mt-3 space-y-1 text-sm text-amber-900 dark:text-amber-200">{blockingProblemSummary.reasons.map(({ reason, count, lines }) => <li key={reason} className="flex flex-col gap-1 border-t border-amber-200/70 pt-1 first:border-t-0 first:pt-0 dark:border-amber-800/70 sm:flex-row sm:items-start sm:justify-between sm:gap-4"><span className="min-w-0 break-words">{reason} — {count} {count === 1 ? 'ocorrência' : 'ocorrências'}; {lines.length === 1 ? 'Linha' : 'Linhas'}: {formatLineReferences(lines)}</span></li>)}</ul> : <p className="mt-3 text-sm text-emerald-700 dark:text-emerald-300">Nenhum problema bloqueante encontrado.</p>}
           </section>
           {parsed.discardedRows.length > 0 && <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-4 dark:border-rose-900 dark:bg-rose-950/30"><h3 className="font-bold text-rose-900 dark:text-rose-200">Linhas descartadas</h3><ul className="mt-2 max-h-56 list-disc space-y-1 overflow-y-auto pl-5 text-sm text-rose-800 dark:text-rose-200">{parsed.discardedRows.map((row) => <li key={row.line}>Linha {row.line}: {row.problems.join(' ')}</li>)}</ul></div>}
-          {warnings > 0 && <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30"><strong>Avisos não bloqueantes:</strong> CPFs repetidos no arquivo serão conciliados com a mesma pessoa. Empresas sem correspondência ficam pendentes de cadastro manual e não bloqueiam a matrícula.</div>}
+          {warnings > 0 && <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30"><strong>Avisos não bloqueantes:</strong> CPFs repetidos no arquivo serão conciliados com a mesma pessoa. Empresas sem correspondência serão criadas e vinculadas automaticamente somente quando o lote for iniciado.</div>}
         </section>
 
         <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -225,22 +189,16 @@ export default function StudentMigrationPanel() {
           <label className="text-sm font-semibold text-slate-700 dark:text-slate-200">Quantidade de linhas válidas a gravar (máximo {Math.min(MAX_BATCH_SIZE, parsed.validRows.length)})
             <input type="number" min={parsed.validRows.length ? 1 : 0} max={Math.min(MAX_BATCH_SIZE, parsed.validRows.length)} value={batchSize} onChange={(event) => { setReferencePreview(null); setConfirming(false); setBatchSize(Math.max(1, Math.min(MAX_BATCH_SIZE, parsed.validRows.length, Number(event.target.value) || 1))); }} disabled={running || parsed.validRows.length === 0} className="mt-2 block w-36 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950" />
           </label>
-          {confirming && <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/20"><p className="font-bold text-amber-900 dark:text-amber-200">Confirme o lote antes de gravar</p><p className="mt-1 text-sm text-amber-800 dark:text-amber-300">Serão processadas {selectedRows.length} linha(s) válidas após a conciliação. Linhas descartadas ou com conflito bloqueante não entram no lote, e cada linha terá resultado individual.</p>{referencePreview && <div className="mt-3 rounded-md border border-slate-200 bg-white/70 p-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-950/30 dark:text-slate-200"><strong>Prévia das referências:</strong> {referencePreview.blockingCount} problema(s) bloqueante(s) e {referencePreview.warningCount} aviso(s) não bloqueante(s). <strong>{referencePreview.missingCompanies.length}</strong> empresa(s) ausente(s) e <strong>{referencePreview.missingCompanyStudentCount}</strong> aluno(s) único(s) afetado(s) por CPF normalizado.{referencePreview.missingCompanies.length > 0 && <div className="mt-2 rounded border border-amber-200 bg-amber-50/70 p-2 dark:border-amber-800 dark:bg-amber-950/20">Cadastre as empresas abaixo e refaça a prévia antes de confirmar. A contagem por empresa aparece em cada cadastro.</div>}{referencePreview.blockingCount > 0 && <ul className="mt-2 max-h-36 list-disc overflow-y-auto pl-5 text-rose-700 dark:text-rose-300">{referencePreview.rows.filter((row) => row.problems.length > 0).map((row) => <li key={row.line}>Linha {row.line}: {row.problems.join(' ')}</li>)}</ul>}{referencePreview.warningCount > 0 && <ul className="mt-2 max-h-36 list-disc overflow-y-auto pl-5 text-amber-700 dark:text-amber-300">{referencePreview.rows.filter((row) => row.warnings.length > 0).map((row) => <li key={`warning-${row.line}`}>Linha {row.line}: {row.warnings.join(' ')}</li>)}</ul>}</div>}<div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => void execute()} disabled={!selectedRows.length} className="inline-flex items-center gap-2 rounded-md bg-teal-700 px-4 py-2 text-sm font-bold text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-teal-500"><CheckCircle2 className="h-4 w-4" aria-hidden="true" /> Confirmar e iniciar lote</button><button type="button" onClick={() => { setReferencePreview(null); setConfirming(false); }} className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold dark:border-slate-700">Voltar</button></div></div>}
+          {confirming && <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/20"><p className="font-bold text-amber-900 dark:text-amber-200">Confirme o lote antes de gravar</p><p className="mt-1 text-sm text-amber-800 dark:text-amber-300">A revisão é somente leitura. Serão processadas {selectedRows.length} linha(s) válidas; na confirmação, empresas ausentes serão criadas automaticamente e vinculadas às matrículas. Linhas descartadas ou com conflito bloqueante não entram no lote, e cada linha terá resultado individual.</p>{referencePreview && <div className="mt-3 rounded-md border border-slate-200 bg-white/70 p-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-950/30 dark:text-slate-200"><strong>Prévia das referências:</strong> {referencePreview.blockingCount} problema(s) bloqueante(s) e {referencePreview.warningCount} aviso(s) não bloqueante(s). <strong>{referencePreview.missingCompanies.length}</strong> empresa(s) ausente(s) e <strong>{referencePreview.missingCompanyStudentCount}</strong> aluno(s) único(s) afetado(s) por CPF normalizado.{referencePreview.missingCompanies.length > 0 && <div className="mt-2 rounded border border-amber-200 bg-amber-50/70 p-2 dark:border-amber-800 dark:bg-amber-950/20">A prévia não grava dados. Ao confirmar o lote, as empresas ausentes serão criadas automaticamente uma vez por nome normalizado e vinculadas às matrículas. A contagem por empresa aparece no resumo abaixo.</div>}{referencePreview.blockingCount > 0 && <ul className="mt-2 max-h-36 list-disc overflow-y-auto pl-5 text-rose-700 dark:text-rose-300">{referencePreview.rows.filter((row) => row.problems.length > 0).map((row) => <li key={row.line}>Linha {row.line}: {row.problems.join(' ')}</li>)}</ul>}{referencePreview.warningCount > 0 && <ul className="mt-2 max-h-36 list-disc overflow-y-auto pl-5 text-amber-700 dark:text-amber-300">{referencePreview.rows.filter((row) => row.warnings.length > 0).map((row) => <li key={`warning-${row.line}`}>Linha {row.line}: {row.warnings.join(' ')}</li>)}</ul>}</div>}<div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => void execute()} disabled={!selectedRows.length || running || previewing} className="inline-flex items-center gap-2 rounded-md bg-teal-700 px-4 py-2 text-sm font-bold text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-teal-500"><CheckCircle2 className="h-4 w-4" aria-hidden="true" /> {referencePreview?.missingCompanies.length ? 'Confirmar, criar empresas e iniciar lote' : 'Confirmar e iniciar lote'}</button><button type="button" onClick={() => { setReferencePreview(null); setConfirming(false); }} className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold dark:border-slate-700">Voltar</button></div></div>}
           <button type="button" onClick={() => void prepare()} disabled={running || previewing || !parsed.validRows.length || hasFileProblem} className="mt-4 inline-flex items-center gap-2 rounded-md bg-slate-900 px-4 py-2 text-sm font-bold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-teal-700 dark:hover:bg-teal-600"><Play className="h-4 w-4" aria-hidden="true" /> {previewing ? 'Validando referências…' : 'Revisar e confirmar lote'}</button>
         </section>
-        {companyMessage && !confirming && <p role="status" className="rounded-md border border-teal-200 bg-teal-50 p-3 text-sm text-teal-800 dark:border-teal-900 dark:bg-teal-950/30 dark:text-teal-300">{companyMessage}</p>}
 
         {confirming && referencePreview?.missingCompanies.length ? <section className="rounded-xl border border-amber-300 bg-amber-50 p-5 shadow-sm dark:border-amber-800 dark:bg-amber-950/20">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-amber-900 dark:text-amber-200">Empresas ausentes: cadastro antes do vínculo</h2>
-          <p className="mt-2 text-sm text-amber-800 dark:text-amber-300">Para uma empresa criada pela migração, informe somente o nome fantasia. Razão social e CNPJ são opcionais nesta etapa; quando o CNPJ não for informado, o cadastro usa uma string vazia, sem valor fiscal fictício. A matrícula permanecerá sem empresa enquanto o cadastro não existir. Depois, refaça a prévia para conciliar a empresa antes da gravação.</p>
+          <h2 className="text-sm font-bold uppercase tracking-wide text-amber-900 dark:text-amber-200">Resumo da criação e dos vínculos</h2>
+          <p className="mt-2 text-sm text-amber-800 dark:text-amber-300">Esta etapa de revisão é somente leitura e não grava dados. Ao confirmar, empresas ausentes serão criadas automaticamente uma vez por nome normalizado, sem dados fiscais inventados, e as matrículas serão vinculadas aos cadastros encontrados.</p>
           <div className="mt-4 space-y-4">
-            {referencePreview.missingCompanies.map((missingCompany) => {
-              const key = normalizeStudentComparison(missingCompany.name);
-              const form = companyForms[key] ?? { nome_fantasia: missingCompany.name, razao_social: '', cnpj: '' };
-              return <fieldset key={key} className="rounded-md border border-amber-200 bg-white/70 p-3 dark:border-amber-900 dark:bg-slate-950/30"><legend className="px-1 text-sm font-bold text-slate-800 dark:text-slate-100">Empresa informada: {missingCompany.name}</legend><p className="mb-3 text-xs text-amber-800 dark:text-amber-300"><strong>{missingCompany.studentCount}</strong> aluno(s) único(s) associado(s) por CPF normalizado.</p><div className="grid gap-3 md:grid-cols-3"><label className="text-xs font-semibold text-slate-700 dark:text-slate-200">Nome fantasia<input value={form.nome_fantasia} onChange={(event) => setCompanyForms((current) => ({ ...current, [key]: { ...form, nome_fantasia: event.target.value } }))} disabled={creatingCompany === key} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 dark:border-slate-700 dark:bg-slate-950" /></label><label className="text-xs font-semibold text-slate-700 dark:text-slate-200">Razão social (opcional)<input value={form.razao_social} onChange={(event) => setCompanyForms((current) => ({ ...current, [key]: { ...form, razao_social: event.target.value } }))} disabled={creatingCompany === key} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 dark:border-slate-700 dark:bg-slate-950" /></label><label className="text-xs font-semibold text-slate-700 dark:text-slate-200">CNPJ (opcional)<input value={form.cnpj} onChange={(event) => setCompanyForms((current) => ({ ...current, [key]: { ...form, cnpj: event.target.value } }))} disabled={creatingCompany === key} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 dark:border-slate-700 dark:bg-slate-950" /></label></div><button type="button" onClick={() => void registerCompany(missingCompany.name)} disabled={creatingCompany !== '' || !form.nome_fantasia.trim()} className="mt-3 inline-flex items-center gap-2 rounded-md border border-teal-700 px-3 py-2 text-sm font-bold text-teal-800 disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-teal-500 dark:border-teal-500 dark:text-teal-300">{creatingCompany === key && <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" />} {creatingCompany === key ? 'Cadastrando…' : 'Cadastrar empresa'}</button></fieldset>;
-            })}
+            {referencePreview.missingCompanies.map((missingCompany) => <div key={missingCompany.name} className="rounded-md border border-amber-200 bg-white/70 p-3 text-sm dark:border-amber-900 dark:bg-slate-950/30"><strong>{missingCompany.name}</strong> — {missingCompany.studentCount} aluno(s) único(s) associado(s) por CPF normalizado.</div>)}
           </div>
-          {companyMessage && <p role="status" className="mt-3 text-sm text-teal-800 dark:text-teal-300">{companyMessage}</p>}
         </section> : null}
 
         {(running || progress || result) && <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">

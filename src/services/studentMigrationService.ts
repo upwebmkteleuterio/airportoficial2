@@ -276,7 +276,7 @@ export async function parseStudentMigrationFile(file: File): Promise<StudentMigr
       values,
       normalized: validation.normalized,
       problems: hasIdentifier ? validation.problems : ['Linha vazia.'],
-      warnings: clean(values.Empresa) ? [`Empresa "${clean(values.Empresa)}" informada; a correspondência será verificada na execução. Se não for encontrada, o cadastro manual ficará pendente.`] : [],
+      warnings: clean(values.Empresa) ? [`Empresa "${clean(values.Empresa)}" informada; a correspondência será verificada na prévia e, se estiver ausente, será criada automaticamente ao iniciar o lote.`] : [],
       valid: hasIdentifier && validation.problems.length === 0,
     };
   }).filter((row): row is StudentMigrationRow => row !== null && hasStudentIdentifier(row.values));
@@ -357,6 +357,25 @@ function companyMatches(companies: StudentCompany[], name: string): { company: S
   return { company: matches.length === 1 ? matches[0] : null, ambiguous: matches.length > 1 };
 }
 
+async function ensureMigrationCompanies(rows: StudentMigrationRow[], companies: StudentCompany[]): Promise<StudentCompany[]> {
+  const sourceNames = new Map<string, string>();
+  rows.forEach((row) => {
+    const name = clean(row.values.Empresa);
+    const key = normalizeStudentComparison(name);
+    if (name && key) sourceNames.set(key, name);
+  });
+
+  let created = false;
+  for (const [, sourceName] of sourceNames) {
+    const match = companyMatches(companies, sourceName);
+    if (match.company || match.ambiguous) continue;
+    await companyService.createMigrationCompany({ nome_fantasia: sourceName, razao_social: '', cnpj: '' });
+    created = true;
+  }
+
+  return created ? await companyService.getAll() as StudentCompany[] : companies;
+}
+
 function classForRow(row: StudentMigrationRow, byInternal: Map<number, StudentTurma>, byAnac: Map<string, StudentTurma>): StudentTurma {
   const internal = Number(row.normalized.turma);
   const internalClass = byInternal.get(internal);
@@ -412,7 +431,7 @@ export async function previewStudentMigrationBatch(rows: StudentMigrationRow[]):
         ? `Empresa "${companyName}" encontrada e poderá ser vinculada à matrícula.`
         : match.ambiguous
           ? `Empresa "${companyName}" corresponde a mais de um cadastro; cadastro manual pendente.`
-          : `Empresa "${companyName}" não encontrada; cadastre-a antes de refazer a prévia para vinculá-la.`;
+          : `Empresa "${companyName}" não encontrada; será criada automaticamente ao iniciar o lote e vinculada às matrículas.`;
       if (!previewRow.warnings.includes(warning)) previewRow.warnings.push(warning);
     }
     previewRow.valid = previewRow.problems.length === 0;
@@ -447,18 +466,6 @@ export async function previewStudentMigrationBatch(rows: StudentMigrationRow[]):
     missingCompanies,
     missingCompanyStudentCount: missingCompanyStudentIds.size,
   };
-}
-
-export async function createStudentMigrationCompany(company: { nome_fantasia: string; razao_social?: string; cnpj?: string }): Promise<void> {
-  await assertStudentMigrationAccess();
-  if (!company.nome_fantasia.trim()) {
-    throw safeError('Nome fantasia é obrigatório para cadastrar a empresa.');
-  }
-  await companyService.createMigrationCompany({
-    nome_fantasia: company.nome_fantasia.trim(),
-    razao_social: company.razao_social?.trim() || '',
-    cnpj: company.cnpj?.trim() || '',
-  });
 }
 
 function statusForClass(turma: StudentTurma): 'Ativo' | 'Concluido' {
@@ -511,7 +518,7 @@ export async function runStudentMigrationBatch(rows: StudentMigrationRow[], onPr
     if (peopleByCpf.has(cpf)) duplicatePeopleCpfs.add(cpf);
     peopleByCpf.set(cpf, person);
   });
-  const companies = (companiesQuery.data ?? []) as StudentCompany[];
+  const companies = await ensureMigrationCompanies(selectedRows, (companiesQuery.data ?? []) as StudentCompany[]);
   const classIds = uniqueBy([...internalClasses, ...anacClasses], (turma) => turma.id).map((turma) => turma.id);
   const { data: existingRows, error: existingError } = classIds.length
     ? await supabase.from('matriculas').select('id,aluno_id,turma_id').in('turma_id', classIds)
@@ -576,7 +583,7 @@ export async function runStudentMigrationBatch(rows: StudentMigrationRow[], onPr
         } else {
           const warning = match.ambiguous
             ? `Empresa "${companyName}" corresponde a mais de um cadastro; cadastro manual pendente. Matrícula importada sem vínculo.`
-            : `Empresa "${companyName}" não encontrada — cadastro manual pendente. Matrícula importada sem vínculo.`;
+            : `Empresa "${companyName}" não encontrada após a criação automática — cadastro pendente. Matrícula importada sem vínculo.`;
           if (!row.warnings.includes(warning)) row.warnings = [...row.warnings, warning];
         }
       }
