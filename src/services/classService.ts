@@ -52,6 +52,11 @@ export type MatriculaPageRow = Matricula & {
   total_count?: number;
 };
 
+export type MatriculaWithAluno = Matricula & {
+  aluno_nome?: string;
+  aluno_cpf?: string;
+};
+
 export interface MatriculaPage {
   data: MatriculaPageRow[];
   total: number;
@@ -471,14 +476,36 @@ export const classService = {
   },
 
   // --- Matrículas (Alunos na Turma) CRUD ---
-  getAllMatriculasByTurma: async (turmaId: string): Promise<Matricula[]> => {
+  getAllMatriculasByTurma: async (turmaId: string): Promise<MatriculaWithAluno[]> => {
     await assertCanAccessTurma(turmaId);
     const { data, error } = await supabase
       .from('matriculas')
       .select('*')
       .eq('turma_id', turmaId);
     if (error) throw serviceError(`Não foi possível carregar as matrículas da turma ${turmaId}`, error);
-    return (data ?? []) as Matricula[];
+
+    const matriculas = (data ?? []) as Matricula[];
+    const alunoIds = [...new Set(matriculas.map((matricula) => matricula.aluno_id))];
+    if (alunoIds.length === 0) return [];
+
+    const { data: pessoas, error: pessoasError } = await supabase
+      .from('pessoas')
+      .select('id, nome, cpf')
+      .in('id', alunoIds);
+    if (pessoasError) throw serviceError(`Não foi possível carregar os alunos da turma ${turmaId}`, pessoasError);
+    const pessoasById = new Map(
+      ((pessoas ?? []) as Array<{ id: string; nome?: string | null; cpf?: string | null }>)
+        .map((pessoa) => [pessoa.id, pessoa] as const),
+    );
+
+    return matriculas.map((matricula) => {
+      const pessoa = pessoasById.get(matricula.aluno_id);
+      return {
+        ...matricula,
+        aluno_nome: pessoa?.nome ?? '',
+        aluno_cpf: pessoa?.cpf ?? '',
+      };
+    });
   },
 
   getMatriculatedAlunoIds: async (turmaId: string): Promise<string[]> => {

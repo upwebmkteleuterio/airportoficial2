@@ -1268,10 +1268,8 @@ function ClassDetails() {
                         </td>
                       </tr>
                     ) : allMatriculas.map((m) => {
-                      const student = findStudent(m.aluno_id);
-                      if (!student) return null;
-                      const studentName = typeof student.nome_completo === 'string' && student.nome_completo.trim()
-                        ? student.nome_completo
+                      const studentName = typeof m.aluno_nome === 'string' && m.aluno_nome.trim()
+                        ? m.aluno_nome
                         : 'Aluno desconhecido';
                       const attendancePercentage = typeof m.percentual_presenca === 'number' && Number.isFinite(m.percentual_presenca)
                         ? m.percentual_presenca
@@ -1437,10 +1435,8 @@ function ClassDetails() {
                         </td>
                       </tr>
                     ) : allMatriculas.map((m) => {
-                      const student = findStudent(m.aluno_id);
-                      if (!student) return null;
-                      const studentName = typeof student.nome_completo === 'string' && student.nome_completo.trim()
-                        ? student.nome_completo
+                      const studentName = typeof m.aluno_nome === 'string' && m.aluno_nome.trim()
+                        ? m.aluno_nome
                         : 'Aluno desconhecido';
 
                       const parts = studentName.trim().split(/\s+/);
