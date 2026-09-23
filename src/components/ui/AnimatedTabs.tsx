@@ -62,6 +62,7 @@ export function AnimatedTabs<T extends string>({
       {tabs.map((tab) => {
         const isActive = tab.id === value;
         const isHovered = tab.id === hoveredTab;
+        const showBackground = isActive || isHovered;
 
         return (
           <button
@@ -82,9 +83,9 @@ export function AnimatedTabs<T extends string>({
                 : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-300'
             }`}
           >
-            {isHovered && (
+            {showBackground && (
               <motion.span
-                layoutId={`${instanceId}-hover-background`}
+                layoutId={`${instanceId}-${tab.id}-background`}
                 className="absolute inset-1 z-0 bg-[#005f5f]/10"
                 style={{ borderRadius: 8 }}
                 transition={{ type: 'spring', stiffness: 500, damping: 35 }}

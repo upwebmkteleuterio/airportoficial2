@@ -9,6 +9,7 @@ import { useCourses } from '../hooks/useCourses';
 import { useCompanies } from '../hooks/useCompanies';
 import { useUIStore } from '../store/uiStore';
 import { Usuario } from '../types';
+import { AnimatedTab, AnimatedTabs } from './ui/AnimatedTabs';
 
 interface StaffDetailsPanelProps {
   isOpen: boolean;
@@ -16,9 +17,11 @@ interface StaffDetailsPanelProps {
   staff: Usuario | null;
 }
 
+type StaffTab = 'personal' | 'address' | 'history';
+
 export function StaffDetailsPanel({ isOpen, onClose, staff }: StaffDetailsPanelProps) {
 
-  const [activeTab, setActiveTab] = useState<'personal' | 'address' | 'history'>('personal');
+  const [activeTab, setActiveTab] = useState<StaffTab>('personal');
   const [avatarUrl, setAvatarUrl] = useState('');
   const { classes } = useClasses();
   const { courses } = useCourses();
@@ -88,46 +91,23 @@ export function StaffDetailsPanel({ isOpen, onClose, staff }: StaffDetailsPanelP
         </button>
       </div>
 
-      <div className="flex border-b border-gray-200 dark:border-slate-800 px-6 shrink-0 bg-slate-50 dark:bg-slate-850">
-        <button
-          onClick={() => setActiveTab('personal')}
-          className={`px-4 py-3 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 ${
-            activeTab === 'personal'
-              ? 'border-[#005f5f] text-[#005f5f] dark:text-teal-400'
-              : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-300'
-          }`}
-        >
-          <User className="w-4 h-4" />
-          Dados Pessoais
-        </button>
-        <button
-          onClick={() => setActiveTab('address')}
-          className={`px-4 py-3 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 ${
-            activeTab === 'address'
-              ? 'border-[#005f5f] text-[#005f5f] dark:text-teal-400'
-              : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-300'
-          }`}
-        >
-          <MapPin className="w-4 h-4" />
-          Endereço
-        </button>
-        <button
-          onClick={() => setActiveTab('history')}
-          className={`px-4 py-3 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 ${
-            activeTab === 'history'
-              ? 'border-[#005f5f] text-[#005f5f] dark:text-teal-400'
-              : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-300'
-          }`}
-        >
-          <History className="w-4 h-4" />
-          Histórico de Turmas
-        </button>
-
+      <div className="border-b border-gray-200 dark:border-slate-800 px-6 shrink-0 bg-slate-50 dark:bg-slate-850">
+        <AnimatedTabs
+          tabs={[
+            { id: 'personal', label: 'Dados Pessoais', icon: <User className="w-4 h-4" aria-hidden="true" /> },
+            { id: 'address', label: 'Endereço', icon: <MapPin className="w-4 h-4" aria-hidden="true" /> },
+            { id: 'history', label: 'Histórico de Turmas', icon: <History className="w-4 h-4" aria-hidden="true" /> },
+          ] satisfies readonly AnimatedTab<StaffTab>[]}
+          value={activeTab}
+          onChange={setActiveTab}
+          ariaLabel="Seções dos detalhes do instrutor ou coordenador"
+          idPrefix="staff-details-tab"
+        />
       </div>
 
       <div className="p-6 overflow-y-auto flex-1">
         {activeTab === 'personal' && (
-          <div className="space-y-6">
+          <div id="staff-details-tab-personal-panel" role="tabpanel" aria-labelledby="staff-details-tab-personal" tabIndex={0} className="space-y-6 focus:outline-none">
             <div className="flex justify-center mb-6">
               <div className="w-24 h-24 rounded-full bg-slate-200 dark:bg-slate-800 border-2 border-gray-300 dark:border-slate-700 flex items-center justify-center overflow-hidden">
                 {avatarUrl ? (
@@ -164,7 +144,7 @@ export function StaffDetailsPanel({ isOpen, onClose, staff }: StaffDetailsPanelP
         )}
 
         {activeTab === 'address' && (
-          <div className="grid grid-cols-2 gap-4">
+          <div id="staff-details-tab-address-panel" role="tabpanel" aria-labelledby="staff-details-tab-address" tabIndex={0} className="grid grid-cols-2 gap-4 focus:outline-none">
             <div className="col-span-2">
               <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1">Logradouro / Rua</label>
               <div className="text-sm font-medium text-slate-900 dark:text-white">{staff.endereco || '-'}</div>
@@ -197,7 +177,7 @@ export function StaffDetailsPanel({ isOpen, onClose, staff }: StaffDetailsPanelP
         )}
 
         {activeTab === 'history' && (
-          <div className="space-y-6">
+          <div id="staff-details-tab-history-panel" role="tabpanel" aria-labelledby="staff-details-tab-history" tabIndex={0} className="space-y-6 focus:outline-none">
             <h4 className="font-semibold text-sm text-slate-800 dark:text-slate-200">Linha do Tempo de Turmas</h4>
             
             {historyQuery.isLoading ? (

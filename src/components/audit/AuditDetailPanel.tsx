@@ -14,6 +14,7 @@ import { AuditoriaLogView, Documento, Usuario } from '../../types';
 import { useAuditDetail } from '../../hooks/useAuditDetail';
 import { PasswordModal } from '../ui/PasswordModal';
 import { SlidePanel } from '../ui/SlidePanel';
+import { AnimatedTabs } from '../ui/AnimatedTabs';
 
 interface AuditDetailPanelProps {
   isOpen: boolean;
@@ -270,45 +271,20 @@ export function AuditDetailPanel({ isOpen, log, onClose }: AuditDetailPanelProps
           </button>
         </div>
 
-        <div className="flex shrink-0 border-b border-gray-200 px-5 dark:border-slate-800" role="tablist" aria-label="Abas dos detalhes da auditoria">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              role="tab"
-              tabIndex={activeTab === tab.id ? 0 : -1}
-              aria-selected={activeTab === tab.id}
-              aria-controls={`audit-tabpanel-${tab.id}`}
-              id={`audit-tab-${tab.id}`}
-              onClick={() => setActiveTab(tab.id)}
-              onKeyDown={(event) => {
-                const currentIndex = tabs.findIndex((item) => item.id === tab.id);
-                const nextIndex = event.key === 'ArrowRight'
-                  ? (currentIndex + 1) % tabs.length
-                  : event.key === 'ArrowLeft'
-                    ? (currentIndex - 1 + tabs.length) % tabs.length
-                    : event.key === 'Home'
-                      ? 0
-                      : event.key === 'End'
-                        ? tabs.length - 1
-                        : -1;
-                if (nextIndex < 0) return;
-                event.preventDefault();
-                setActiveTab(tabs[nextIndex].id);
-                window.setTimeout(() => globalThis.document.getElementById(`audit-tab-${tabs[nextIndex].id}`)?.focus(), 0);
-              }}
-              className={`border-b-2 px-3 py-3 text-xs font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-inset focus:ring-teal-500 ${activeTab === tab.id
-                ? 'border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-400'
-                : 'border-transparent text-gray-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'}`}
-            >
-              {tab.label}
-            </button>
-          ))}
+        <div className="shrink-0 border-b border-gray-200 px-5 dark:border-slate-800">
+          <AnimatedTabs
+            tabs={tabs}
+            value={activeTab}
+            onChange={setActiveTab}
+            ariaLabel="Abas dos detalhes da auditoria"
+            idPrefix="audit-detail-tab"
+            className="text-xs"
+          />
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto p-5">
           {activeTab === 'operador' && (
-            <section id="audit-tabpanel-operador" role="tabpanel" aria-labelledby="audit-tab-operador">
+            <section id="audit-detail-tab-operador-panel" role="tabpanel" aria-labelledby="audit-detail-tab-operador" tabIndex={0}>
               <div className="mb-5 flex items-center gap-3">
                 <div className="flex h-11 w-11 items-center justify-center rounded-full bg-teal-100 text-sm font-bold text-teal-700 dark:bg-teal-900/30 dark:text-teal-300">
                   <User className="h-5 w-5" />
@@ -332,7 +308,7 @@ export function AuditDetailPanel({ isOpen, log, onClose }: AuditDetailPanelProps
           )}
 
           {activeTab === 'alvo' && (
-            <section id="audit-tabpanel-alvo" role="tabpanel" aria-labelledby="audit-tab-alvo">
+            <section id="audit-detail-tab-alvo-panel" role="tabpanel" aria-labelledby="audit-detail-tab-alvo" tabIndex={0}>
               {!targetUserId ? (
                 <EmptyState icon={<User className="h-5 w-5" />} message="Este registro não possui um usuário-alvo." />
               ) : (
@@ -362,7 +338,7 @@ export function AuditDetailPanel({ isOpen, log, onClose }: AuditDetailPanelProps
           )}
 
           {activeTab === 'documento' && (
-            <section id="audit-tabpanel-documento" role="tabpanel" aria-labelledby="audit-tab-documento">
+            <section id="audit-detail-tab-documento-panel" role="tabpanel" aria-labelledby="audit-detail-tab-documento" tabIndex={0}>
               {!documentId ? (
                 <EmptyState icon={<FileText className="h-5 w-5" />} message="Não há documento vinculado a este registro." />
               ) : (
