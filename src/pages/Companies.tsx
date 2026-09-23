@@ -32,7 +32,6 @@ import {
 } from 'lucide-react';
 
 import { useCompanies } from '../hooks/useCompanies';
-import { useActiveEmployeeCounts } from '../hooks/useActiveEmployeeCounts';
 import { useClasses } from '../hooks/useClasses';
 import { useCourses } from '../hooks/useCourses';
 import { useAudit } from '../hooks/useAudit';
@@ -58,7 +57,6 @@ export function Companies() {
     isCreating,
     isUpdating,
   } = useCompanies();
-  const { activeEmployeeCounts, isLoadingActiveEmployeeCounts } = useActiveEmployeeCounts();
   const { createLog } = useAudit();
 
   const [addCompanyOpen, setAddCompanyOpen] = useState(false);
@@ -376,7 +374,6 @@ export function Companies() {
                 <th className="px-5 py-4 w-10 text-center"></th>
                 <th className="px-5 py-4">CNPJ</th>
                 <th className="px-5 py-4">RAZÃO SOCIAL</th>
-                <th className="px-5 py-4 text-center">TOTAL DE FUNCIONÁRIOS</th>
                 <th className="px-5 py-4 text-center">LINK DE INSCRIÇÃO</th>
                 <th className="px-5 py-4 text-center">STATUS</th>
               </tr>
@@ -384,7 +381,7 @@ export function Companies() {
             <tbody className="divide-y divide-gray-150 dark:divide-slate-800 font-sans text-slate-700 dark:text-slate-200">
               {isLoading ? (
                 <tr>
-                  <td colSpan={6} className="px-5 py-12 text-center">
+                  <td colSpan={5} className="px-5 py-12 text-center">
                     <div className="flex flex-col items-center justify-center gap-2 text-gray-500">
                       <div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin"></div>
                       <p className="font-sans text-sm">Carregando parceiros B2B...</p>
@@ -393,7 +390,7 @@ export function Companies() {
                 </tr>
               ) : filteredCompanies.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-5 py-12 text-center text-gray-500 font-sans">
+                  <td colSpan={5} className="px-5 py-12 text-center text-gray-500 font-sans">
                     <div className="flex flex-col items-center justify-center gap-2.5 max-w-sm mx-auto">
                       <div className="p-3 bg-teal-500/10 rounded-full text-teal-500">
                         <Building2 className="w-6 h-6" />
@@ -460,15 +457,6 @@ export function Companies() {
                           </span>
                           {isIncompleteMigration && <span className="mt-1 inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 dark:text-amber-300"><TriangleAlert className="h-3 w-3" aria-hidden="true" /> Migração · completar dados fiscais</span>}
                         </div>
-                      </td>
-
-                      {/* Total Funcionarios Column */}
-                      <td className="px-5 py-2.5 border-r border-gray-100/50 dark:border-slate-800/30 text-center font-mono text-[13px] font-bold text-slate-800 dark:text-slate-200">
-                        {isLoadingActiveEmployeeCounts ? (
-                          <span className="inline-block h-3 w-8 animate-pulse rounded bg-gray-200 dark:bg-slate-700" aria-label="Carregando total de funcionários" />
-                        ) : (
-                          activeEmployeeCounts[comp.id] ?? 0
-                        )}
                       </td>
 
                       {/* Link Gerar Column */}
