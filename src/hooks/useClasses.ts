@@ -3,9 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { classService, type ClassFilters } from '../services/classService';
 import { Turma, Matricula } from '../types';
+import { withQueryTimeout } from '../utils/queryTimeout';
 
 interface ClassesOptions {
   page?: number;
@@ -34,13 +35,15 @@ export function useClasses(options: ClassesOptions = {}) {
     queryKey: isPaginated
       ? ['classes', 'page', page, pageSize, { search, courseSearch, filters }]
       : ['classes', 'all'],
-    queryFn: async () => {
+    queryFn: ({ signal }) => withQueryTimeout(async (requestSignal) => {
       if (!isPaginated) {
-        const data = await classService.getAll();
+        const data = await classService.getAll(requestSignal);
         return { data, total: data.length };
       }
-      return classService.getPage({ page, pageSize, search, courseSearch, filters });
-    },
+      return classService.getPage({ page, pageSize, search, courseSearch, filters, signal: requestSignal });
+    }, signal),
+    placeholderData: isPaginated ? keepPreviousData : undefined,
+    retry: false,
   });
 
   // Mutations
@@ -88,6 +91,7 @@ export function useClasses(options: ClassesOptions = {}) {
     isLoading: classesQuery.isLoading,
     isFetching: classesQuery.isFetching,
     isError: classesQuery.isError,
+    refetch: classesQuery.refetch,
     getClassEditability: classService.getEditability,
     getInstrutoresByTurmas: classService.getInstrutoresByTurmas,
     createClass: createClassMutation.mutateAsync,
@@ -123,7 +127,12 @@ export function useClassDetails(classId: string | null, options: ClassDetailsOpt
 
   const matriculasPageQuery = useQuery({
     queryKey: ['matriculas', classId, 'page', options.page, options.pageSize, options.sortOrder, options.search],
-    queryFn: () => classId ? classService.getMatriculasPage({ turmaId: classId, ...options }) : Promise.resolve({ data: [], total: 0 }),
+    queryFn: ({ signal }) => withQueryTimeout(
+      (requestSignal) => classId ? classService.getMatriculasPage({ turmaId: classId, ...options, signal: requestSignal }) : Promise.resolve({ data: [], total: 0 }),
+      signal,
+    ),
+    placeholderData: keepPreviousData,
+    retry: false,
     enabled: !!classId && !!classQuery.data,
   });
 

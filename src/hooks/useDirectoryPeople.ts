@@ -3,6 +3,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { personService, type DirectoryPerson, type Pessoa } from '../services/personService';
 import { userService } from '../services/userService';
 import { UserRole } from '../types';
+import { withQueryTimeout } from '../utils/queryTimeout';
 
 interface DirectoryPeopleOptions {
   role: UserRole;
@@ -30,8 +31,12 @@ export function useDirectoryPeople(options: DirectoryPeopleOptions) {
   const queryKey = directoryPeopleQueryKey({ ...options, search });
   const directoryQuery = useQuery({
     queryKey,
-    queryFn: () => personService.getDirectoryPage({ ...options, search }),
+    queryFn: ({ signal }) => withQueryTimeout(
+      (requestSignal) => personService.getDirectoryPage({ ...options, search, signal: requestSignal }),
+      signal,
+    ),
     placeholderData: keepPreviousData,
+    retry: false,
     staleTime: directoryStaleTime,
   });
 
@@ -46,7 +51,11 @@ export function useDirectoryPeople(options: DirectoryPeopleOptions) {
       const adjacentOptions = { role, page: adjacentPage, pageSize, search, onlyActive };
       void queryClient.prefetchQuery({
         queryKey: directoryPeopleQueryKey(adjacentOptions),
-        queryFn: () => personService.getDirectoryPage(adjacentOptions),
+        queryFn: ({ signal }) => withQueryTimeout(
+          (requestSignal) => personService.getDirectoryPage({ ...adjacentOptions, signal: requestSignal }),
+          signal,
+        ),
+        retry: false,
         staleTime: directoryStaleTime,
       });
     });

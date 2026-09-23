@@ -20,6 +20,7 @@ import { PasswordModal } from '../components/ui/PasswordModal';
 import { SharedDocumentsPanel } from '../components/SharedDocumentsPanel';
 import { StaffDetailsPanel } from '../components/StaffDetailsPanel';
 import { DocumentAccessGrant } from '../services/documentAccessService';
+import { QueryErrorState } from '../components/ui/QueryErrorState';
 
 
 export function Coordinators() {
@@ -60,10 +61,10 @@ export function Coordinators() {
   }, [openMenuId]);
 
 
-  // Pagination is performed by Supabase; only the current page is kept in memory.
+  // Pagination is performed by Supabase.
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 50;
-  const { users, total, isLoading } = useUsers({
+  const { users, total, isLoading, isFetching, isError, refetch } = useUsers({
     page: currentPage,
     pageSize: itemsPerPage,
     role: UserRole.COORDENADOR,
@@ -130,6 +131,7 @@ export function Coordinators() {
 
       {/* Main Table */}
       <div className="flex-1 border border-gray-200 dark:border-slate-800 rounded-xl overflow-hidden bg-white dark:bg-slate-900 flex flex-col shadow-sm min-h-[400px]">
+        {isError && !isLoading && paginatedCoordinators.length > 0 && <QueryErrorState compact onRetry={() => void refetch()} isRetrying={isFetching} message="Os dados anteriores continuam visíveis." />}
         <div className="overflow-x-auto overflow-y-auto flex-1 custom-scrollbar">
           <table className="w-full text-left border-collapse whitespace-nowrap text-sm">
             <thead className="sticky top-0 bg-slate-50 dark:bg-slate-850 z-10 border-b border-gray-200 dark:border-slate-800 font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider text-xs">
@@ -151,6 +153,12 @@ export function Coordinators() {
                       <div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin"></div>
                       <p className="font-sans text-sm">Carregando coordenadors...</p>
                     </div>
+                  </td>
+                </tr>
+              ) : isError && paginatedCoordinators.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-5 py-12 text-center">
+                    <QueryErrorState onRetry={() => void refetch()} isRetrying={isFetching} message="Verifique sua conexão e tente novamente." />
                   </td>
                 </tr>
               ) : paginatedCoordinators.length === 0 ? (

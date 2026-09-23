@@ -6,13 +6,18 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { courseService } from '../services/courseService';
 import { Curso } from '../types';
+import { withQueryTimeout } from '../utils/queryTimeout';
 
 export function useCourses() {
   const queryClient = useQueryClient();
 
   const coursesQuery = useQuery({
     queryKey: ['courses'],
-    queryFn: () => courseService.getAll(),
+    queryFn: ({ signal }) => withQueryTimeout(
+      (requestSignal) => courseService.getAll(requestSignal),
+      signal,
+    ),
+    retry: false,
   });
 
   const createCourseMutation = useMutation({
@@ -39,6 +44,9 @@ export function useCourses() {
   return {
     courses: coursesQuery.data || [],
     isLoading: coursesQuery.isLoading,
+    isFetching: coursesQuery.isFetching,
+    isError: coursesQuery.isError,
+    refetch: coursesQuery.refetch,
     createCourse: createCourseMutation.mutateAsync,
     updateCourse: updateCourseMutation.mutateAsync,
     deleteCourse: deleteCourseMutation.mutateAsync,

@@ -6,6 +6,7 @@ import { Button } from '../components/ui/Button';
 import { ConfirmDeleteModal } from '../components/ui/ConfirmDeleteModal';
 import { HelpModal } from '../components/ui/HelpModal';
 import { RowActionMenu } from '../components/ui/RowActionMenu';
+import { QueryErrorState } from '../components/ui/QueryErrorState';
 
 export default function Courses() {
   const {
@@ -14,6 +15,9 @@ export default function Courses() {
     updateCourse,
     deleteCourse,
     isLoading,
+    isFetching,
+    isError,
+    refetch,
     isCreating,
     isUpdating,
     isDeleting,
@@ -96,6 +100,7 @@ export default function Courses() {
       </div>
 
       <div className="flex-1 border border-gray-200 dark:border-slate-800 rounded-xl overflow-hidden bg-white dark:bg-slate-900 shadow-sm flex flex-col min-h-[350px]">
+        {isError && !isLoading && courses.length > 0 && <QueryErrorState compact onRetry={() => void refetch()} isRetrying={isFetching} message="Os dados anteriores continuam visíveis." />}
         <div className="overflow-x-auto overflow-y-auto flex-1 custom-scrollbar">
           <table className="w-full text-left border-collapse whitespace-nowrap text-xs">
             <thead className="sticky top-0 bg-slate-50 dark:bg-slate-850 z-10 border-b border-gray-200 dark:border-slate-800 font-bold uppercase tracking-wider text-gray-500 dark:text-slate-400">
@@ -113,6 +118,12 @@ export default function Courses() {
                       <div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin" aria-label="Carregando" />
                       <p className="font-sans text-sm">Carregando cursos...</p>
                     </div>
+                  </td>
+                </tr>
+              ) : isError && courses.length === 0 ? (
+                <tr>
+                  <td colSpan={3} className="px-4 py-12 text-center text-gray-500 font-sans">
+                    <QueryErrorState onRetry={() => void refetch()} isRetrying={isFetching} message="Verifique sua conexão e tente novamente." />
                   </td>
                 </tr>
               ) : courses.length === 0 ? (

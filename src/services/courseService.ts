@@ -3,10 +3,12 @@ import { Curso } from '../types';
 import { newServiceId, serviceError } from './supabaseErrors';
 
 export const courseService = {
-  getAll: async (): Promise<Curso[]> => {
-    const { data, error } = await supabase
+  getAll: async (signal?: AbortSignal): Promise<Curso[]> => {
+    let query = supabase
       .from('cursos')
       .select('*');
+    if (signal) query = query.abortSignal(signal);
+    const { data, error } = await query;
     if (error) throw serviceError('Não foi possível carregar os cursos', error);
     return (data ?? []) as Curso[];
   },

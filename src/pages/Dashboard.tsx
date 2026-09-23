@@ -76,6 +76,7 @@ import { TruncatedInfoTooltip } from "../components/ui/TruncatedInfoTooltip";
 import { ClassDeadlineAlertModal } from "../components/classes/ClassDeadlineAlertModal";
 import { ClassDeadlineAlertTags } from "../components/classes/ClassDeadlineAlertTags";
 import { PaginationFooter } from "../components/ui/PaginationFooter";
+import { QueryErrorState } from "../components/ui/QueryErrorState";
 import {
     ClassDeadlineAlertType,
     classifyClassDeadlineAlert,
@@ -284,6 +285,8 @@ export function Dashboard() {
         saveInstrutoresForTurma,
         isLoading,
         isFetching,
+        isError,
+        refetch,
         isCreating,
         isUpdating
     } = useClasses({
@@ -1248,6 +1251,7 @@ export function Dashboard() {
             {}
             <div
                 className="flex-1 border border-gray-200 dark:border-slate-800 rounded-xl overflow-hidden bg-white dark:bg-slate-900 shadow-sm flex flex-col min-h-[350px]">
+                {isError && !isLoading && paginatedClasses.length > 0 && <QueryErrorState compact onRetry={() => void refetch()} isRetrying={isFetching} message="Os dados anteriores continuam visíveis." />}
                 <div className="overflow-x-auto overflow-y-auto flex-1 custom-scrollbar">
                     <table className="w-full text-left border-collapse whitespace-nowrap text-xs">
                         <thead
@@ -1317,7 +1321,7 @@ export function Dashboard() {
                         </thead>
                         <tbody
                             className="divide-y divide-gray-150 dark:divide-slate-800 text-gray-700 dark:text-slate-200 font-mono">
-                            {isLoading || isFetching ? Array.from({ length: 5 }, (_, index) => (
+                            {isLoading ? Array.from({ length: 5 }, (_, index) => (
                                 <tr key={`class-skeleton-${index}`} aria-hidden="true" className="h-[38px]">
                                     <td
                                         colSpan={Object.values(visibleColumns).filter(Boolean).length + (isInstructor ? 0 : 1)}
@@ -1325,7 +1329,13 @@ export function Dashboard() {
                                         <div className="h-4 w-full rounded bg-slate-200 dark:bg-slate-700 animate-pulse" />
                                     </td>
                                 </tr>
-                            )) : paginatedClasses.length === 0 ? (<tr>
+                            )) : isError && paginatedClasses.length === 0 ? (<tr>
+                                <td
+                                    colSpan={Object.values(visibleColumns).filter(Boolean).length + (isInstructor ? 0 : 1)}
+                                    className="px-4 py-12 text-center">
+                                    <QueryErrorState onRetry={() => void refetch()} isRetrying={isFetching} message="Verifique sua conexão e tente novamente." />
+                                </td>
+                            </tr>) : paginatedClasses.length === 0 ? (<tr>
                                 <td
                                     colSpan={Object.values(visibleColumns).filter(Boolean).length + (isInstructor ? 0 : 1)}
                                     className="px-4 py-12 text-center text-gray-500 font-sans">

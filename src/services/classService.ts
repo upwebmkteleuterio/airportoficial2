@@ -29,6 +29,7 @@ export interface ClassPageOptions {
   search?: string;
   courseSearch?: string;
   filters?: ClassFilters;
+  signal?: AbortSignal;
 }
 
 export interface ClassPage {
@@ -42,6 +43,7 @@ export interface MatriculaPageOptions {
   pageSize: number;
   sortOrder: string;
   search?: string;
+  signal?: AbortSignal;
 }
 
 export type MatriculaPageRow = Matricula & {
@@ -206,7 +208,7 @@ function getClassSessions(turma: Turma): Array<{ dataAula: string; horarioPeriod
 
 export const classService = {
   // --- Turmas CRUD ---
-  getAll: async (): Promise<Turma[]> => {
+  getAll: async (signal?: AbortSignal): Promise<Turma[]> => {
     const context = await getAuthContext();
     if (!context) throw new Error('Sessão não autenticada.');
     let query = supabase.from('turmas').select('*');
@@ -215,12 +217,13 @@ export const classService = {
       if (classIds.length === 0) return [];
       query = query.in('id', classIds);
     }
+    if (signal) query = query.abortSignal(signal);
     const { data, error } = await query;
     if (error) throw serviceError('Não foi possível carregar as turmas', error);
     return (data ?? []) as Turma[];
   },
 
-  getPage: async ({ page, pageSize, search, courseSearch, filters }: ClassPageOptions): Promise<ClassPage> => {
+  getPage: async ({ page, pageSize, search, courseSearch, filters, signal }: ClassPageOptions): Promise<ClassPage> => {
     const context = await getAuthContext();
     if (!context) throw new Error('Sessão não autenticada.');
     const from = Math.max(0, page - 1) * pageSize;
@@ -292,7 +295,9 @@ export const classService = {
     if (activeFilters.startDateFrom) query = query.gte('data_inicio', activeFilters.startDateFrom);
     if (activeFilters.startDateTo) query = query.lte('data_inicio', activeFilters.startDateTo);
 
-    const { data, count, error } = await query.range(from, to);
+    let rangedQuery = query.range(from, to);
+    if (signal) rangedQuery = rangedQuery.abortSignal(signal);
+    const { data, count, error } = await rangedQuery;
     if (error) throw serviceError('Não foi possível carregar as turmas', error);
     return { data: (data ?? []) as Turma[], total: count ?? 0 };
   },
@@ -486,15 +491,17 @@ export const classService = {
     return ((data ?? []) as Array<{ aluno_id: string }>).map((matricula) => matricula.aluno_id);
   },
 
-  getMatriculasPage: async ({ turmaId, page, pageSize, sortOrder, search }: MatriculaPageOptions): Promise<MatriculaPage> => {
+  getMatriculasPage: async ({ turmaId, page, pageSize, sortOrder, search, signal }: MatriculaPageOptions): Promise<MatriculaPage> => {
     await assertCanAccessTurma(turmaId);
-    const { data, error } = await supabase.rpc('get_matriculas_page', {
+    let query = supabase.rpc('get_matriculas_page', {
       p_turma_id: turmaId,
       p_page: page,
       p_page_size: pageSize,
       p_sort_order: sortOrder,
       p_search: search?.trim() || null,
     });
+    if (signal) query = query.abortSignal(signal);
+    const { data, error } = await query;
     if (error) throw serviceError(`Não foi possível carregar a página de matrículas da turma ${turmaId}`, error);
     const rows = (data ?? []) as MatriculaPageRow[];
     return {

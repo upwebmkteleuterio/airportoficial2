@@ -10,6 +10,7 @@ export interface UserPageOptions {
   search?: string;
   empresaId?: string;
   turmaId?: string;
+  signal?: AbortSignal;
 }
 
 export interface UserPage {
@@ -21,7 +22,7 @@ export interface UserCountOptions extends UserFilters {
   origemCadastro?: Usuario['origem_cadastro'];
 }
 
-type UserFilters = Pick<UserPageOptions, 'role' | 'status' | 'search' | 'empresaId' | 'turmaId'>;
+type UserFilters = Pick<UserPageOptions, 'role' | 'status' | 'search' | 'empresaId' | 'turmaId' | 'signal'>;
 type ProfileRow = Omit<Usuario, 'id'> & { id?: string; legacy_id: string };
 export type CreateUserInput = Omit<Usuario, 'id'> & { id?: string; password?: string; person_id?: string };
 
@@ -40,7 +41,7 @@ function unwrapCreatedUser(data: unknown): Usuario | undefined {
 }
 
 export const userService = {
-  getAll: async ({ role, status, search, empresaId, turmaId }: UserFilters = {}): Promise<Usuario[]> => {
+  getAll: async ({ role, status, search, empresaId, turmaId, signal }: UserFilters = {}): Promise<Usuario[]> => {
     let query = supabase
       .from('profiles')
       .select('*')
@@ -58,12 +59,13 @@ export const userService = {
       );
     }
 
+    if (signal) query = query.abortSignal(signal);
     const { data, error } = await query;
     if (error) throw serviceError('Não foi possível carregar os usuários', error);
     return (data ?? []).map((row) => toUsuario(row as ProfileRow));
   },
 
-  getPage: async ({ page, pageSize, role, status, search, empresaId, turmaId }: UserPageOptions): Promise<UserPage> => {
+  getPage: async ({ page, pageSize, role, status, search, empresaId, turmaId, signal }: UserPageOptions): Promise<UserPage> => {
     const from = Math.max(0, page - 1) * pageSize;
     const to = from + pageSize - 1;
     let query = supabase
@@ -84,6 +86,7 @@ export const userService = {
       );
     }
 
+    if (signal) query = query.abortSignal(signal);
     const { data, count, error } = await query;
     if (error) throw serviceError('Não foi possível carregar os usuários', error);
     return {

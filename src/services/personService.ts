@@ -38,19 +38,22 @@ export const personService = {
     pageSize: number;
     search?: string;
     onlyActive: boolean;
+    signal?: AbortSignal;
   }): Promise<{ data: DirectoryPerson[]; total: number }> => {
     const page = Number.isFinite(options.page) ? Math.max(1, Math.floor(options.page)) : 1;
     const pageSize = Number.isFinite(options.pageSize)
       ? Math.min(300, Math.max(1, Math.floor(options.pageSize)))
       : 300;
     const search = normalizeDirectorySearch(options.search ?? '');
-    const { data, error } = await supabase.rpc('get_directory_people_page', {
+    let query = supabase.rpc('get_directory_people_page', {
       p_role: options.role,
       p_page: page,
       p_page_size: pageSize,
       p_search: search || null,
       p_only_active: options.onlyActive,
     });
+    if (options.signal) query = query.abortSignal(options.signal);
+    const { data, error } = await query;
     if (error) throw serviceError('Não foi possível carregar o diretório de pessoas', error);
     const rows = ((data ?? []) as DirectoryPerson[]).map(toDirectoryPerson);
     return { data: rows, total: rows[0]?.total_count ?? 0 };

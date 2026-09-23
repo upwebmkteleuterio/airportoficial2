@@ -26,6 +26,7 @@ import { CreateMenu } from '../components/ui/CreateMenu';
 import { PersonRegistrationModal } from '../components/PersonRegistrationModal';
 import { DocumentAccessGrant } from '../services/documentAccessService';
 import { PaginationFooter } from '../components/ui/PaginationFooter';
+import { QueryErrorState } from '../components/ui/QueryErrorState';
 
 
 type ToastState = {
@@ -80,10 +81,10 @@ export function Instructors() {
     return () => window.clearTimeout(timeoutId);
   }, [toast]);
 
-  // Pagination is performed by Supabase; only the current page is kept in memory.
+  // Pagination is performed by Supabase.
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 50;
-  const { people, total, createPerson, updatePerson, isLoading, deleteUser } = useDirectoryPeople({
+  const { people, total, createPerson, updatePerson, isLoading, isFetching, isError, refetch, deleteUser } = useDirectoryPeople({
     role: UserRole.INSTRUTOR,
     page: currentPage,
     pageSize: itemsPerPage,
@@ -174,6 +175,7 @@ export function Instructors() {
 
       {/* Main Table */}
       <div className="flex-1 border border-gray-200 dark:border-slate-800 rounded-xl overflow-hidden bg-white dark:bg-slate-900 flex flex-col shadow-sm min-h-[400px]">
+        {isError && !isLoading && paginatedInstructors.length > 0 && <QueryErrorState compact onRetry={() => void refetch()} isRetrying={isFetching} message="Os dados anteriores continuam visíveis." />}
         <div className="overflow-x-auto overflow-y-auto flex-1 custom-scrollbar">
           <table className="w-full text-left border-collapse whitespace-nowrap text-sm">
             <thead className="sticky top-0 bg-slate-50 dark:bg-slate-850 z-10 border-b border-gray-200 dark:border-slate-800 font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider text-xs">
@@ -198,7 +200,13 @@ export function Instructors() {
                   <td className="px-5 py-2.5"><div className="h-4 w-24 animate-pulse rounded bg-slate-200 dark:bg-slate-700" /></td>
                   <td className="px-5 py-2.5"><div className="h-4 w-20 animate-pulse rounded bg-slate-200 dark:bg-slate-700" /></td>
                 </tr>
-              )) : paginatedInstructors.length === 0 ? (
+              )) : isError && paginatedInstructors.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-6 py-12 text-center text-gray-500 dark:text-slate-400 font-sans">
+                    <QueryErrorState onRetry={() => void refetch()} isRetrying={isFetching} message="Verifique sua conexão e tente novamente." />
+                  </td>
+                </tr>
+              ) : paginatedInstructors.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-6 py-12 text-center text-gray-500 dark:text-slate-400 font-sans">
                     <div className="flex flex-col items-center justify-center gap-2.5 max-w-sm mx-auto">

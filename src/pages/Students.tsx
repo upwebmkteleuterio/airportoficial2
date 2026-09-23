@@ -13,6 +13,7 @@ import { SharedDocumentsPanel } from '../components/SharedDocumentsPanel';
 import { StudentDetailsPanel } from '../components/StudentDetailsPanel';
 import { DocumentAccessGrant } from '../services/documentAccessService';
 import { PaginationFooter } from '../components/ui/PaginationFooter';
+import { QueryErrorState } from '../components/ui/QueryErrorState';
 
 const formatStudentDate = (value: unknown) => {
   if (typeof value !== 'string' || !value.trim()) return '-';
@@ -47,7 +48,7 @@ export function Students() {
   const [accessGrant, setAccessGrant] = useState<DocumentAccessGrant | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 300;
-  const { people, total, isLoading, createPerson, updatePerson, deleteUser } = useDirectoryPeople({
+  const { people, total, isLoading, isFetching, isError, refetch, createPerson, updatePerson, deleteUser } = useDirectoryPeople({
     role: UserRole.ALUNO,
     page: currentPage,
     pageSize: itemsPerPage,
@@ -137,6 +138,7 @@ export function Students() {
       </div>
 
       <div className="flex-1 border border-gray-200 dark:border-slate-800 rounded-xl overflow-hidden bg-white dark:bg-slate-900 flex flex-col shadow-sm min-h-[400px]">
+        {isError && !isLoading && paginatedStudents.length > 0 && <QueryErrorState compact onRetry={() => void refetch()} isRetrying={isFetching} message="Os dados anteriores continuam visíveis." />}
         <div className="overflow-x-auto overflow-y-auto flex-1 custom-scrollbar">
           <table className="w-full text-left border-collapse whitespace-nowrap text-sm">
             <thead className="sticky top-0 bg-slate-50 dark:bg-slate-850 z-10 border-b border-gray-200 dark:border-slate-800 font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider text-xs">
@@ -151,7 +153,7 @@ export function Students() {
                 <td className="px-5 py-2.5"><div className="h-4 w-32 animate-pulse rounded bg-slate-200 dark:bg-slate-700" /></td>
                 <td className="px-5 py-2.5"><div className="h-4 w-24 animate-pulse rounded bg-slate-200 dark:bg-slate-700" /></td>
                 <td className="px-5 py-2.5"><div className="h-4 w-20 animate-pulse rounded bg-slate-200 dark:bg-slate-700" /></td>
-              </tr>) : paginatedStudents.length === 0 ? <tr><td colSpan={7} className="px-6 py-12 text-center text-gray-500 dark:text-slate-400"><div className="flex flex-col items-center justify-center gap-2.5 max-w-sm mx-auto"><div className="p-3 bg-teal-500/10 rounded-full text-teal-500"><User className="w-6 h-6" /></div><p className="font-bold text-sm text-slate-800 dark:text-slate-200">Nenhum aluno encontrado</p><p className="text-xs text-gray-400">Tente ajustar a busca ou cadastre um novo aluno.</p></div></td></tr> : paginatedStudents.map((aluno) => <tr key={aluno.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-850/20 transition-colors h-[52px] cursor-pointer" onClick={() => { setOpenMenuId(null); setSelectedStudentForDetails(aluno); setDetailsPanelOpen(true); }}>
+              </tr>) : isError && paginatedStudents.length === 0 ? <tr><td colSpan={7} className="px-6 py-12 text-center text-gray-500 dark:text-slate-400"><QueryErrorState onRetry={() => void refetch()} isRetrying={isFetching} message="Verifique sua conexão e tente novamente." /></td></tr> : paginatedStudents.length === 0 ? <tr><td colSpan={7} className="px-6 py-12 text-center text-gray-500 dark:text-slate-400"><div className="flex flex-col items-center justify-center gap-2.5 max-w-sm mx-auto"><div className="p-3 bg-teal-500/10 rounded-full text-teal-500"><User className="w-6 h-6" /></div><p className="font-bold text-sm text-slate-800 dark:text-slate-200">Nenhum aluno encontrado</p><p className="text-xs text-gray-400">Tente ajustar a busca ou cadastre um novo aluno.</p></div></td></tr> : paginatedStudents.map((aluno) => <tr key={aluno.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-850/20 transition-colors h-[52px] cursor-pointer" onClick={() => { setOpenMenuId(null); setSelectedStudentForDetails(aluno); setDetailsPanelOpen(true); }}>
                 <td className="px-5 py-2.5 text-center relative" onClick={(event) => event.stopPropagation()}><div className="flex items-center justify-center gap-1">
                   <button type="button" aria-label={`Ações de ${aluno.nome_completo}`} onClick={(event) => { event.stopPropagation(); setOpenMenuId(openMenuId === aluno.id ? null : aluno.id); }} className="p-1 text-gray-500 hover:text-slate-800 dark:text-slate-400 rounded-full hover:bg-gray-100 dark:hover:bg-slate-800"><MoreVertical className="w-4 h-4" /></button>
                   {openMenuId === aluno.id && <div className="absolute left-full top-0 ml-2 w-48 bg-white dark:bg-slate-850 rounded-lg shadow-lg border border-gray-200 dark:border-slate-700 py-1 z-50">

@@ -3,9 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { userService, type CreateUserInput } from '../services/userService';
 import { UserRole, Usuario } from '../types';
+import { withQueryTimeout } from '../utils/queryTimeout';
 
 interface UsersOptions {
   page?: number;
@@ -39,13 +40,15 @@ export function useUsers(options: UsersOptions = {}) {
     queryKey: isPaginated
       ? ['users', 'page', page, pageSize, { role, status, search, empresaId, turmaId }]
       : ['users', 'all', { role, status, search, empresaId, turmaId }],
-    queryFn: async () => {
+    queryFn: ({ signal }) => withQueryTimeout(async (requestSignal) => {
       if (!isPaginated) {
-        const data = await userService.getAll({ role, status, search, empresaId, turmaId });
+        const data = await userService.getAll({ role, status, search, empresaId, turmaId, signal: requestSignal });
         return { data, total: data.length };
       }
-      return userService.getPage({ page, pageSize, role, status, search, empresaId, turmaId });
-    },
+      return userService.getPage({ page, pageSize, role, status, search, empresaId, turmaId, signal: requestSignal });
+    }, signal),
+    placeholderData: isPaginated ? keepPreviousData : undefined,
+    retry: false,
     enabled,
   });
 
