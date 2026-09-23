@@ -54,10 +54,11 @@ function TurmaMigration() {
   const [diagnosing, setDiagnosing] = useState(false);
   const [diagnosticError, setDiagnosticError] = useState('');
   const [diagnosticClipboardMessage, setDiagnosticClipboardMessage] = useState('');
+  const [diagnosticSelection, setDiagnosticSelection] = useState<MigrationParseResult['rows'] | null>(null);
   const [parseError, setParseError] = useState('');
   const [clipboardMessage, setClipboardMessage] = useState('');
 
-  const selectedRows = useMemo(() => parsed?.rows.slice(0, Math.min(batchSize, MAX_BATCH_SIZE, parsed.rows.length)) ?? [], [batchSize, parsed]);
+  const selectedRows = useMemo(() => diagnosticSelection ?? parsed?.rows.slice(0, Math.min(batchSize, MAX_BATCH_SIZE, parsed.rows.length)) ?? [], [batchSize, diagnosticSelection, parsed]);
   const numericDeadlineRows = parsed?.rows.filter((row) => row.prazoNumericDays !== undefined && row.prazoCalculatedDate) ?? [];
   const allProblems = parsed?.rows.reduce((total, row) => total + row.problems.length, 0) ?? 0;
   const allWarnings = parsed?.rows.reduce((total, row) => total + row.warnings.length, 0) ?? 0;
@@ -72,6 +73,7 @@ function TurmaMigration() {
     setParseError('');
     setRunResult(null);
     setDiagnostic(null);
+    setDiagnosticSelection(null);
     setDiagnosticError('');
     setDiagnosticClipboardMessage('');
     setConfirming(false);
@@ -92,6 +94,7 @@ function TurmaMigration() {
     if (!parsed || diagnosing || running) return;
     setDiagnosing(true);
     setDiagnostic(null);
+    setDiagnosticSelection(null);
     setDiagnosticError('');
     setDiagnosticClipboardMessage('');
     try {
@@ -101,6 +104,16 @@ function TurmaMigration() {
     } finally {
       setDiagnosing(false);
     }
+  };
+
+  const selectSafeDiagnosticRows = () => {
+    if (!diagnostic || diagnostic.counts.safeToImportRows === 0 || running || diagnosing) return;
+    const safeLines = new Set(diagnostic.rows.filter((row) => row.canImport).map((row) => row.line));
+    const safeRows = parsed?.rows.filter((row) => safeLines.has(row.line)) ?? [];
+    setDiagnosticSelection(safeRows);
+    setBatchSize(safeRows.length);
+    setConfirming(false);
+    setRunResult(null);
   };
 
   const copyDiagnostic = async () => {
@@ -235,7 +248,7 @@ function TurmaMigration() {
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="text-sm text-slate-600 dark:text-slate-300">Compare todas as linhas carregadas com os identificadores atuais de <code>public.turmas</code>, sem gravar, alterar ou reparar dados.</p>
-                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">A ausência atual não prova o motivo histórico de uma importação anterior; o relatório informa somente o que foi encontrado neste momento.</p>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">A ausência atual não prova o motivo histórico de uma importação anterior; os bloqueios são detectados pela lógica atual e o relatório informa somente o que foi encontrado neste momento.</p>
                 </div>
                 <button type="button" onClick={() => void runDiagnostic()} disabled={diagnosing || running || parsed.rows.length === 0} aria-busy={diagnosing} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-teal-700 px-4 py-2 text-sm font-bold text-white hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-50">
                   {diagnosing ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <TriangleAlert className="h-4 w-4" aria-hidden="true" />}
@@ -244,18 +257,29 @@ function TurmaMigration() {
               </div>
               {diagnosticError && <p role="alert" className="mt-3 rounded-md bg-rose-50 p-3 text-sm text-rose-700 dark:bg-rose-950/30 dark:text-rose-300">{diagnosticError}</p>}
               {diagnostic && <>
-                <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                  <Summary label="Total analisado" value={String(diagnostic.counts.totalAnalyzed)} />
+                  <Summary label="Encontradas pelos dois (omitidas)" value={String(diagnostic.counts.fullyFound)} tone="success" />
+                  <Summary label="Pendentes/problema" value={String(diagnostic.counts.pendingRows)} tone={diagnostic.counts.pendingRows ? 'warning' : 'success'} />
+                  <Summary label="Bloqueadas pela lógica atual" value={String(diagnostic.counts.blockedRows)} tone={diagnostic.counts.blockedRows ? 'warning' : 'success'} />
+                  <Summary label="Aptas para importar" value={String(diagnostic.counts.safeToImportRows)} tone={diagnostic.counts.safeToImportRows ? 'success' : 'warning'} />
+                </div>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {(Object.keys(diagnosticStatusLabels) as MigrationDiagnosticStatus[]).map((status) => <Summary key={status} label={diagnosticStatusLabels[status]} value={String(diagnostic.counts[status])} tone={status === 'ambos' ? 'success' : status === 'identificadores_invalidos' || status === 'conflitante' || status === 'nenhum' ? 'warning' : 'default'} />)}
                 </div>
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Foram avaliadas {diagnostic.rows.length} linha(s). Os resultados ficam apenas na memória desta sessão.</p>
-                  <button type="button" onClick={() => void copyDiagnostic()} disabled={diagnosing || !diagnostic} className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700"><Clipboard className="h-4 w-4" aria-hidden="true" /> Copiar relatório do diagnóstico</button>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Foram avaliadas {diagnostic.counts.totalAnalyzed} linha(s); {diagnostic.counts.fullyFound} encontrada(s) pelos dois identificadores foram omitidas do detalhe. Os resultados ficam apenas na memória desta sessão.</p>
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" onClick={selectSafeDiagnosticRows} disabled={diagnosing || running || diagnostic.counts.safeToImportRows === 0} aria-busy={diagnosing} className="inline-flex items-center gap-2 rounded-md bg-teal-700 px-3 py-2 text-xs font-bold text-white hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-50"><CheckCircle2 className="h-4 w-4" aria-hidden="true" /> Selecionar {diagnostic.counts.safeToImportRows} turmas aptas para importar</button>
+                    <button type="button" onClick={() => void copyDiagnostic()} disabled={diagnosing || !diagnostic} className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700"><Clipboard className="h-4 w-4" aria-hidden="true" /> Copiar relatório do diagnóstico</button>
+                  </div>
                 </div>
+                {diagnostic.counts.safeToImportRows === 0 ? <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">Nenhuma turma está apta para importar pela validação atual. Corrija a planilha ou os bloqueios apontados antes de selecionar um lote.</p> : diagnosticSelection ? <p role="status" className="mt-3 rounded-md border border-teal-200 bg-teal-50 p-3 text-sm text-teal-800 dark:border-teal-900 dark:bg-teal-950/30 dark:text-teal-200">{selectedRows.length} turma(s) apta(s) selecionada(s). A ação “Revisar e confirmar lote” abaixo processará somente estas linhas; nada foi importado automaticamente.</p> : null}
                 <div className="mt-3 max-h-[34rem] overflow-auto rounded-lg border border-slate-200 dark:border-slate-700" tabIndex={0} role="region" aria-label="Resultados detalhados do diagnóstico">
                   <table className="min-w-[860px] text-left text-xs">
                     <caption className="sr-only">Resultados do diagnóstico de turmas por linha da planilha</caption>
-                    <thead className="sticky top-0 bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"><tr><th className="px-3 py-2">Linha</th><th className="px-3 py-2">ANAC</th><th className="px-3 py-2">ID interno (TURMA)</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">Motivos seguros</th></tr></thead>
-                    <tbody>{diagnostic.rows.map((row) => <tr key={row.line} className="border-t border-slate-200 align-top dark:border-slate-800"><td className="px-3 py-2 font-semibold">{row.line}</td><td className="max-w-xs break-words px-3 py-2">{row.anac || '—'}</td><td className="px-3 py-2">{row.interno || '—'}</td><td className={`whitespace-nowrap px-3 py-2 font-bold ${row.status === 'ambos' ? 'text-emerald-700 dark:text-emerald-300' : row.status === 'conflitante' || row.status === 'identificadores_invalidos' ? 'text-rose-700 dark:text-rose-300' : row.status === 'nenhum' ? 'text-amber-700 dark:text-amber-300' : 'text-sky-700 dark:text-sky-300'}`}>{diagnosticStatusLabels[row.status]}</td><td className="max-w-2xl px-3 py-2"><ul className="list-disc space-y-1 pl-4">{row.reasons.map((reason, index) => <li key={`${row.line}-${index}`} className="break-words">{reason}</li>)}</ul></td></tr>)}</tbody>
+                    <thead className="sticky top-0 bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"><tr><th className="px-3 py-2">Linha</th><th className="px-3 py-2">ANAC</th><th className="px-3 py-2">ID interno (TURMA)</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">Avaliação de importação</th><th className="px-3 py-2">Motivos e bloqueios</th></tr></thead>
+                    <tbody>{diagnostic.rows.map((row) => <tr key={row.line} className="border-t border-slate-200 align-top dark:border-slate-800"><td className="px-3 py-2 font-semibold">{row.line}</td><td className="max-w-xs break-words px-3 py-2">{row.anac || '—'}</td><td className="px-3 py-2">{row.interno || '—'}</td><td className={`whitespace-nowrap px-3 py-2 font-bold ${row.status === 'conflitante' || row.status === 'identificadores_invalidos' ? 'text-rose-700 dark:text-rose-300' : row.status === 'nenhum' ? 'text-amber-700 dark:text-amber-300' : 'text-sky-700 dark:text-sky-300'}`}>{diagnosticStatusLabels[row.status]}</td><td className={`whitespace-nowrap px-3 py-2 font-bold ${row.canImport ? 'text-emerald-700 dark:text-emerald-300' : 'text-rose-700 dark:text-rose-300'}`}>{row.canImport ? 'Apta para importar' : 'Bloqueada'}{row.importBlockers.length > 0 && <ul className="mt-1 list-disc space-y-1 pl-4 text-xs font-normal">{row.importBlockers.map((blocker, index) => <li key={`${row.line}-blocker-${index}`} className="whitespace-normal break-words">{blocker}</li>)}</ul>}</td><td className="max-w-2xl px-3 py-2"><ul className="list-disc space-y-1 pl-4">{row.reasons.map((reason, index) => <li key={`${row.line}-${index}`} className="break-words">{reason}</li>)}</ul></td></tr>)}</tbody>
                   </table>
                 </div>
               </>}
@@ -265,9 +289,9 @@ function TurmaMigration() {
             <Section title="4. Selecionar lote">
               <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
                 <label className="text-sm font-semibold text-slate-700 dark:text-slate-200">Quantidade de linhas a gravar (máximo {Math.min(MAX_BATCH_SIZE, parsed.rows.length)})
-                  <input type="number" min={parsed.rows.length ? 1 : 0} max={Math.min(MAX_BATCH_SIZE, parsed.rows.length)} value={Math.min(batchSize, MAX_BATCH_SIZE, parsed.rows.length)} onChange={(event) => setBatchSize(Math.max(1, Math.min(MAX_BATCH_SIZE, parsed.rows.length, Number(event.target.value) || 1)))} disabled={running || parsed.rows.length === 0} className="mt-2 block w-36 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950" />
+                  <input type="number" min={parsed.rows.length ? 1 : 0} max={Math.min(MAX_BATCH_SIZE, parsed.rows.length)} value={Math.min(batchSize, MAX_BATCH_SIZE, parsed.rows.length)} onChange={(event) => { setDiagnosticSelection(null); setBatchSize(Math.max(1, Math.min(MAX_BATCH_SIZE, parsed.rows.length, Number(event.target.value) || 1))); }} disabled={running || parsed.rows.length === 0} className="mt-2 block w-36 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 dark:border-slate-700 dark:bg-slate-950" />
                 </label>
-                <p className="max-w-xl text-xs text-slate-500 dark:text-slate-400">Somente as primeiras {selectedRows.length} linhas selecionadas serão gravadas. Depois da confirmação, cursos, endereços e pessoas serão conciliados por chave normalizada: registros existentes serão localizados e os ausentes serão criados uma vez e reutilizados. Linhas inválidas e entidades ambíguas permanecem pendentes.</p>
+                <p className="max-w-xl text-xs text-slate-500 dark:text-slate-400">{diagnosticSelection ? `O diagnóstico selecionou exatamente ${selectedRows.length} turma(s) apta(s) para importar.` : `Somente as primeiras ${selectedRows.length} linhas selecionadas serão gravadas.`} Depois da confirmação, cursos, endereços e pessoas serão conciliados por chave normalizada: registros existentes serão localizados e os ausentes serão criados uma vez e reutilizados. Linhas inválidas e entidades ambíguas permanecem pendentes.</p>
               </div>
               {confirming && <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/20"><p className="font-bold text-amber-900 dark:text-amber-200">Confirme o lote antes de gravar</p><p className="mt-1 text-sm text-amber-800 dark:text-amber-300">Você está prestes a processar {selectedRows.length} linha(s). A execução criará apenas os registros conciliados e continuará após erros individuais.</p><div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => void executeBatch()} className="inline-flex items-center gap-2 rounded-md bg-teal-700 px-4 py-2 text-sm font-bold text-white hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-500"><CheckCircle2 className="h-4 w-4" aria-hidden="true" /> Confirmar e iniciar lote</button><button type="button" onClick={() => setConfirming(false)} className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold dark:border-slate-700">Voltar</button></div></div>}
               <button type="button" onClick={prepareBatch} disabled={running || !selectedRows.length || hasBlockingFileIssue} className="mt-4 inline-flex items-center gap-2 rounded-md bg-slate-900 px-4 py-2 text-sm font-bold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-teal-700 dark:hover:bg-teal-600"><Play className="h-4 w-4" aria-hidden="true" /> Revisar e confirmar lote</button>

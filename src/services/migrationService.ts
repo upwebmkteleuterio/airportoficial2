@@ -71,12 +71,22 @@ export type MigrationDiagnosticRow = {
   anac: string;
   interno: string;
   status: MigrationDiagnosticStatus;
+  canImport: boolean;
+  importBlockers: string[];
   reasons: string[];
+};
+
+export type MigrationDiagnosticCounts = Record<MigrationDiagnosticStatus, number> & {
+  totalAnalyzed: number;
+  fullyFound: number;
+  pendingRows: number;
+  blockedRows: number;
+  safeToImportRows: number;
 };
 
 export type MigrationDiagnosticResult = {
   rows: MigrationDiagnosticRow[];
-  counts: Record<MigrationDiagnosticStatus, number>;
+  counts: MigrationDiagnosticCounts;
 };
 
 const ignoredColumns = new Set<MigrationColumn>(['PASTA', 'CÓPIA TURMA', 'referência']);
@@ -637,6 +647,18 @@ export async function diagnoseMigrationRows(rows: MigrationParsedRow[]): Promise
   const validRows = preparedRows.filter(({ identifiers }) => identifiers.reasons.length === 0);
   const internalIds = Array.from(new Set(validRows.map(({ identifiers }) => identifiers.internoNumber).filter((value): value is number => value !== null)));
   const anacIds = Array.from(new Set(validRows.map(({ identifiers }) => identifiers.anac)));
+  const references = await loadReferenceData();
+  const ambiguousCourseNames = new Set<string>();
+  const courseNames = new Set<string>();
+  references.courses.forEach((course) => {
+    const name = normalizeComparison(course.nome_curso);
+    if (!name) return;
+    if (courseNames.has(name)) ambiguousCourseNames.add(name);
+    else courseNames.add(name);
+  });
+  const ambiguousPeopleNames = new Set(
+    references.people.map((person) => normalizeComparison(person.nome)).filter((name, index, names) => name && names.indexOf(name) !== index),
+  );
 
   const lookup = async (column: 'id_interno_escola' | 'id_anac', values: Array<number | string>): Promise<DiagnosticTurma[]> => {
     const records: DiagnosticTurma[] = [];
@@ -652,21 +674,28 @@ export async function diagnoseMigrationRows(rows: MigrationParsedRow[]): Promise
   const [internalRecords, anacRecords] = await Promise.all([lookup('id_interno_escola', internalIds), lookup('id_anac', anacIds)]);
   const byInternal = new Map(internalRecords.map((turma) => [turma.id_interno_escola, turma]));
   const byAnac = new Map(anacRecords.map((turma) => [normalizeMigrationValue(turma.id_anac), turma]));
-  const counts: Record<MigrationDiagnosticStatus, number> = {
+  const counts: MigrationDiagnosticCounts = {
     ambos: 0,
     somente_anac: 0,
     somente_interno: 0,
     conflitante: 0,
     nenhum: 0,
     identificadores_invalidos: 0,
+    totalAnalyzed: rows.length,
+    fullyFound: 0,
+    pendingRows: 0,
+    blockedRows: 0,
+    safeToImportRows: 0,
   };
 
-  const diagnosticRows = preparedRows.map(({ row, identifiers }) => {
+  const diagnosticRows = preparedRows.flatMap(({ row, identifiers }) => {
     let status: MigrationDiagnosticStatus;
     const reasons = [...identifiers.reasons];
+    const importBlockers: string[] = [];
     if (identifiers.reasons.length > 0) {
       status = 'identificadores_invalidos';
       reasons.push('A comparação com public.turmas não foi feita para identificadores ausentes ou inválidos.');
+      identifiers.reasons.forEach((reason) => importBlockers.push(`Bloqueio detectado pela lógica atual: ${reason}`));
     } else {
       const internalClass = byInternal.get(identifiers.internoNumber as number);
       const anacClass = byAnac.get(identifiers.anac);
@@ -687,12 +716,44 @@ export async function diagnoseMigrationRows(rows: MigrationParsedRow[]): Promise
         nenhum: 'Nenhum dos dois identificadores foi encontrado em public.turmas no momento do diagnóstico.',
       };
       reasons.push(statusReason[status]);
+      if (status === 'somente_anac' || status === 'somente_interno' || status === 'conflitante') {
+        importBlockers.push('Bloqueio detectado pela lógica atual: runMigrationBatch rejeita a linha quando o ID ANAC ou o ID interno já existe, mesmo que apenas um deles tenha sido encontrado ou que estejam em conflito.');
+      }
     }
+
     row.problems.forEach((problem) => {
-      if (!reasons.includes(`Problema de validação da linha: ${problem}`)) reasons.push(`Problema de validação da linha: ${problem}`);
+      const blocker = `Bloqueio detectado pela lógica atual: problema de validação da linha — ${problem}`;
+      if (!importBlockers.includes(blocker)) importBlockers.push(blocker);
+      const reason = `Problema de validação da linha: ${problem}`;
+      if (!reasons.includes(reason)) reasons.push(reason);
     });
+
+    if (status === 'nenhum' && ambiguousCourseNames.has(normalizeComparison(row.values.Curso))) {
+      const blocker = `Bloqueio detectado pela lógica atual: o curso "${normalizeMigrationValue(row.values.Curso)}" é ambíguo na referência atual.`;
+      importBlockers.push(blocker);
+      reasons.push(blocker);
+    }
+    personNameValues(row).forEach((entry) => {
+      if (ambiguousPeopleNames.has(normalizeComparison(entry.name))) {
+        const blocker = `Bloqueio detectado pela lógica atual: a pessoa "${normalizeMigrationValue(entry.name)}" é ambígua na referência atual.`;
+        if (!importBlockers.includes(blocker)) importBlockers.push(blocker);
+        if (!reasons.includes(blocker)) reasons.push(blocker);
+      }
+    });
+
+    const canImport = status === 'nenhum' && importBlockers.length === 0;
+    if (canImport) reasons.push('Apta para importar: nenhum cadastro atual foi encontrado e não há bloqueio detectável na validação ou no preflight atual.');
+    else if (status !== 'ambos' && importBlockers.length > 0) reasons.push('A importação permanece bloqueada pela lógica atual; o diagnóstico não determina a causa histórica da situação.');
+
     counts[status] += 1;
-    return { line: row.line, anac: identifiers.anac, interno: identifiers.interno, status, reasons };
+    if (status === 'ambos') {
+      counts.fullyFound += 1;
+      return [];
+    }
+    counts.pendingRows += 1;
+    if (canImport) counts.safeToImportRows += 1;
+    else counts.blockedRows += 1;
+    return [{ line: row.line, anac: identifiers.anac, interno: identifiers.interno, status, canImport, importBlockers, reasons }];
   });
 
   return { rows: diagnosticRows, counts };
@@ -708,10 +769,21 @@ const diagnosticStatusLabels: Record<MigrationDiagnosticStatus, string> = {
 };
 
 export function migrationDiagnosticLogText(result: MigrationDiagnosticResult): string {
-  const summary = Object.entries(result.counts)
-    .map(([status, count]) => `${diagnosticStatusLabels[status as MigrationDiagnosticStatus]}: ${count}`)
-    .join(' · ');
-  const rows = result.rows.map((row) => `[${diagnosticStatusLabels[row.status].toUpperCase()}] Linha ${row.line} · ANAC ${row.anac || '—'} · TURMA ${row.interno || '—'}: ${row.reasons.join(' ')}`);
-  return [`DIAGNÓSTICO DE TURMAS`, summary, 'Limitação: este diagnóstico mostra a situação atual em public.turmas e não prova o motivo histórico de uma importação anterior.', ...rows].join('\n');
+  const summary = [
+    `Total analisado: ${result.counts.totalAnalyzed}`,
+    `Encontrado pelos dois (omitido do detalhe): ${result.counts.fullyFound}`,
+    `Pendentes/problema: ${result.counts.pendingRows}`,
+    `Bloqueadas pela lógica atual: ${result.counts.blockedRows}`,
+    `Aptas para importar: ${result.counts.safeToImportRows}`,
+    ...Object.entries(result.counts)
+      .filter(([status]) => status in diagnosticStatusLabels)
+      .map(([status, count]) => `${diagnosticStatusLabels[status as MigrationDiagnosticStatus]}: ${count}`),
+  ].join(' · ');
+  const rows = result.rows.map((row) => {
+    const assessment = row.canImport ? 'APTA PARA IMPORTAR' : 'BLOQUEADA';
+    const blockers = row.importBlockers.length > 0 ? ` Bloqueios: ${row.importBlockers.join(' ')}` : '';
+    return `[${diagnosticStatusLabels[row.status].toUpperCase()} · ${assessment}] Linha ${row.line} · ANAC ${row.anac || '—'} · TURMA ${row.interno || '—'}: ${row.reasons.join(' ')}${blockers}`;
+  });
+  return [`DIAGNÓSTICO DE TURMAS`, summary, 'Limitação: este diagnóstico mostra a situação atual em public.turmas e os bloqueios detectáveis pela lógica atual; ele não prova o motivo histórico de uma importação anterior.', ...rows].join('\n');
 }
 
