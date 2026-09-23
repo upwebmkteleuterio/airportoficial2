@@ -208,6 +208,44 @@ const DEFAULT_VISIBLE_COLUMNS = {
 
 type VisibleColumns = { -readonly [Key in keyof typeof DEFAULT_VISIBLE_COLUMNS]: boolean };
 const VISIBLE_COLUMNS_STORAGE_KEY = "dashboard-visible-columns-v1";
+const DEADLINE_ALERT_STORAGE_KEY = "turmas-deadline-alert-seen-v1";
+const DEADLINE_ALERT_SUPPRESSION_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+type StoredDeadlineAlert = {
+    datasetKey: string;
+    timestamp: number;
+};
+
+const getDeadlineAlertStorageKey = (userId: string) => `${DEADLINE_ALERT_STORAGE_KEY}:${userId}`;
+
+function readStoredDeadlineAlert(userId: string): StoredDeadlineAlert | null {
+    if (typeof window === "undefined") return null;
+
+    try {
+        const parsed: unknown = JSON.parse(window.localStorage.getItem(getDeadlineAlertStorageKey(userId)) || "null");
+        if (!parsed || typeof parsed !== "object") return null;
+
+        const record = parsed as Record<string, unknown>;
+        return typeof record.datasetKey === "string" && typeof record.timestamp === "number" && Number.isFinite(record.timestamp)
+            ? { datasetKey: record.datasetKey, timestamp: record.timestamp }
+            : null;
+    } catch {
+        return null;
+    }
+}
+
+function storeSeenDeadlineAlert(userId: string, datasetKey: string, timestamp: number) {
+    if (typeof window === "undefined") return;
+
+    try {
+        window.localStorage.setItem(
+            getDeadlineAlertStorageKey(userId),
+            JSON.stringify({ datasetKey, timestamp })
+        );
+    } catch {
+        // Storage may be unavailable in private browsing contexts.
+    }
+}
 
 function loadVisibleColumns(): VisibleColumns {
     if (typeof window === "undefined") return { ...DEFAULT_VISIBLE_COLUMNS };
@@ -857,16 +895,30 @@ export function Dashboard() {
     }, [activeDeadlineAlert, deadlineAlertCounts]);
 
     useEffect(() => {
-        if (!isLoading && deadlineModalDatasetKey) {
-            if (deadlineAlertDatasetRef.current !== deadlineModalDatasetKey) {
-                deadlineAlertDatasetRef.current = deadlineModalDatasetKey;
-                setIsDeadlineAlertModalOpen(true);
+        const userId = userLogged?.id;
+        const alertInstanceKey = userId && deadlineModalDatasetKey
+            ? `${userId}:${deadlineModalDatasetKey}`
+            : null;
+
+        if (!isLoading && deadlineModalDatasetKey && userId) {
+            if (deadlineAlertDatasetRef.current !== alertInstanceKey) {
+                deadlineAlertDatasetRef.current = alertInstanceKey;
+                const now = Date.now();
+                const storedAlert = readStoredDeadlineAlert(userId);
+                const wasRecentlySeen = storedAlert?.datasetKey === deadlineModalDatasetKey
+                    && now - storedAlert.timestamp >= 0
+                    && now - storedAlert.timestamp < DEADLINE_ALERT_SUPPRESSION_WINDOW_MS;
+
+                if (!wasRecentlySeen) {
+                    storeSeenDeadlineAlert(userId, deadlineModalDatasetKey, now);
+                    setIsDeadlineAlertModalOpen(true);
+                }
             }
         } else if (!deadlineModalDatasetKey) {
             deadlineAlertDatasetRef.current = null;
             setIsDeadlineAlertModalOpen(false);
         }
-    }, [deadlineModalDatasetKey, isLoading]);
+    }, [deadlineModalDatasetKey, isLoading, userLogged?.id]);
 
     const handleRemoveInstructor = (instructorId: string) => {
         setSelectedInstructors(selectedInstructors.filter(id => id !== instructorId));
