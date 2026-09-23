@@ -3,10 +3,14 @@ import { CheckCircle2, Clipboard, FileSpreadsheet, LoaderCircle, Play, TriangleA
 import {
   MIGRATION_COLUMNS,
   MIGRATION_DESTINATIONS,
+  diagnoseMigrationRows,
+  migrationDiagnosticLogText,
   migrationIssuesLogText,
   migrationLogText,
   parseMigrationFile,
   runMigrationBatch,
+  type MigrationDiagnosticResult,
+  type MigrationDiagnosticStatus,
   type MigrationParseResult,
   type MigrationProgress,
   type MigrationRunResult,
@@ -19,6 +23,15 @@ function formatBrazilianDate(date: string): string {
   const [year, month, day] = date.split('-');
   return `${day}/${month}/${year}`;
 }
+
+const diagnosticStatusLabels: Record<MigrationDiagnosticStatus, string> = {
+  ambos: 'Encontrado pelos dois',
+  somente_anac: 'Somente por ANAC',
+  somente_interno: 'Somente por ID interno',
+  conflitante: 'Registros diferentes',
+  nenhum: 'Nenhum encontrado',
+  identificadores_invalidos: 'Ausentes ou inválidos',
+};
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -37,6 +50,10 @@ function TurmaMigration() {
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<MigrationProgress | null>(null);
   const [runResult, setRunResult] = useState<MigrationRunResult | null>(null);
+  const [diagnostic, setDiagnostic] = useState<MigrationDiagnosticResult | null>(null);
+  const [diagnosing, setDiagnosing] = useState(false);
+  const [diagnosticError, setDiagnosticError] = useState('');
+  const [diagnosticClipboardMessage, setDiagnosticClipboardMessage] = useState('');
   const [parseError, setParseError] = useState('');
   const [clipboardMessage, setClipboardMessage] = useState('');
 
@@ -54,6 +71,9 @@ function TurmaMigration() {
     if (!file) return;
     setParseError('');
     setRunResult(null);
+    setDiagnostic(null);
+    setDiagnosticError('');
+    setDiagnosticClipboardMessage('');
     setConfirming(false);
     try {
       const result = await parseMigrationFile(file);
@@ -66,6 +86,31 @@ function TurmaMigration() {
       setParseError(error instanceof Error ? error.message : 'Não foi possível ler o arquivo.');
     }
     event.target.value = '';
+  };
+
+  const runDiagnostic = async () => {
+    if (!parsed || diagnosing || running) return;
+    setDiagnosing(true);
+    setDiagnostic(null);
+    setDiagnosticError('');
+    setDiagnosticClipboardMessage('');
+    try {
+      setDiagnostic(await diagnoseMigrationRows(parsed.rows));
+    } catch (error) {
+      setDiagnosticError(error instanceof Error ? error.message : 'Não foi possível concluir o diagnóstico.');
+    } finally {
+      setDiagnosing(false);
+    }
+  };
+
+  const copyDiagnostic = async () => {
+    if (!diagnostic) return;
+    try {
+      await navigator.clipboard.writeText(migrationDiagnosticLogText(diagnostic));
+      setDiagnosticClipboardMessage('Relatório do diagnóstico copiado para a área de transferência.');
+    } catch {
+      setDiagnosticClipboardMessage('Não foi possível copiar o diagnóstico. Verifique a permissão da área de transferência.');
+    }
   };
 
   const prepareBatch = () => {
@@ -186,7 +231,38 @@ function TurmaMigration() {
               </div>
             </Section>
 
-            <Section title="3. Selecionar lote">
+            <Section title="3. Diagnóstico somente leitura">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm text-slate-600 dark:text-slate-300">Compare todas as linhas carregadas com os identificadores atuais de <code>public.turmas</code>, sem gravar, alterar ou reparar dados.</p>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">A ausência atual não prova o motivo histórico de uma importação anterior; o relatório informa somente o que foi encontrado neste momento.</p>
+                </div>
+                <button type="button" onClick={() => void runDiagnostic()} disabled={diagnosing || running || parsed.rows.length === 0} aria-busy={diagnosing} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-teal-700 px-4 py-2 text-sm font-bold text-white hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-50">
+                  {diagnosing ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <TriangleAlert className="h-4 w-4" aria-hidden="true" />}
+                  {diagnosing ? 'Diagnosticando…' : 'Diagnosticar turmas ausentes'}
+                </button>
+              </div>
+              {diagnosticError && <p role="alert" className="mt-3 rounded-md bg-rose-50 p-3 text-sm text-rose-700 dark:bg-rose-950/30 dark:text-rose-300">{diagnosticError}</p>}
+              {diagnostic && <>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {(Object.keys(diagnosticStatusLabels) as MigrationDiagnosticStatus[]).map((status) => <Summary key={status} label={diagnosticStatusLabels[status]} value={String(diagnostic.counts[status])} tone={status === 'ambos' ? 'success' : status === 'identificadores_invalidos' || status === 'conflitante' || status === 'nenhum' ? 'warning' : 'default'} />)}
+                </div>
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Foram avaliadas {diagnostic.rows.length} linha(s). Os resultados ficam apenas na memória desta sessão.</p>
+                  <button type="button" onClick={() => void copyDiagnostic()} disabled={diagnosing || !diagnostic} className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700"><Clipboard className="h-4 w-4" aria-hidden="true" /> Copiar relatório do diagnóstico</button>
+                </div>
+                <div className="mt-3 max-h-[34rem] overflow-auto rounded-lg border border-slate-200 dark:border-slate-700" tabIndex={0} role="region" aria-label="Resultados detalhados do diagnóstico">
+                  <table className="min-w-[860px] text-left text-xs">
+                    <caption className="sr-only">Resultados do diagnóstico de turmas por linha da planilha</caption>
+                    <thead className="sticky top-0 bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"><tr><th className="px-3 py-2">Linha</th><th className="px-3 py-2">ANAC</th><th className="px-3 py-2">ID interno (TURMA)</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">Motivos seguros</th></tr></thead>
+                    <tbody>{diagnostic.rows.map((row) => <tr key={row.line} className="border-t border-slate-200 align-top dark:border-slate-800"><td className="px-3 py-2 font-semibold">{row.line}</td><td className="max-w-xs break-words px-3 py-2">{row.anac || '—'}</td><td className="px-3 py-2">{row.interno || '—'}</td><td className={`whitespace-nowrap px-3 py-2 font-bold ${row.status === 'ambos' ? 'text-emerald-700 dark:text-emerald-300' : row.status === 'conflitante' || row.status === 'identificadores_invalidos' ? 'text-rose-700 dark:text-rose-300' : row.status === 'nenhum' ? 'text-amber-700 dark:text-amber-300' : 'text-sky-700 dark:text-sky-300'}`}>{diagnosticStatusLabels[row.status]}</td><td className="max-w-2xl px-3 py-2"><ul className="list-disc space-y-1 pl-4">{row.reasons.map((reason, index) => <li key={`${row.line}-${index}`} className="break-words">{reason}</li>)}</ul></td></tr>)}</tbody>
+                  </table>
+                </div>
+              </>}
+              {diagnosticClipboardMessage && <p role="status" className="mt-2 text-sm text-slate-600 dark:text-slate-300">{diagnosticClipboardMessage}</p>}
+            </Section>
+
+            <Section title="4. Selecionar lote">
               <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
                 <label className="text-sm font-semibold text-slate-700 dark:text-slate-200">Quantidade de linhas a gravar (máximo {Math.min(MAX_BATCH_SIZE, parsed.rows.length)})
                   <input type="number" min={parsed.rows.length ? 1 : 0} max={Math.min(MAX_BATCH_SIZE, parsed.rows.length)} value={Math.min(batchSize, MAX_BATCH_SIZE, parsed.rows.length)} onChange={(event) => setBatchSize(Math.max(1, Math.min(MAX_BATCH_SIZE, parsed.rows.length, Number(event.target.value) || 1)))} disabled={running || parsed.rows.length === 0} className="mt-2 block w-36 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950" />
@@ -197,7 +273,7 @@ function TurmaMigration() {
               <button type="button" onClick={prepareBatch} disabled={running || !selectedRows.length || hasBlockingFileIssue} className="mt-4 inline-flex items-center gap-2 rounded-md bg-slate-900 px-4 py-2 text-sm font-bold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-teal-700 dark:hover:bg-teal-600"><Play className="h-4 w-4" aria-hidden="true" /> Revisar e confirmar lote</button>
             </Section>
 
-            {(running || progress || runResult) && <Section title="4. Acompanhamento e logs">
+            {(running || progress || runResult) && <Section title="5. Acompanhamento e logs">
               {progress && <div aria-live="polite"><div className="mb-2 flex justify-between text-sm font-semibold"><span>Etapa: {progress.stage} — {progress.message}</span><span>{progress.current}/{progress.total} ({progress.percent}%)</span></div><div className="h-3 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800"><div className={`h-full transition-all ${progress.stage === 'erro' ? 'bg-rose-600' : 'bg-teal-600'}`} style={{ width: `${progress.percent}%` }} /></div></div>}
               {running && <p className="mt-4 flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300"><LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> Processando linha a linha. O botão permanece desabilitado durante a execução.</p>}
               {runResult && <div className="mt-4">

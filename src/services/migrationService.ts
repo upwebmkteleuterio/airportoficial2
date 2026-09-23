@@ -64,6 +64,21 @@ export type MigrationRunResult = {
   errorCount: number;
 };
 
+export type MigrationDiagnosticStatus = 'ambos' | 'somente_anac' | 'somente_interno' | 'conflitante' | 'nenhum' | 'identificadores_invalidos';
+
+export type MigrationDiagnosticRow = {
+  line: number;
+  anac: string;
+  interno: string;
+  status: MigrationDiagnosticStatus;
+  reasons: string[];
+};
+
+export type MigrationDiagnosticResult = {
+  rows: MigrationDiagnosticRow[];
+  counts: Record<MigrationDiagnosticStatus, number>;
+};
+
 const ignoredColumns = new Set<MigrationColumn>(['PASTA', 'CÓPIA TURMA', 'referência']);
 const columnAliases: Record<string, MigrationColumn> = {
   TURMA: 'TURMA', ANAC: 'ANAC', CURSO: 'Curso', TURNO: 'TURNO', HORARIO: 'HORÁRIO',
@@ -594,5 +609,109 @@ export function migrationLogText(result: MigrationRunResult): string {
 
 export function migrationIssuesLogText(result: MigrationRunResult): string {
   return result.results.filter((item) => item.status === 'erro').map(migrationResultLine).join('\n');
+}
+
+const DIAGNOSTIC_BATCH_SIZE = 300;
+
+type DiagnosticTurma = { id: string; id_interno_escola: number; id_anac: string };
+
+function diagnosticIdentifiers(row: MigrationParsedRow): { anac: string; interno: string; internoNumber: number | null; reasons: string[] } {
+  const anac = normalizeMigrationValue(row.values.ANAC);
+  const interno = normalizeMigrationValue(row.values.TURMA);
+  const reasons: string[] = [];
+  if (!anac) reasons.push('ID ANAC ausente.');
+
+  const isDecimalInteger = /^[+-]?\d+$/.test(interno);
+  const internoNumber = isDecimalInteger ? Number(interno) : Number.NaN;
+  if (!interno) reasons.push('ID interno (TURMA) ausente.');
+  else if (!isDecimalInteger || !Number.isSafeInteger(internoNumber) || internoNumber < -2147483648 || internoNumber > 2147483647) {
+    reasons.push('ID interno (TURMA) inválido: informe um número inteiro dentro do limite do banco.');
+  }
+
+  return { anac, interno, internoNumber: Number.isNaN(internoNumber) ? null : internoNumber, reasons };
+}
+
+export async function diagnoseMigrationRows(rows: MigrationParsedRow[]): Promise<MigrationDiagnosticResult> {
+  await assertMigrationAccess();
+  const preparedRows = rows.map((row) => ({ row, identifiers: diagnosticIdentifiers(row) }));
+  const validRows = preparedRows.filter(({ identifiers }) => identifiers.reasons.length === 0);
+  const internalIds = Array.from(new Set(validRows.map(({ identifiers }) => identifiers.internoNumber).filter((value): value is number => value !== null)));
+  const anacIds = Array.from(new Set(validRows.map(({ identifiers }) => identifiers.anac)));
+
+  const lookup = async (column: 'id_interno_escola' | 'id_anac', values: Array<number | string>): Promise<DiagnosticTurma[]> => {
+    const records: DiagnosticTurma[] = [];
+    for (let index = 0; index < values.length; index += DIAGNOSTIC_BATCH_SIZE) {
+      const batch = values.slice(index, index + DIAGNOSTIC_BATCH_SIZE);
+      const query = await supabase.from('turmas').select('id,id_interno_escola,id_anac').in(column, batch);
+      if (query.error) throw safeError('Não foi possível consultar os identificadores das turmas para o diagnóstico.');
+      records.push(...((query.data ?? []) as DiagnosticTurma[]));
+    }
+    return records;
+  };
+
+  const [internalRecords, anacRecords] = await Promise.all([lookup('id_interno_escola', internalIds), lookup('id_anac', anacIds)]);
+  const byInternal = new Map(internalRecords.map((turma) => [turma.id_interno_escola, turma]));
+  const byAnac = new Map(anacRecords.map((turma) => [normalizeMigrationValue(turma.id_anac), turma]));
+  const counts: Record<MigrationDiagnosticStatus, number> = {
+    ambos: 0,
+    somente_anac: 0,
+    somente_interno: 0,
+    conflitante: 0,
+    nenhum: 0,
+    identificadores_invalidos: 0,
+  };
+
+  const diagnosticRows = preparedRows.map(({ row, identifiers }) => {
+    let status: MigrationDiagnosticStatus;
+    const reasons = [...identifiers.reasons];
+    if (identifiers.reasons.length > 0) {
+      status = 'identificadores_invalidos';
+      reasons.push('A comparação com public.turmas não foi feita para identificadores ausentes ou inválidos.');
+    } else {
+      const internalClass = byInternal.get(identifiers.internoNumber as number);
+      const anacClass = byAnac.get(identifiers.anac);
+      if (internalClass && anacClass) {
+        status = internalClass.id === anacClass.id ? 'ambos' : 'conflitante';
+      } else if (anacClass) {
+        status = 'somente_anac';
+      } else if (internalClass) {
+        status = 'somente_interno';
+      } else {
+        status = 'nenhum';
+      }
+      const statusReason: Record<Exclude<MigrationDiagnosticStatus, 'identificadores_invalidos'>, string> = {
+        ambos: 'Os dois identificadores apontam para o mesmo cadastro em public.turmas.',
+        somente_anac: 'O ID ANAC foi encontrado, mas o ID interno (TURMA) não foi encontrado.',
+        somente_interno: 'O ID interno (TURMA) foi encontrado, mas o ID ANAC não foi encontrado.',
+        conflitante: 'Os dois identificadores foram encontrados, mas apontam para cadastros diferentes em public.turmas.',
+        nenhum: 'Nenhum dos dois identificadores foi encontrado em public.turmas no momento do diagnóstico.',
+      };
+      reasons.push(statusReason[status]);
+    }
+    row.problems.forEach((problem) => {
+      if (!reasons.includes(`Problema de validação da linha: ${problem}`)) reasons.push(`Problema de validação da linha: ${problem}`);
+    });
+    counts[status] += 1;
+    return { line: row.line, anac: identifiers.anac, interno: identifiers.interno, status, reasons };
+  });
+
+  return { rows: diagnosticRows, counts };
+}
+
+const diagnosticStatusLabels: Record<MigrationDiagnosticStatus, string> = {
+  ambos: 'Encontrado pelos dois identificadores',
+  somente_anac: 'Encontrado somente por ANAC',
+  somente_interno: 'Encontrado somente por ID interno',
+  conflitante: 'Identificadores em conflito',
+  nenhum: 'Nenhum identificador encontrado',
+  identificadores_invalidos: 'Identificadores ausentes ou inválidos',
+};
+
+export function migrationDiagnosticLogText(result: MigrationDiagnosticResult): string {
+  const summary = Object.entries(result.counts)
+    .map(([status, count]) => `${diagnosticStatusLabels[status as MigrationDiagnosticStatus]}: ${count}`)
+    .join(' · ');
+  const rows = result.rows.map((row) => `[${diagnosticStatusLabels[row.status].toUpperCase()}] Linha ${row.line} · ANAC ${row.anac || '—'} · TURMA ${row.interno || '—'}: ${row.reasons.join(' ')}`);
+  return [`DIAGNÓSTICO DE TURMAS`, summary, 'Limitação: este diagnóstico mostra a situação atual em public.turmas e não prova o motivo histórico de uma importação anterior.', ...rows].join('\n');
 }
 
