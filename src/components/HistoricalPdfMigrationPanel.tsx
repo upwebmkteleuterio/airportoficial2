@@ -17,7 +17,7 @@ type PreviewData = {
 type FileResult = { key: string; fileName: string; studentName: string; status: string; message: string };
 
 function classLabel(turma: HistoricalPdfClass) {
-  return `Turma ${turma.id_anac || '—'} · ID interno ${turma.id_interno_escola}`;
+  return `Turma · ID interno ${turma.id_interno_escola}`;
 }
 
 function isPdf(file: File) {
@@ -276,7 +276,7 @@ export default function HistoricalPdfMigrationPanel() {
               onKeyDown={handleClassPickerKeyDown}
               disabled={running || previewing}
               className="w-full rounded-md border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 dark:border-slate-700 dark:bg-slate-950"
-              placeholder="Digite o ID ANAC ou interno"
+              placeholder="Digite o ID interno da turma"
             />
             {classPickerOpen && <div className="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-md border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900">
               <ul id="historical-class-options" role="listbox" aria-label="Turmas encontradas" className="py-1">
@@ -290,8 +290,7 @@ export default function HistoricalPdfMigrationPanel() {
                   onMouseEnter={() => setActiveClassIndex(index)}
                   onClick={() => chooseClass(turma)}
                 >
-                  <span className="block font-semibold">ANAC: {turma.id_anac || '—'}</span>
-                  <span className="block text-xs text-slate-500 dark:text-slate-400">ID interno: {turma.id_interno_escola}</span>
+                  <span className="block font-semibold">ID interno: {turma.id_interno_escola}</span>
                 </li>)}
                 {!classSearch && <li className="px-3 py-2 text-sm text-slate-500">Digite um número para buscar turmas.</li>}
               </ul>

@@ -6,7 +6,7 @@ import { serviceError } from './supabaseErrors';
 export const UNIFIED_DOCUMENT_TYPE = 'Documento unificado';
 
 export type HistoricalPdfRosterPerson = Pick<Pessoa, 'id' | 'nome'>;
-export type HistoricalPdfClass = Pick<Turma, 'id' | 'id_anac' | 'id_interno_escola'>;
+export type HistoricalPdfClass = Pick<Turma, 'id' | 'id_interno_escola'>;
 
 async function assertCanMigrateHistoricalPdfs() {
   const { data, error } = await supabase.auth.getUser();
@@ -63,21 +63,31 @@ async function assertPeopleBelongToClass(turmaId: string, personIds: string[]) {
 export const historicalPdfMigrationService = {
   searchClasses: async (query: string): Promise<HistoricalPdfClass[]> => {
     await assertCanMigrateHistoricalPdfs();
-    const numericQuery = query.replace(/\D/g, '').slice(0, 32);
-    if (!numericQuery) return [];
+    const numericQuery = query.replace(/\D/g, '');
+    if (!numericQuery || (numericQuery.length > 1 && numericQuery.startsWith('0')) || numericQuery.length > 10) return [];
 
-    const internalId = Number(numericQuery);
-    let classQuery = supabase
-      .from('turmas')
-      .select('id, id_anac, id_interno_escola')
-      .ilike('id_anac', `%${numericQuery}%`);
-    if (Number.isSafeInteger(internalId)) {
-      classQuery = supabase
-        .from('turmas')
-        .select('id, id_anac, id_interno_escola')
-        .or(`id_anac.ilike.%${numericQuery}%,id_interno_escola.eq.${internalId}`);
+    const prefix = Number(numericQuery);
+    const maxInternalId = 2147483647;
+    if (!Number.isSafeInteger(prefix) || prefix > maxInternalId) return [];
+
+    const ranges: Array<{ min: number; max: number }> = [];
+    const maxSuffixLength = numericQuery === '0' ? 0 : 10 - numericQuery.length;
+    for (let suffixLength = 0; suffixLength <= maxSuffixLength; suffixLength += 1) {
+      const min = prefix * 10 ** suffixLength;
+      if (min > maxInternalId) break;
+      ranges.push({ min, max: Math.min(min + 10 ** suffixLength - 1, maxInternalId) });
     }
-    const { data, error } = await classQuery.order('id_interno_escola', { ascending: false }).limit(15);
+    if (ranges.length === 0) return [];
+
+    const rangeFilters = ranges
+      .map(({ min, max }) => `and(id_interno_escola.gte.${min},id_interno_escola.lte.${max})`)
+      .join(',');
+    const { data, error } = await supabase
+      .from('turmas')
+      .select('id, id_interno_escola')
+      .or(rangeFilters)
+      .order('id_interno_escola', { ascending: false })
+      .limit(15);
     if (error) throw serviceError('Não foi possível buscar as turmas', error);
     return (data ?? []) as HistoricalPdfClass[];
   },
