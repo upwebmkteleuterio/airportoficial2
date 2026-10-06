@@ -35,10 +35,15 @@ export default function HistoricalPdfMigrationPanel() {
   const [classPickerOpen, setClassPickerOpen] = useState(false);
   const [activeClassIndex, setActiveClassIndex] = useState(-1);
   const classSearchInputRef = useRef<HTMLInputElement>(null);
+  const fileValidationInProgressRef = useRef(false);
+  const nextFileKeyRef = useRef(0);
   const [drafts, setDrafts] = useState<DraftFile[]>([]);
   const [preview, setPreview] = useState<PreviewData | null>(null);
   const [manualAssignments, setManualAssignments] = useState<Record<string, string>>({});
   const [previewing, setPreviewing] = useState(false);
+  const [validatingFiles, setValidatingFiles] = useState(false);
+  const [validationStatus, setValidationStatus] = useState('');
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState('');
   const [results, setResults] = useState<FileResult[] | null>(null);
@@ -96,6 +101,8 @@ export default function HistoricalPdfMigrationPanel() {
     setPreview(null);
     setManualAssignments({});
     setResults(null);
+    setValidationStatus('');
+    setValidationErrors([]);
     setError('');
   };
 
@@ -118,36 +125,49 @@ export default function HistoricalPdfMigrationPanel() {
   };
 
   const handleFiles = async (event: ChangeEvent<HTMLInputElement>) => {
-    const files: File[] = event.target.files ? Array.from(event.target.files as FileList) as File[] : [];
+    const files: File[] = event.target.files ? Array.from(event.target.files as FileList) : [];
     event.target.value = '';
+    if (files.length === 0 || fileValidationInProgressRef.current) return;
+
+    fileValidationInProgressRef.current = true;
+    setValidatingFiles(true);
+    setValidationErrors([]);
+    setValidationStatus(`Validando ${files.length} arquivo(s)…`);
     setError('');
     setResults(null);
     setPreview(null);
     setManualAssignments({});
-    if (files.some((file) => !isPdf(file))) {
-      setDrafts([]);
-      setError('Selecione somente arquivos PDF. Nenhum arquivo foi adicionado.');
-      return;
-    }
+    const errors: string[] = [];
+
     try {
-      for (const file of files) {
-        if (file.size === 0) throw new Error(`O arquivo “${file.name}” está vazio.`);
-        const signature = new TextDecoder().decode(await file.slice(0, 5).arrayBuffer());
-        if (signature !== '%PDF-') throw new Error(`O arquivo “${file.name}” não contém uma assinatura PDF válida.`);
+      for (const [index, file] of files.entries()) {
+        setValidationStatus(`Validando arquivo ${index + 1} de ${files.length}: ${file.name}`);
+        try {
+          if (!isPdf(file)) throw new Error('não possui extensão PDF.');
+          if (file.size === 0) throw new Error('está vazio.');
+          const signature = new TextDecoder().decode(await file.slice(0, 5).arrayBuffer());
+          if (signature !== '%PDF-') throw new Error('não contém uma assinatura PDF válida.');
+          setDrafts((current) => [...current, {
+            key: `${file.name}:${file.size}:${file.lastModified}:${nextFileKeyRef.current++}`,
+            file,
+            excluded: false,
+          }]);
+        } catch (cause) {
+          const detail = cause instanceof Error ? cause.message : 'não foi possível validar o arquivo.';
+          errors.push(`O arquivo “${file.name}” ${detail}`);
+        }
       }
-      const offset = drafts.length;
-      setDrafts((current) => [...current, ...files.map((file, index) => ({
-        key: `${file.name}:${file.size}:${file.lastModified}:${offset + index}`,
-        file,
-        excluded: false,
-      }))]);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Não foi possível validar os arquivos selecionados.');
+      setValidationErrors(errors);
+      const acceptedCount = files.length - errors.length;
+      setValidationStatus(`Validação concluída: ${acceptedCount} PDF(s) aceito(s) de ${files.length}.`);
+    } finally {
+      fileValidationInProgressRef.current = false;
+      setValidatingFiles(false);
     }
   };
 
   const preparePreview = async () => {
-    if (!classId || !rosterQuery.data || drafts.length === 0 || previewing || running) return;
+    if (!classId || !rosterQuery.data || drafts.length === 0 || previewing || validatingFiles || running) return;
     setPreviewing(true);
     setPreview(null);
     setResults(null);
@@ -274,7 +294,7 @@ export default function HistoricalPdfMigrationPanel() {
               onBlur={() => setClassPickerOpen(false)}
               onChange={(event) => { setClassSearch(event.target.value.replace(/\D/g, '')); setClassPickerOpen(true); }}
               onKeyDown={handleClassPickerKeyDown}
-              disabled={running || previewing}
+              disabled={running || previewing || validatingFiles}
               className="w-full rounded-md border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 dark:border-slate-700 dark:bg-slate-950"
               placeholder="Digite o ID interno da turma"
             />
@@ -312,15 +332,20 @@ export default function HistoricalPdfMigrationPanel() {
           <UploadCloud className="mb-2 h-7 w-7 text-teal-600" aria-hidden="true" />
           <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">Escolher arquivos PDF</span>
           <span className="mt-1 text-xs text-slate-500">PDF válido. Os arquivos permanecem no navegador até confirmar.</span>
-          <input className="sr-only" type="file" accept="application/pdf,.pdf" multiple onChange={(event) => void handleFiles(event)} disabled={!classId || !rosterQuery.data || running || previewing} />
+          <input className="sr-only" type="file" accept="application/pdf,.pdf" multiple onChange={(event) => void handleFiles(event)} disabled={!classId || !rosterQuery.data || running || previewing || validatingFiles} />
         </label>
-        {drafts.length > 0 && <div className="mt-3 flex items-center justify-between gap-3"><p className="text-sm text-slate-600 dark:text-slate-300">{drafts.length} arquivo(s) selecionado(s)</p><button type="button" onClick={() => { setDrafts([]); setPreview(null); setManualAssignments({}); setResults(null); }} disabled={running || previewing} className="rounded-md border border-slate-300 px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:opacity-50 dark:border-slate-700">Limpar arquivos</button></div>}
+        {validationStatus && <p role="status" aria-live="polite" className="mt-3 flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">{validatingFiles && <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" />}{validationStatus}</p>}
+        {validationErrors.length > 0 && <ul role="alert" className="mt-3 space-y-1 rounded-md bg-rose-50 p-3 text-sm text-rose-700 dark:bg-rose-950/30 dark:text-rose-300">{validationErrors.map((message, index) => <li key={`${index}-${message}`}>{message}</li>)}</ul>}
+        {drafts.length > 0 && <>
+          <div className="mt-3 flex items-center justify-between gap-3"><p className="text-sm text-slate-600 dark:text-slate-300">{drafts.length} arquivo(s) selecionado(s)</p><button type="button" onClick={() => { setDrafts([]); setPreview(null); setManualAssignments({}); setResults(null); setValidationStatus(''); setValidationErrors([]); }} disabled={running || previewing || validatingFiles} className="rounded-md border border-slate-300 px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:opacity-50 dark:border-slate-700">Limpar arquivos</button></div>
+          <ul aria-label="Arquivos PDF aceitos para prévia" className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-600 dark:text-slate-300">{drafts.map((draft) => <li key={draft.key} className="break-all">{draft.file.name}</li>)}</ul>
+        </>}
         {error && <p role="alert" className="mt-3 rounded-md bg-rose-50 p-3 text-sm text-rose-700 dark:bg-rose-950/30 dark:text-rose-300">{error}</p>}
       </section>
 
       {drafts.length > 0 && <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-700 dark:text-slate-200">3. Conciliar e revisar — prévia somente leitura</h2>
-        {!preview && <button type="button" onClick={() => void preparePreview()} disabled={!rosterQuery.data || previewing || running} aria-busy={previewing} className="inline-flex items-center gap-2 rounded-md bg-teal-700 px-4 py-2 text-sm font-bold text-white hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-50">{previewing ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <FileText className="h-4 w-4" aria-hidden="true" />}{previewing ? 'Gerando prévia…' : 'Gerar prévia e conciliar nomes'}</button>}
+        {!preview && <button type="button" onClick={() => void preparePreview()} disabled={!rosterQuery.data || previewing || validatingFiles || running} aria-busy={previewing} className="inline-flex items-center gap-2 rounded-md bg-teal-700 px-4 py-2 text-sm font-bold text-white hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-50">{previewing ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <FileText className="h-4 w-4" aria-hidden="true" />}{previewing ? 'Gerando prévia…' : 'Gerar prévia e conciliar nomes'}</button>}
         {preview && <>
           <div className="mb-4 grid gap-3 sm:grid-cols-3"><Summary label="Arquivos" value={String(drafts.length)} /><Summary label="Prontos para importar" value={String(importableCount)} tone={importableCount ? 'success' : 'warning'} /><Summary label="Alunos sem arquivo associado" value={String((rosterQuery.data ?? []).filter((person) => !coveredPeople.has(person.id)).length)} tone="warning" /></div>
           <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
