@@ -258,7 +258,7 @@ export function SharedDocumentsPanel({ isOpen, onClose, student, accessGrant }: 
                   if (url) window.open(url, '_blank', 'noopener');
                 }}
                 disabled={!activeEntry || (activeEntry.kind === 'photo' ? !activeEntry.signedUrl : !activeEntry.item.signedUrl)}
-                className="p-2 text-gray-400 hover:text-[#005f5f] dark:hover:text-teal-400 transition-colors bg-gray-100 dark:bg-slate-800 rounded-lg disabled:cursor-not-allowed disabled:opacity-40"
+                className="p-2 rounded-lg transition-colors enabled:bg-[#005f5f] enabled:text-white enabled:hover:bg-[#004d4d] dark:enabled:bg-teal-700 dark:enabled:hover:bg-teal-600 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400 disabled:opacity-50 dark:disabled:bg-slate-800 dark:disabled:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#005f5f] focus-visible:ring-offset-2 dark:focus-visible:ring-teal-400 dark:focus-visible:ring-offset-slate-900"
                 title="Abrir em nova aba"
                 aria-label="Abrir documento em nova aba"
               >
@@ -281,7 +281,7 @@ export function SharedDocumentsPanel({ isOpen, onClose, student, accessGrant }: 
                   anchor.remove();
                 }}
                 disabled={!activeEntry || (activeEntry.kind === 'photo' ? !activeEntry.signedUrl : !activeEntry.item.signedUrl)}
-                className="p-2 text-gray-400 hover:text-[#005f5f] dark:hover:text-teal-400 transition-colors bg-gray-100 dark:bg-slate-800 rounded-lg disabled:cursor-not-allowed disabled:opacity-40"
+                className="p-2 rounded-lg transition-colors enabled:bg-[#005f5f] enabled:text-white enabled:hover:bg-[#004d4d] dark:enabled:bg-teal-700 dark:enabled:hover:bg-teal-600 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400 disabled:opacity-50 dark:disabled:bg-slate-800 dark:disabled:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#005f5f] focus-visible:ring-offset-2 dark:focus-visible:ring-teal-400 dark:focus-visible:ring-offset-slate-900"
                 title="Baixar"
                 aria-label="Baixar documento"
               >
