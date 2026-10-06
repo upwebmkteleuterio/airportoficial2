@@ -258,6 +258,8 @@ export interface AuditoriaLog {
   hash_sha256: string;
   /** Usuário-alvo do evento (aluno/instrutor/coordenador acessado). */
   alvo_id?: string | null;
+  /** Pessoa-alvo do evento, inclusive quando não existe perfil de login. */
+  alvo_pessoa_id?: string | null;
   documento_id?: string | null;
   documento_tipo?: string | null;
   documento_hash?: string | null;

@@ -62,6 +62,7 @@ const mapAuditRow = (row: AuditRpcRow): AuditoriaLogView => ({
   data_hora: row.data_hora,
   hash_sha256: row.hash_sha256,
   alvo_id: row.alvo_id,
+  alvo_pessoa_id: row.alvo_pessoa_id ?? null,
   documento_id: row.documento_id,
   documento_tipo: row.documento_tipo,
   documento_hash: row.documento_hash,
@@ -122,8 +123,22 @@ export const auditService = {
     if (error) throw serviceError('Não foi possível carregar os logs de auditoria', error);
 
     const rows = (data ?? []) as AuditRpcRow[];
+    const pageLogIds = rows.map((row) => row.id);
+    let personTargetByLogId = new Map<string, string | null>();
+    if (pageLogIds.length > 0) {
+      const { data: personTargets, error: personTargetError } = await supabase
+        .from('auditoria_logs')
+        .select('id, alvo_pessoa_id')
+        .in('id', pageLogIds);
+      if (personTargetError) throw serviceError('Não foi possível carregar os alvos pessoais da página de auditoria', personTargetError);
+      personTargetByLogId = new Map((personTargets ?? []).map((row) => [row.id, row.alvo_pessoa_id]));
+    }
+
     return {
-      data: rows.map(mapAuditRow),
+      data: rows.map((row) => mapAuditRow({
+        ...row,
+        alvo_pessoa_id: personTargetByLogId.get(row.id) ?? null,
+      })),
       total: rows.length > 0 ? Number(rows[0].total_count ?? 0) : 0,
     };
   },

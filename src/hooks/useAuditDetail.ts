@@ -23,6 +23,8 @@ export function useAuditDetail({ isOpen, log }: UseAuditDetailOptions) {
 
   const operatorId = log?.usuario_id || log?.operador?.legacy_id || '';
   const targetUserId = log?.alvo_id || log?.alvo?.legacy_id || '';
+  const targetPersonId = log?.alvo_pessoa_id || '';
+  const accessTargetId = targetPersonId || targetUserId;
   const documentId = log?.documento_id || log?.documento?.id || '';
 
   const operatorQuery = useQuery<Usuario | undefined>({
@@ -76,17 +78,25 @@ export function useAuditDetail({ isOpen, log }: UseAuditDetailOptions) {
   }, [accessGrant, authorizedLogId, queryClient]);
 
   const authorizeDocument = useCallback(async (grant: DocumentAccessGrant) => {
-    if (!log?.id || !targetUserId || !documentId) {
-      throw new Error('Este registro não possui um documento e usuário-alvo válidos.');
+    if (!log?.id || !accessTargetId || !documentId) {
+      throw new Error('Este registro não possui um documento e alvo válidos.');
     }
 
     setAccessError(null);
     try {
       const item = await queryClient.fetchQuery<DocumentAccessItem | null>({
-        queryKey: ['audit-document-access', log.id, targetUserId, documentId, grant.id],
+        queryKey: ['audit-document-access', log.id, accessTargetId, documentId, grant.id],
         queryFn: async () => {
           const document = await documentService.getById(documentId);
-          if (!document || document.usuario_id !== targetUserId) return null;
+          const belongsToPerson = Boolean(
+            targetPersonId && grant.target_person_id === targetPersonId && document?.pessoa_id === grant.target_person_id,
+          );
+          const expectedPersonId = targetPersonId || grant.target_person_id;
+          const belongsToLegacyUser = Boolean(
+            targetUserId && grant.target_user_id === targetUserId && document?.usuario_id === grant.target_user_id &&
+            (!expectedPersonId || !document.pessoa_id || document.pessoa_id === expectedPersonId),
+          );
+          if (!document || (!belongsToPerson && !belongsToLegacyUser)) return null;
           return documentAccessService.toItem(document);
         },
         retry: 1,
@@ -101,7 +111,7 @@ export function useAuditDetail({ isOpen, log }: UseAuditDetailOptions) {
 
       await documentAccessService.logEvent({
         action: 'DOCUMENTO_VISUALIZADO',
-        targetUserId,
+        targetUserId: accessTargetId,
         grantId: grant.id,
         documentoId: documentId,
       });
@@ -115,7 +125,7 @@ export function useAuditDetail({ isOpen, log }: UseAuditDetailOptions) {
       setAccessError(message);
       throw new Error(message);
     }
-  }, [documentId, log?.id, queryClient, targetUserId]);
+  }, [accessTargetId, documentId, log?.id, queryClient, targetPersonId, targetUserId]);
 
   const revokeAuthorization = useCallback(() => {
     clearAuthorization();
@@ -134,6 +144,8 @@ export function useAuditDetail({ isOpen, log }: UseAuditDetailOptions) {
     targetQuery,
     documentQuery,
     targetUserId,
+    targetPersonId,
+    accessTargetId,
     documentId,
     accessGrant: isAuthorizedForCurrentLog ? accessGrant : null,
     documentItem: isAuthorizedForCurrentLog ? authorizedItem : null,

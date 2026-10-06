@@ -15,6 +15,7 @@ type PreviewData = {
   documents: Documento[];
 };
 type FileResult = { key: string; fileName: string; studentName: string; status: string; message: string };
+type ImportProgress = { fileName: string; index: number; total: number; stage: 'checking' | 'uploading'; percent: number | null };
 
 function classLabel(turma: HistoricalPdfClass) {
   return `Turma · ID interno ${turma.id_interno_escola}`;
@@ -41,11 +42,13 @@ export default function HistoricalPdfMigrationPanel() {
   const [preview, setPreview] = useState<PreviewData | null>(null);
   const [manualAssignments, setManualAssignments] = useState<Record<string, string>>({});
   const [previewing, setPreviewing] = useState(false);
+  const [previewStatus, setPreviewStatus] = useState('');
+  const [previewError, setPreviewError] = useState('');
   const [validatingFiles, setValidatingFiles] = useState(false);
   const [validationStatus, setValidationStatus] = useState('');
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [running, setRunning] = useState(false);
-  const [error, setError] = useState('');
+  const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
   const [results, setResults] = useState<FileResult[] | null>(null);
 
   useEffect(() => {
@@ -99,11 +102,12 @@ export default function HistoricalPdfMigrationPanel() {
     classSearchInputRef.current?.blur();
     setDrafts([]);
     setPreview(null);
+    setPreviewStatus('');
+    setPreviewError('');
     setManualAssignments({});
     setResults(null);
     setValidationStatus('');
     setValidationErrors([]);
-    setError('');
   };
 
   const handleClassPickerKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -133,9 +137,10 @@ export default function HistoricalPdfMigrationPanel() {
     setValidatingFiles(true);
     setValidationErrors([]);
     setValidationStatus(`Validando ${files.length} arquivo(s)…`);
-    setError('');
     setResults(null);
     setPreview(null);
+    setPreviewStatus('');
+    setPreviewError('');
     setManualAssignments({});
     const errors: string[] = [];
 
@@ -170,20 +175,21 @@ export default function HistoricalPdfMigrationPanel() {
     if (!classId || !rosterQuery.data || drafts.length === 0 || previewing || validatingFiles || running) return;
     setPreviewing(true);
     setPreview(null);
+    setPreviewError('');
     setResults(null);
-    setError('');
     try {
-      const [hashes, documents] = await Promise.all([
-        (async () => {
-          const fileHashes: Array<readonly [string, string]> = [];
-          for (const draft of drafts) {
-            fileHashes.push([draft.key, await hashHistoricalPdf(draft.file)]);
-          }
-          return fileHashes;
-        })(),
-        historicalPdfMigrationService.getUnifiedDocuments(classId, rosterQuery.data.map((person) => person.id)),
-      ]);
-      const matches = Object.fromEntries(drafts.map((draft) => [draft.key, matchPdfName(draft.file.name, rosterQuery.data!)])) as Record<string, MatchResult>;
+      setPreviewStatus('Carregando documentos unificados existentes da turma…');
+      const documents = await historicalPdfMigrationService.getUnifiedDocuments(classId, rosterQuery.data.map((person) => person.id));
+
+      const hashes: Array<readonly [string, string]> = [];
+      for (const [index, draft] of drafts.entries()) {
+        setPreviewStatus(`Calculando hash SHA-256 do arquivo ${index + 1} de ${drafts.length}: ${draft.file.name}`);
+        hashes.push([draft.key, await hashHistoricalPdf(draft.file)]);
+      }
+
+      setPreviewStatus('Correspondendo nomes dos arquivos ao roster da turma…');
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      const matches = Object.fromEntries(drafts.map((draft) => [draft.key, matchPdfName(draft.file.name, rosterQuery.data)])) as Record<string, MatchResult>;
       const automaticAssignments: Record<string, string | null> = {};
       const automaticCounts = new Map<string, number>();
       Object.values(matches).forEach((match) => {
@@ -201,8 +207,10 @@ export default function HistoricalPdfMigrationPanel() {
         automaticAssignments[draft.key] = person && !duplicate ? person.id : null;
       });
       setPreview({ hashes: Object.fromEntries(hashes), matches, automaticAssignments, automaticDuplicateKeys, documents });
+      setPreviewStatus('Prévia concluída.');
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Não foi possível gerar a prévia.');
+      setPreviewStatus('A prévia não pôde ser concluída.');
+      setPreviewError(cause instanceof Error ? cause.message : 'Não foi possível gerar a prévia.');
     } finally {
       setPreviewing(false);
     }
@@ -230,34 +238,42 @@ export default function HistoricalPdfMigrationPanel() {
   const executeImport = async () => {
     if (!preview || running) return;
     setRunning(true);
-    setError('');
     setResults(null);
+    setImportProgress(null);
     const fileResults: FileResult[] = [];
-    for (const draft of drafts) {
-      const state = getFileState(draft);
-      if (draft.excluded) {
-        fileResults.push({ key: draft.key, fileName: draft.file.name, studentName: '—', status: 'Ignorado', message: state.message });
-        continue;
+    try {
+      for (const [index, draft] of drafts.entries()) {
+        setImportProgress({ fileName: draft.file.name, index: index + 1, total: drafts.length, stage: 'checking', percent: null });
+        let state: ReturnType<typeof getFileState> | null = null;
+        try {
+          state = getFileState(draft);
+          if (draft.excluded) {
+            fileResults.push({ key: draft.key, fileName: draft.file.name, studentName: '—', status: 'Ignorado', message: state.message });
+            continue;
+          }
+          if (!state.person || state.blocked) {
+            fileResults.push({ key: draft.key, fileName: draft.file.name, studentName: state.person?.nome ?? 'Não associado', status: state.label, message: state.message });
+            continue;
+          }
+          const outcome = await historicalPdfMigrationService.importOne(classId, draft.file, state.person, (percent) => {
+            setImportProgress({ fileName: draft.file.name, index: index + 1, total: drafts.length, stage: 'uploading', percent });
+          });
+          fileResults.push({
+            key: draft.key,
+            fileName: draft.file.name,
+            studentName: state.person.nome,
+            status: outcome === 'importado' ? 'Importado' : outcome === 'ja_importado' ? 'Já importado' : 'Conflito',
+            message: outcome === 'importado' ? 'Documento unificado enviado e registrado.' : outcome === 'ja_importado' ? 'O mesmo hash já estava registrado para este aluno.' : 'Já existe documento unificado com outro hash; nenhum arquivo foi sobrescrito.',
+          });
+        } catch (cause) {
+          fileResults.push({ key: draft.key, fileName: draft.file.name, studentName: state?.person?.nome ?? 'Não associado', status: 'Erro', message: cause instanceof Error ? cause.message : 'Falha ao enviar ou registrar o arquivo.' });
+        }
       }
-      if (!state.person || state.blocked) {
-        fileResults.push({ key: draft.key, fileName: draft.file.name, studentName: state.person?.nome ?? 'Não associado', status: state.label, message: state.message });
-        continue;
-      }
-      try {
-        const outcome = await historicalPdfMigrationService.importOne(classId, draft.file, state.person);
-        fileResults.push({
-          key: draft.key,
-          fileName: draft.file.name,
-          studentName: state.person.nome,
-          status: outcome === 'importado' ? 'Importado' : outcome === 'ja_importado' ? 'Já importado' : 'Conflito',
-          message: outcome === 'importado' ? 'Documento unificado enviado e registrado.' : outcome === 'ja_importado' ? 'O mesmo hash já estava registrado para este aluno.' : 'Já existe documento unificado com outro hash; nenhum arquivo foi sobrescrito.',
-        });
-      } catch (cause) {
-        fileResults.push({ key: draft.key, fileName: draft.file.name, studentName: state.person.nome, status: 'Erro', message: cause instanceof Error ? cause.message : 'Falha ao enviar ou registrar o arquivo.' });
-      }
+      setResults(fileResults);
+    } finally {
+      setRunning(false);
+      setImportProgress(null);
     }
-    setResults(fileResults);
-    setRunning(false);
   };
 
   const importableCount = drafts.filter((draft) => !getFileState(draft).blocked).length;
@@ -340,11 +356,12 @@ export default function HistoricalPdfMigrationPanel() {
           <div className="mt-3 flex items-center justify-between gap-3"><p className="text-sm text-slate-600 dark:text-slate-300">{drafts.length} arquivo(s) selecionado(s)</p><button type="button" onClick={() => { setDrafts([]); setPreview(null); setManualAssignments({}); setResults(null); setValidationStatus(''); setValidationErrors([]); }} disabled={running || previewing || validatingFiles} className="rounded-md border border-slate-300 px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:opacity-50 dark:border-slate-700">Limpar arquivos</button></div>
           <ul aria-label="Arquivos PDF aceitos para prévia" className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-600 dark:text-slate-300">{drafts.map((draft) => <li key={draft.key} className="break-all">{draft.file.name}</li>)}</ul>
         </>}
-        {error && <p role="alert" className="mt-3 rounded-md bg-rose-50 p-3 text-sm text-rose-700 dark:bg-rose-950/30 dark:text-rose-300">{error}</p>}
       </section>
 
       {drafts.length > 0 && <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-700 dark:text-slate-200">3. Conciliar e revisar — prévia somente leitura</h2>
+        {previewStatus && <p role="status" aria-live="polite" className="mb-3 flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">{previewing && <LoaderCircle className="h-4 w-4 shrink-0 animate-spin" aria-hidden="true" />}{previewStatus}</p>}
+        {previewError && <p role="alert" className="mb-3 rounded-md bg-rose-50 p-3 text-sm text-rose-700 dark:bg-rose-950/30 dark:text-rose-300">{previewError}</p>}
         {!preview && <button type="button" onClick={() => void preparePreview()} disabled={!rosterQuery.data || previewing || validatingFiles || running} aria-busy={previewing} className="inline-flex items-center gap-2 rounded-md bg-teal-700 px-4 py-2 text-sm font-bold text-white hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-50">{previewing ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <FileText className="h-4 w-4" aria-hidden="true" />}{previewing ? 'Gerando prévia…' : 'Gerar prévia e conciliar nomes'}</button>}
         {preview && <>
           <div className="mb-4 grid gap-3 sm:grid-cols-3"><Summary label="Arquivos" value={String(drafts.length)} /><Summary label="Prontos para importar" value={String(importableCount)} tone={importableCount ? 'success' : 'warning'} /><Summary label="Alunos sem arquivo associado" value={String((rosterQuery.data ?? []).filter((person) => !coveredPeople.has(person.id)).length)} tone="warning" /></div>
@@ -363,6 +380,10 @@ export default function HistoricalPdfMigrationPanel() {
             </table>
           </div>
           <section aria-label="Alunos sem arquivo" className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/30"><h3 className="font-bold text-amber-900 dark:text-amber-200">Alunos da turma sem arquivo associado</h3><p className="mt-1 text-sm text-amber-800 dark:text-amber-300">{(rosterQuery.data ?? []).filter((person) => !coveredPeople.has(person.id)).map((person) => person.nome).join(', ') || 'Nenhum.'}</p></section>
+          {importProgress && <div role="status" aria-live="polite" aria-atomic="true" className="mt-4 space-y-2 rounded-lg border border-teal-200 bg-teal-50 p-3 text-sm text-teal-900 dark:border-teal-900 dark:bg-teal-950/30 dark:text-teal-100">
+            <p>Arquivo {importProgress.index} de {importProgress.total}: <strong className="break-all">{importProgress.fileName}</strong> — {importProgress.stage === 'checking' ? 'Verificando autorização, vínculo com a turma, hash e duplicidade antes do envio.' : 'Enviando para o armazenamento: ' + importProgress.percent + '%'}</p>
+            {importProgress.stage === 'uploading' && <progress className="h-2 w-full accent-teal-700" value={importProgress.percent ?? 0} max={100} aria-label="Progresso do envio do arquivo" />}
+          </div>}
           <div className="mt-4 flex flex-wrap items-center gap-3"><button type="button" onClick={() => void executeImport()} disabled={running || importableCount === 0} aria-busy={running} className="inline-flex items-center gap-2 rounded-md bg-teal-700 px-4 py-2 text-sm font-bold text-white hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-50">{running ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <CheckCircle2 className="h-4 w-4" aria-hidden="true" />}{running ? 'Enviando documentos…' : `Confirmar e importar ${importableCount} PDF(s)`}</button><p className="text-xs text-slate-500 dark:text-slate-400">A confirmação envia apenas os arquivos marcados como prontos. Ambiguidades, duplicatas e conflitos permanecem sem gravação.</p></div>
         </>}
       </section>}

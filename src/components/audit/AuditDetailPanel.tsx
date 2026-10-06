@@ -201,6 +201,8 @@ export function AuditDetailPanel({ isOpen, log, onClose }: AuditDetailPanelProps
     targetQuery,
     documentQuery,
     targetUserId,
+    targetPersonId,
+    accessTargetId,
     documentId,
     accessGrant,
     documentItem,
@@ -230,7 +232,7 @@ export function AuditDetailPanel({ isOpen, log, onClose }: AuditDetailPanelProps
   const documentDate = documentMetadata?.data_criacao || log?.data_hora;
   const resolvedDocument = documentItem?.document;
   const operatorName = displayName(operator, log?.operador, log?.usuario_id || 'Operador não identificado');
-  const targetName = displayName(target, log?.alvo, 'Alvo não informado');
+  const targetName = displayName(target, log?.alvo, targetPersonId || 'Alvo não informado');
 
   const tabs = useMemo(() => [
     { id: 'operador' as const, label: 'Operador' },
@@ -309,8 +311,8 @@ export function AuditDetailPanel({ isOpen, log, onClose }: AuditDetailPanelProps
 
           {activeTab === 'alvo' && (
             <section id="audit-detail-tab-alvo-panel" role="tabpanel" aria-labelledby="audit-detail-tab-alvo" tabIndex={0}>
-              {!targetUserId ? (
-                <EmptyState icon={<User className="h-5 w-5" />} message="Este registro não possui um usuário-alvo." />
+              {!targetUserId && !targetPersonId ? (
+                <EmptyState icon={<User className="h-5 w-5" />} message="Este registro não possui um alvo." />
               ) : (
                 <>
                   <div className="mb-5 flex items-center gap-3">
@@ -319,18 +321,25 @@ export function AuditDetailPanel({ isOpen, log, onClose }: AuditDetailPanelProps
                     </div>
                     <div>
                       <h3 className="font-bold text-slate-900 dark:text-white">{targetName}</h3>
-                      <p className="text-xs text-gray-500 dark:text-slate-400">Usuário acessado no registro</p>
+                      <p className="text-xs text-gray-500 dark:text-slate-400">{targetUserId ? 'Usuário acessado no registro' : 'Pessoa acessada no registro'}</p>
                     </div>
                   </div>
                   {targetQuery.isLoading && <LoadingState label="Carregando dados do alvo..." />}
                   {targetQuery.isError && <ErrorState message="Não foi possível carregar os dados completos do alvo." />}
                   {!targetQuery.isLoading && !targetQuery.isError && (
-                    <UserDetails
-                      user={target}
-                      summary={log.alvo}
-                      logId={log.alvo_id || log.alvo?.legacy_id || 'Não identificado'}
-                      logField="ID do alvo no log"
-                    />
+                    <>
+                      <UserDetails
+                        user={target}
+                        summary={log.alvo}
+                        logId={log.alvo_id || log.alvo?.legacy_id || 'Não identificado'}
+                        logField="ID do alvo no log"
+                      />
+                      {targetPersonId && (
+                        <dl className="mt-3 grid gap-3 sm:grid-cols-2">
+                          <InfoRow label="ID da pessoa-alvo" value={targetPersonId} />
+                        </dl>
+                      )}
+                    </>
                   )}
                 </>
               )}
@@ -368,8 +377,8 @@ export function AuditDetailPanel({ isOpen, log, onClose }: AuditDetailPanelProps
                     </dl>
                   )}
 
-                  {!targetUserId ? (
-                    <EmptyState icon={<Lock className="h-5 w-5" />} message="Não é possível solicitar este documento sem um usuário-alvo." />
+                  {!accessTargetId ? (
+                    <EmptyState icon={<Lock className="h-5 w-5" />} message="Não é possível solicitar este documento sem um alvo válido." />
                   ) : documentItem ? (
                     <DocumentPreview document={resolvedDocument ?? documentMetadata} url={documentItem.signedUrl} error={previewError} onError={handlePreviewError} />
                   ) : (
@@ -403,7 +412,7 @@ export function AuditDetailPanel({ isOpen, log, onClose }: AuditDetailPanelProps
         isOpen={passwordModalOpen}
         onClose={() => setPasswordModalOpen(false)}
         onConfirm={authorizeDocument}
-        targetUserId={targetUserId}
+        targetUserId={accessTargetId}
         title="Autorizar documento da auditoria"
         description="Confirme sua senha para liberar somente o documento deste registro. O acesso será registrado no servidor."
       />
@@ -460,6 +469,17 @@ function DocumentPreview({ document, url, error, onError }: DocumentPreviewProps
     return (
       <div className="overflow-hidden rounded-xl border border-gray-200 dark:border-slate-800">
         <iframe src={url} title={`Prévia de ${document.arquivo_nome}`} onError={onError} className="h-[52vh] w-full bg-white" />
+        <div className="border-t border-gray-200 p-3 dark:border-slate-800">
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 rounded-lg bg-[#005f5f] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#004d4d] focus:outline-none focus:ring-2 focus:ring-teal-500"
+          >
+            Abrir PDF em nova aba
+            <ExternalLink className="h-4 w-4" />
+          </a>
+        </div>
       </div>
     );
   }

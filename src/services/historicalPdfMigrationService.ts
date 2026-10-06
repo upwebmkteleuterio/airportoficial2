@@ -125,7 +125,7 @@ export const historicalPdfMigrationService = {
     return (data ?? []) as Documento[];
   },
 
-  importOne: async (turmaId: string, file: File, person: HistoricalPdfRosterPerson): Promise<'importado' | 'ja_importado' | 'conflito'> => {
+  importOne: async (turmaId: string, file: File, person: HistoricalPdfRosterPerson, onProgress?: (progress: number) => void): Promise<'importado' | 'ja_importado' | 'conflito'> => {
     await assertCanMigrateHistoricalPdfs();
     await assertPeopleBelongToClass(turmaId, [person.id]);
     const hash = await hashHistoricalPdf(file);
@@ -136,6 +136,7 @@ export const historicalPdfMigrationService = {
     await documentService.uploadFile({
       file,
       pessoa_id: person.id,
+      onProgress,
       usuario_id: null,
       tipo_documento: UNIFIED_DOCUMENT_TYPE,
       status: DocumentStatus.APROVADO,
