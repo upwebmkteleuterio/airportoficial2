@@ -116,9 +116,9 @@ async function hashHistoricalPdf(file: File) {
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
-export function historicalPdfDocumentGroupId(personId: string, relativePath: string) {
+export function historicalPdfDocumentGroupId(turmaId: string, personId: string, relativePath: string) {
   const normalizedPath = relativePath.normalize('NFC').replace(/\\/g, '/').toLocaleLowerCase('pt-BR');
-  return `historico-pdf:${personId}:${encodeURIComponent(normalizedPath)}`;
+  return `historico-pdf:${turmaId}:${personId}:${encodeURIComponent(normalizedPath)}`;
 }
 
 async function assertPeopleBelongToClass(turmaId: string, personIds: string[]) {
@@ -135,13 +135,14 @@ async function assertPeopleBelongToClass(turmaId: string, personIds: string[]) {
   }
 }
 
-async function getUnifiedDocumentsForValidatedPeople(personIds: string[]): Promise<Documento[]> {
+async function getUnifiedDocumentsForValidatedPeople(personIds: string[], turmaId: string): Promise<Documento[]> {
   if (personIds.length === 0) return [];
   const { data, error } = await supabase
     .from('documentos')
     .select('*')
     .in('pessoa_id', personIds)
-    .eq('tipo_documento', UNIFIED_DOCUMENT_TYPE);
+    .eq('tipo_documento', UNIFIED_DOCUMENT_TYPE)
+    .eq('turma_id', turmaId);
   if (error) throw serviceError('Não foi possível verificar documentos unificados já registrados', error);
   return (data ?? []) as Documento[];
 }
@@ -206,12 +207,34 @@ export const historicalPdfMigrationService = {
     await assertCanMigrateHistoricalPdfs();
     const selectedPersonIds = [...new Set(entries.map((entry) => entry.person.id))];
     await assertPeopleBelongToClass(turmaId, selectedPersonIds);
-    const documents = await getUnifiedDocumentsForValidatedPeople(selectedPersonIds);
+    const documents = await getUnifiedDocumentsForValidatedPeople(selectedPersonIds, turmaId);
+    const { data: documentsAcrossClasses, error: reuseQueryError } = await supabase
+      .from('documentos')
+      .select('pessoa_id, hash_sha256, url_armazenamento, storage_area')
+      .in('pessoa_id', selectedPersonIds)
+      .eq('tipo_documento', UNIFIED_DOCUMENT_TYPE)
+      .not('turma_id', 'is', null)
+      .not('url_armazenamento', 'is', null)
+      .not('storage_area', 'is', null);
+    if (reuseQueryError) throw serviceError('Não foi possível localizar arquivos armazenados em outras turmas', reuseQueryError);
+
     const documentIndex = new Map<string, Array<Pick<Documento, 'hash_sha256' | 'grupo_documento_id'>>>();
     documents.forEach((document) => {
       const existing = documentIndex.get(document.pessoa_id) ?? [];
       existing.push(document);
       documentIndex.set(document.pessoa_id, existing);
+    });
+    const reusableStorage = new Map<string, { url_armazenamento: string; storage_area: 'temporarios' | 'oficiais' }>();
+    (documentsAcrossClasses ?? []).forEach((document) => {
+      if (!document.pessoa_id || !document.hash_sha256 || !document.url_armazenamento) return;
+      if (document.storage_area !== 'temporarios' && document.storage_area !== 'oficiais') return;
+      const key = `${document.pessoa_id}:${document.hash_sha256}`;
+      if (!reusableStorage.has(key)) {
+        reusableStorage.set(key, {
+          url_armazenamento: document.url_armazenamento,
+          storage_area: document.storage_area,
+        });
+      }
     });
 
     const results: HistoricalPdfImportResult[] = [];
@@ -221,32 +244,50 @@ export const historicalPdfMigrationService = {
         const hash = await hashHistoricalPdf(entry.file);
         const personDocuments = documentIndex.get(entry.person.id) ?? [];
         if (personDocuments.some((document) => document.hash_sha256 === hash)) {
-          results.push({ key: entry.key, fileName: entry.relativePath, studentName: entry.person.nome, status: 'Já importado', message: 'O mesmo hash já está registrado para este aluno; o arquivo foi ignorado.' });
+          results.push({ key: entry.key, fileName: entry.relativePath, studentName: entry.person.nome, status: 'Já importado', message: 'O mesmo arquivo já está registrado para este aluno nesta turma; o registro foi ignorado.' });
           continue;
         }
-        const groupId = historicalPdfDocumentGroupId(entry.person.id, entry.relativePath);
+        const groupId = historicalPdfDocumentGroupId(turmaId, entry.person.id, entry.relativePath);
         if (personDocuments.some((document) => document.grupo_documento_id === groupId)) {
           results.push({ key: entry.key, fileName: entry.relativePath, studentName: entry.person.nome, status: 'Conflito', message: 'Este subcaminho já possui um documento diferente. O arquivo não foi sobrescrito nem versionado.' });
           continue;
         }
         onProgress?.(entry, index + 1, entries.length, 'uploading', null);
-        await documentService.uploadFile({
-          file: entry.file,
-          hash_sha256: hash,
+        const sharedMetadata = {
           pessoa_id: entry.person.id,
-          onProgress: (percent) => onProgress?.(entry, index + 1, entries.length, 'uploading', percent),
           usuario_id: null,
+          turma_id: turmaId,
           tipo_documento: UNIFIED_DOCUMENT_TYPE,
+          hash_sha256: hash,
+          arquivo_nome: entry.file.name,
           status: DocumentStatus.APROVADO,
-          origem_cadastro: 'migracao',
-          metodo_verificacao: 'nao_aplicavel',
-          storage_area: 'oficiais',
+          origem_cadastro: 'migracao' as const,
+          metodo_verificacao: 'nao_aplicavel' as const,
           grupo_documento_id: groupId,
           versao: 1,
           esta_atual: true,
-        });
+        };
+        const reusable = reusableStorage.get(`${entry.person.id}:${hash}`);
+        const createdDocument = reusable
+          ? await documentService.create({
+            ...sharedMetadata,
+            url_armazenamento: reusable.url_armazenamento,
+            storage_area: reusable.storage_area,
+          })
+          : await documentService.uploadFile({
+            file: entry.file,
+            ...sharedMetadata,
+            onProgress: (percent) => onProgress?.(entry, index + 1, entries.length, 'uploading', percent),
+            storage_area: 'oficiais',
+          });
         personDocuments.push({ hash_sha256: hash, grupo_documento_id: groupId });
         documentIndex.set(entry.person.id, personDocuments);
+        if (createdDocument.url_armazenamento && (createdDocument.storage_area === 'temporarios' || createdDocument.storage_area === 'oficiais')) {
+          reusableStorage.set(`${entry.person.id}:${hash}`, {
+            url_armazenamento: createdDocument.url_armazenamento,
+            storage_area: createdDocument.storage_area,
+          });
+        }
         results.push({ key: entry.key, fileName: entry.relativePath, studentName: entry.person.nome, status: 'Importado', message: 'Documento unificado enviado e registrado.' });
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : '';

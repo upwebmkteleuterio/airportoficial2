@@ -223,6 +223,8 @@ export interface Documento {
   pessoa_id?: string | null;
   /** Legado: permanece para leitura e compatibilidade com documentos antigos. */
   usuario_id?: string | null;
+  /** Turma à qual o documento pertence; nulo para documentos não vinculados a turma. */
+  turma_id?: string | null;
   tipo_documento: string;
   url_armazenamento?: string;
   arquivo_nome: string;

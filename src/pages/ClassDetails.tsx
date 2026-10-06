@@ -2122,6 +2122,7 @@ Equipe Airport`;
         onClose={() => setPasswordModalOpen(false)}
         onConfirm={handlePasswordConfirm}
         targetUserId={selectedStudentForDocs?.id || ''}
+        turmaId={selectedClassId}
       />
       <SharedDocumentsPanel
         isOpen={documentsPanelOpen}
@@ -2132,6 +2133,8 @@ Equipe Airport`;
         }}
         student={selectedStudentForDocs}
         accessGrant={accessGrant}
+        turmaId={selectedClassId}
+        baseZIndex={110}
       />
 
       {/* --- MODAL CENTRAL ADICIONAR ALUNO --- */}

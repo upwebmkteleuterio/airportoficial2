@@ -1,0 +1,1 @@
+ALTER TABLE public.documentos ADD CONSTRAINT documentos_turma_id_fkey FOREIGN KEY (turma_id) REFERENCES public.turmas(id) ON DELETE CASCADE;

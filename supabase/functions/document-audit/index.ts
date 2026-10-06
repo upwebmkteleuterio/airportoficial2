@@ -90,7 +90,7 @@ Deno.serve(async (req) => {
 
     const { data: grant, error: grantError } = await adminClient
       .from("document_access_grants")
-      .select("id, operator_id, target_person_id, target_user_id, expires_at")
+      .select("id, operator_id, target_person_id, target_user_id, turma_id, expires_at")
       .eq("id", grantId)
       .maybeSingle();
     if (grantError || !grant) return response({ error: "Autorização de acesso não encontrada" }, 403);
@@ -102,15 +102,16 @@ Deno.serve(async (req) => {
     }
     if (new Date(grant.expires_at).getTime() <= Date.now()) return response({ error: "Autorização de acesso expirada" }, 403);
 
-    let documentRow: { id: string; pessoa_id: string | null; usuario_id: string | null; tipo_documento: string; hash_sha256: string; versao: number; arquivo_nome: string } | null = null;
+    let documentRow: { id: string; pessoa_id: string | null; usuario_id: string | null; turma_id: string | null; tipo_documento: string; hash_sha256: string; versao: number; arquivo_nome: string } | null = null;
     if (documentActions.has(action)) {
       const { data: fetchedDocument, error: documentError } = await adminClient
         .from("documentos")
-        .select("id, pessoa_id, usuario_id, tipo_documento, hash_sha256, versao, arquivo_nome")
+        .select("id, pessoa_id, usuario_id, turma_id, tipo_documento, hash_sha256, versao, arquivo_nome")
         .eq("id", documentoId)
         .maybeSingle();
       if (documentError || !fetchedDocument) return response({ error: "Documento não encontrado" }, 404);
       if (fetchedDocument.pessoa_id !== targetPersonId && fetchedDocument.usuario_id !== targetProfileLegacyId) return response({ error: "Documento não pertence ao usuário-alvo" }, 403);
+      if (grant.turma_id && fetchedDocument.turma_id !== grant.turma_id) return response({ error: "Documento não pertence à turma autorizada" }, 403);
       documentRow = fetchedDocument;
     }
 

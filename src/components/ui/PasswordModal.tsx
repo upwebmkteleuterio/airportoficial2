@@ -8,6 +8,7 @@ interface PasswordModalProps {
   onClose: () => void;
   onConfirm: (grant: DocumentAccessGrant) => void | Promise<void>;
   targetUserId: string;
+  turmaId?: string | null;
   title?: string;
   description?: string;
 }
@@ -17,6 +18,7 @@ export function PasswordModal({
   onClose,
   onConfirm,
   targetUserId,
+  turmaId,
   title = "Confirmação de Acesso",
   description = "Para visualizar este documento, confirme sua senha. O acesso será registrado."
 }: PasswordModalProps) {
@@ -39,7 +41,7 @@ export function PasswordModal({
     setError(null);
 
     try {
-      const grant = await documentAccessService.openAccess(targetUserId, password);
+      const grant = await documentAccessService.openAccess(targetUserId, password, turmaId);
       await onConfirm(grant);
       setPassword('');
       onClose();

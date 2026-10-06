@@ -1,0 +1,1 @@
+CREATE INDEX document_access_grants_turma_idx ON public.document_access_grants (operator_id, target_person_id, turma_id, expires_at);

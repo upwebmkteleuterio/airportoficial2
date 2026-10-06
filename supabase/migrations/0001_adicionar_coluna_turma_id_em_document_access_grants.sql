@@ -1,0 +1,1 @@
+ALTER TABLE public.document_access_grants ADD COLUMN turma_id text;

@@ -13,6 +13,9 @@ interface SharedDocumentsPanelProps {
   onClose: () => void;
   student: DocumentPerson | null;
   accessGrant?: DocumentAccessGrant | null;
+  turmaId?: string | null;
+  contextLabel?: string;
+  baseZIndex?: number;
 }
 
 type PanelEntry =
@@ -40,7 +43,7 @@ function downloadUrl(signedUrl: string, fileName: string) {
   return `${signedUrl}${separator}download=${encodeURIComponent(fileName)}`;
 }
 
-export function SharedDocumentsPanel({ isOpen, onClose, student, accessGrant }: SharedDocumentsPanelProps) {
+export function SharedDocumentsPanel({ isOpen, onClose, student, accessGrant, turmaId, contextLabel, baseZIndex = 50 }: SharedDocumentsPanelProps) {
   const [activeDocId, setActiveDocId] = useState<string | null>(null);
   const [avatarUrl, setAvatarUrl] = useState('');
 
@@ -48,8 +51,8 @@ export function SharedDocumentsPanel({ isOpen, onClose, student, accessGrant }: 
   const grantId = accessGrant?.id ?? '';
 
   const documentsQuery = useQuery({
-    queryKey: ['document-access', targetUserId, grantId],
-    queryFn: () => documentAccessService.getCurrentItemsByPersonId(targetUserId, student?.profile_legacy_id ?? targetUserId),
+    queryKey: ['document-access', targetUserId, grantId, turmaId],
+    queryFn: () => documentAccessService.getCurrentItemsByPersonId(targetUserId, student?.profile_legacy_id ?? targetUserId, turmaId),
     enabled: isOpen && Boolean(targetUserId) && Boolean(grantId),
     retry: 1,
   });
@@ -85,10 +88,10 @@ export function SharedDocumentsPanel({ isOpen, onClose, student, accessGrant }: 
   useEffect(() => {
     if (!isOpen || !student || !accessGrant) return;
     documentAccessService
-      .logEvent({ action: 'PASTA_ABERTA', targetUserId: student.id, grantId: accessGrant.id })
+      .logEvent({ action: 'PASTA_ABERTA', targetUserId: student.id, grantId: accessGrant.id, turmaId })
       .catch((error) => console.error('Não foi possível registrar a auditoria documental', error));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, student?.id, accessGrant?.id]);
+  }, [isOpen, student?.id, accessGrant?.id, turmaId]);
 
   const entries: PanelEntry[] = [];
 
@@ -114,7 +117,7 @@ export function SharedDocumentsPanel({ isOpen, onClose, student, accessGrant }: 
     if (!isOpen || !student || !accessGrant || !activeEntryId || !activeEntry) return;
     if (activeEntry.kind === 'photo') {
       documentAccessService
-        .logEvent({ action: 'FOTO_VISUALIZADA', targetUserId: student.id, grantId: accessGrant.id })
+        .logEvent({ action: 'FOTO_VISUALIZADA', targetUserId: student.id, grantId: accessGrant.id, turmaId })
         .catch((error) => console.error('Não foi possível registrar a auditoria documental', error));
     } else {
       documentAccessService
@@ -123,16 +126,17 @@ export function SharedDocumentsPanel({ isOpen, onClose, student, accessGrant }: 
           targetUserId: student.id,
           grantId: accessGrant.id,
           documentoId: activeEntry.item.document.id,
+          turmaId,
         })
         .catch((error) => console.error('Não foi possível registrar a auditoria documental', error));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, student?.id, accessGrant?.id, activeEntryId]);
+  }, [isOpen, student?.id, accessGrant?.id, activeEntryId, turmaId]);
 
   const logDocumentEvent = (action: DocumentAuditAction, documentoId?: string) => {
     if (!student || !accessGrant) return;
     documentAccessService
-      .logEvent({ action, targetUserId: student.id, grantId: accessGrant.id, documentoId })
+      .logEvent({ action, targetUserId: student.id, grantId: accessGrant.id, documentoId, turmaId })
       .catch((error) => console.error('Não foi possível registrar a auditoria documental', error));
   };
 
@@ -147,12 +151,13 @@ export function SharedDocumentsPanel({ isOpen, onClose, student, accessGrant }: 
     : null;
 
   return (
-    <SlidePanel isOpen={isOpen} onClose={onClose} maxWidth="max-w-3xl">
+    <SlidePanel isOpen={isOpen} onClose={onClose} maxWidth="max-w-3xl" baseZIndex={baseZIndex}>
       <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-800 shrink-0">
         <div>
           <h3 className="font-display text-lg font-bold text-slate-900 dark:text-white">
             Documentos: {student.nome_completo}
           </h3>
+          {contextLabel && <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-400">{contextLabel}</p>}
           {grantExpiresAt && (
             <p className="mt-1 flex items-center gap-1.5 text-xs text-gray-500 dark:text-slate-400">
               <ShieldCheck className="w-3.5 h-3.5 text-[#005f5f] dark:text-teal-400" />

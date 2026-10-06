@@ -7,11 +7,7 @@ import { Modal } from '../components/ui/Modal';
 import { StudentRegistrationModal } from '../components/StudentRegistrationModal';
 import { PersonRegistrationModal } from '../components/PersonRegistrationModal';
 import { CreateMenu } from '../components/ui/CreateMenu';
-import { FolderIcon } from '../components/ui/FolderIcon';
-import { PasswordModal } from '../components/ui/PasswordModal';
-import { SharedDocumentsPanel } from '../components/SharedDocumentsPanel';
 import { StudentDetailsPanel } from '../components/StudentDetailsPanel';
-import { DocumentAccessGrant } from '../services/documentAccessService';
 import { PaginationFooter } from '../components/ui/PaginationFooter';
 import { QueryErrorState } from '../components/ui/QueryErrorState';
 
@@ -42,10 +38,6 @@ export function Students() {
   const [selectedPersonForEdit, setSelectedPersonForEdit] = useState<StudentRow | null>(null);
   const [studentToDelete, setStudentToDelete] = useState<StudentRow | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
-  const [passwordModalOpen, setPasswordModalOpen] = useState(false);
-  const [documentsPanelOpen, setDocumentsPanelOpen] = useState(false);
-  const [selectedStudentForDocs, setSelectedStudentForDocs] = useState<StudentRow | null>(null);
-  const [accessGrant, setAccessGrant] = useState<DocumentAccessGrant | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 300;
   const { people, total, isLoading, isFetching, isError, refetch, createPerson, updatePerson, deleteUser } = useDirectoryPeople({
@@ -82,12 +74,6 @@ export function Students() {
   }, [toast]);
 
   const paginatedStudents = studentRows;
-
-  const handleOpenDocuments = (student: StudentRow) => {
-    setAccessGrant(null);
-    setSelectedStudentForDocs(student);
-    setPasswordModalOpen(true);
-  };
 
   const handleDelete = async () => {
     if (!studentToDelete) return;
@@ -161,7 +147,6 @@ export function Students() {
                     {aluno.is_directory_person && <button type="button" onClick={(event) => { event.stopPropagation(); setOpenMenuId(null); setSelectedStudentForEdit(aluno); setSelectedPersonForAccess(aluno.id); setRegistrationModalOpen(true); }} className="w-full text-left px-4 py-2 text-xs font-semibold text-teal-700 dark:text-teal-300 hover:bg-teal-50 dark:hover:bg-slate-800 flex items-center gap-2"><UserPlus className="w-4 h-4" />Dar acesso ao sistema</button>}
                     <button type="button" onClick={(event) => { event.stopPropagation(); setOpenMenuId(null); setStudentToDelete(aluno); }} className="w-full text-left px-4 py-2 text-xs font-semibold text-red-500 hover:bg-red-50 dark:hover:bg-slate-800 flex items-center gap-2"><Trash2 className="w-4 h-4" />Excluir</button>
                   </div>}
-                  <FolderIcon onClick={(event) => { event.stopPropagation(); handleOpenDocuments(aluno); }} />
                 </div></td>
                 <td className="px-5 py-2.5"><div className="font-bold text-slate-900 dark:text-white">{aluno.nome_completo}</div></td>
                 <td className="px-5 py-2.5 font-mono text-xs">{aluno.cpf || '-'}</td>
@@ -179,8 +164,6 @@ export function Students() {
       <StudentDetailsPanel isOpen={detailsPanelOpen} onClose={() => { setDetailsPanelOpen(false); setSelectedStudentForDetails(null); }} student={selectedStudentForDetails} />
       <PersonRegistrationModal contextLabel="aluno" isOpen={personRegistrationOpen} initialData={selectedPersonForEdit} requireCpf onClose={() => { setPersonRegistrationOpen(false); setSelectedPersonForEdit(null); }} onSubmit={async (input) => { if (selectedPersonForEdit) await updatePerson({ id: selectedPersonForEdit.id, updates: input }); else await createPerson({ ...input, papel: UserRole.ALUNO }); await queryClient.invalidateQueries({ queryKey: ['people'] }); setPersonRegistrationOpen(false); setSelectedPersonForEdit(null); setToast({ type: 'success', message: selectedPersonForEdit ? 'Aluno atualizado com sucesso.' : 'Aluno cadastrado com sucesso.' }); }} />
       <StudentRegistrationModal personId={selectedPersonForAccess ?? undefined} initialData={selectedStudentForEdit} isOpen={registrationModalOpen} onClose={() => { setRegistrationModalOpen(false); setSelectedStudentForEdit(null); setSelectedPersonForAccess(null); }} onSuccess={({ status }) => { setRegistrationModalOpen(false); setSelectedStudentForEdit(null); setSelectedPersonForAccess(null); setToast({ type: 'success', message: status === 'ativo' ? 'Aluno cadastrado e ativado com sucesso.' : 'Cadastro salvo. O aluno está em Aprovações Pendentes.' }); void queryClient.invalidateQueries({ queryKey: ['users'] }); void queryClient.invalidateQueries({ queryKey: ['people'] }); }} />
-      <PasswordModal isOpen={passwordModalOpen} onClose={() => setPasswordModalOpen(false)} onConfirm={(grant) => { setAccessGrant(grant); setDocumentsPanelOpen(true); }} targetUserId={selectedStudentForDocs?.id || ''} />
-      <SharedDocumentsPanel isOpen={documentsPanelOpen} onClose={() => { setDocumentsPanelOpen(false); setSelectedStudentForDocs(null); setAccessGrant(null); }} student={selectedStudentForDocs} accessGrant={accessGrant} />
       <Modal isOpen={!!studentToDelete} onClose={() => setStudentToDelete(null)}><div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-xl p-6 space-y-4 shadow-2xl font-sans text-center"><div className="mx-auto w-12 h-12 bg-rose-500/10 rounded-full flex items-center justify-center text-rose-600"><Trash2 className="w-6 h-6" /></div><h4 className="font-bold text-base text-slate-900 dark:text-white">Excluir aluno</h4><p className="text-xs text-gray-500 dark:text-slate-400">Tem certeza de que deseja excluir <strong>{studentToDelete?.nome_completo}</strong>?</p><div className="flex items-center gap-3"><button type="button" onClick={() => setStudentToDelete(null)} className="flex-1 py-2 bg-gray-100 dark:bg-slate-800 rounded-lg text-xs font-semibold">Cancelar</button><button type="button" onClick={() => void handleDelete()} className="flex-1 py-2 bg-rose-600 text-white rounded-lg text-xs font-semibold">Confirmar Exclusão</button></div></div></Modal>
       {toast && <div role="alert" className={`fixed bottom-4 right-4 z-[100] max-w-md rounded-xl border p-4 shadow-2xl ${toast.type === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-rose-200 bg-rose-50 text-rose-900'}`}>{toast.message}</div>}
     </div>

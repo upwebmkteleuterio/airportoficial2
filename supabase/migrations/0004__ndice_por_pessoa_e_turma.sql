@@ -1,0 +1,1 @@
+CREATE INDEX documentos_pessoa_turma_idx ON public.documentos (pessoa_id, turma_id);

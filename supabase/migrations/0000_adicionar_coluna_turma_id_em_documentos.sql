@@ -1,0 +1,1 @@
+ALTER TABLE public.documentos ADD COLUMN turma_id text;

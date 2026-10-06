@@ -50,6 +50,10 @@ Deno.serve(async (req) => {
     const targetId = typeof body.target_user_id === "string" ? body.target_user_id.trim() : "";
     const password = typeof body.password === "string" ? body.password : "";
     if (!targetId || !password) return json({ error: "Dados de acesso inválidos" }, 400);
+    if (body.turma_id !== undefined && body.turma_id !== null && (typeof body.turma_id !== "string" || !body.turma_id.trim())) {
+      return json({ error: "Turma inválida" }, 400);
+    }
+    const turmaId = typeof body.turma_id === "string" ? body.turma_id.trim() : null;
 
     const { data: person, error: personError } = await adminClient
       .from("pessoas")
@@ -74,6 +78,33 @@ Deno.serve(async (req) => {
     if (!targetRole || !allowedTargetRoles.has(targetRole) || person?.ativo === false) {
       return json({ error: "Usuário documental não encontrado" }, 404);
     }
+    if (turmaId) {
+      if (!targetPersonId && targetProfileLegacyId) {
+        const { data: linkedPerson, error: linkedPersonError } = await adminClient
+          .from("pessoas")
+          .select("id")
+          .eq("profile_legacy_id", targetProfileLegacyId)
+          .maybeSingle();
+        if (linkedPersonError) throw linkedPersonError;
+        targetPersonId = linkedPerson?.id ?? null;
+      }
+      const { data: turma, error: turmaError } = await adminClient
+        .from("turmas")
+        .select("id")
+        .eq("id", turmaId)
+        .maybeSingle();
+      if (turmaError) throw turmaError;
+      if (!turma) return json({ error: "Turma não encontrada" }, 404);
+      if (!targetPersonId) return json({ error: "O aluno não está matriculado nesta turma" }, 403);
+      const { data: enrollment, error: enrollmentError } = await adminClient
+        .from("matriculas")
+        .select("aluno_id")
+        .eq("aluno_id", targetPersonId)
+        .eq("turma_id", turmaId)
+        .maybeSingle();
+      if (enrollmentError) throw enrollmentError;
+      if (!enrollment) return json({ error: "O aluno não está matriculado nesta turma" }, 403);
+    }
 
     const verificationClient = createClient(supabaseUrl, anonKey, {
       auth: { autoRefreshToken: false, persistSession: false },
@@ -91,9 +122,10 @@ Deno.serve(async (req) => {
         operator_id: callerProfile.legacy_id,
         target_person_id: targetPersonId,
         target_user_id: targetProfileLegacyId,
+        turma_id: turmaId,
         expires_at: expiresAt,
       })
-      .select("id, target_person_id, target_user_id, expires_at")
+      .select("id, target_person_id, target_user_id, turma_id, expires_at")
       .single();
     if (grantError || !grant) throw grantError ?? new Error("Não foi possível criar a autorização temporária");
 

@@ -13,6 +13,7 @@ export interface DocumentAccessGrant {
   id: string;
   target_person_id: string;
   target_user_id?: string | null;
+  turma_id?: string | null;
   expires_at: string;
 }
 
@@ -28,6 +29,7 @@ export interface DocumentAuditEventInput {
   targetUserId: string;
   grantId: string;
   documentoId?: string;
+  turmaId?: string | null;
 }
 
 const documentLabels: Record<string, string> = {
@@ -66,9 +68,9 @@ async function invokeErrorMessage(error: unknown): Promise<string | null> {
 }
 
 export const documentAccessService = {
-  openAccess: async (targetUserId: string, password: string): Promise<DocumentAccessGrant> => {
+  openAccess: async (targetUserId: string, password: string, turmaId?: string | null): Promise<DocumentAccessGrant> => {
     const { data, error } = await supabase.functions.invoke('document-access', {
-      body: { target_user_id: targetUserId, password },
+      body: { target_user_id: targetUserId, password, turma_id: turmaId ?? null },
     });
     if (error) {
       const serverMessage = await invokeErrorMessage(error);
@@ -81,13 +83,14 @@ export const documentAccessService = {
 
   // Registra um evento de auditoria documental. Operador, IP, hash do documento,
   // versão e hash da auditoria são sempre derivados no servidor.
-  logEvent: async ({ action, targetUserId, grantId, documentoId }: DocumentAuditEventInput): Promise<void> => {
+  logEvent: async ({ action, targetUserId, grantId, documentoId, turmaId }: DocumentAuditEventInput): Promise<void> => {
     const { error } = await supabase.functions.invoke('document-audit', {
       body: {
         acao: action,
         alvo_id: targetUserId,
         grant_id: grantId,
         documento_id: documentoId ?? null,
+        turma_id: turmaId ?? null,
       },
     });
     if (error) {
@@ -96,8 +99,8 @@ export const documentAccessService = {
     }
   },
 
-  getCurrentByPersonId: async (personId: string, profileLegacyId?: string | null): Promise<Documento[]> => {
-    const documents = await documentService.getByPersonId(personId, profileLegacyId);
+  getCurrentByPersonId: async (personId: string, profileLegacyId?: string | null, turmaId?: string | null): Promise<Documento[]> => {
+    const documents = await documentService.getByPersonId(personId, profileLegacyId, turmaId);
     const currentByGroup = new Map<string, Documento>();
 
     documents
@@ -126,8 +129,8 @@ export const documentAccessService = {
     signedUrl: await documentAccessService.createSignedUrl(document, expiresIn),
   }),
 
-  getCurrentItemsByPersonId: async (personId: string, profileLegacyId?: string | null, expiresIn = 300): Promise<DocumentAccessItem[]> => {
-    const documents = await documentAccessService.getCurrentByPersonId(personId, profileLegacyId);
+  getCurrentItemsByPersonId: async (personId: string, profileLegacyId?: string | null, turmaId?: string | null, expiresIn = 300): Promise<DocumentAccessItem[]> => {
+    const documents = await documentAccessService.getCurrentByPersonId(personId, profileLegacyId, turmaId);
     return Promise.all(documents.map((document) => documentAccessService.toItem(document, expiresIn)));
   },
 
@@ -136,6 +139,6 @@ export const documentAccessService = {
   },
 
   getCurrentItemsByUserId: async (userId: string, expiresIn = 300): Promise<DocumentAccessItem[]> => {
-    return documentAccessService.getCurrentItemsByPersonId(userId, userId, expiresIn);
+    return documentAccessService.getCurrentItemsByPersonId(userId, userId, null, expiresIn);
   },
 };

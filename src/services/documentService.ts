@@ -80,12 +80,19 @@ export const documentService = {
     return (data ?? []) as Documento[];
   },
 
-  getByPersonId: async (personId: string, profileLegacyId?: string | null): Promise<Documento[]> => {
-    const personQuery = supabase.from('documentos').select('*').eq('pessoa_id', personId);
-    const legacyQuery = profileLegacyId
+  getByPersonId: async (personId: string, profileLegacyId?: string | null, turmaId?: string | null): Promise<Documento[]> => {
+    let personQuery = supabase.from('documentos').select('*').eq('pessoa_id', personId);
+    let legacyQuery = profileLegacyId
       ? supabase.from('documentos').select('*').eq('usuario_id', profileLegacyId)
-      : Promise.resolve({ data: [], error: null });
-    const [{ data: personDocuments, error: personError }, { data: legacyDocuments, error: legacyError }] = await Promise.all([personQuery, legacyQuery]);
+      : null;
+    if (turmaId !== undefined && turmaId !== null) {
+      personQuery = personQuery.eq('turma_id', turmaId);
+      if (legacyQuery) legacyQuery = legacyQuery.eq('turma_id', turmaId);
+    }
+    const [{ data: personDocuments, error: personError }, { data: legacyDocuments, error: legacyError }] = await Promise.all([
+      personQuery,
+      legacyQuery ?? Promise.resolve({ data: [], error: null }),
+    ]);
     if (personError || legacyError) throw serviceError(`Não foi possível carregar os documentos da pessoa ${personId}`, personError || legacyError);
     const documents = [...((personDocuments ?? []) as Documento[]), ...((legacyDocuments ?? []) as Documento[])];
     return Array.from(new Map(documents.map((document) => [document.id, document])).values());
@@ -153,7 +160,7 @@ export const documentService = {
     return data as Documento;
   },
 
-  uploadFile: async ({ file, pessoa_id, usuario_id, onProgress, hash_sha256, ...metadata }: UploadDocumentInput): Promise<Documento> => {
+  uploadFile: async ({ file, pessoa_id, usuario_id, turma_id, onProgress, hash_sha256, ...metadata }: UploadDocumentInput): Promise<Documento> => {
     validateUploadType(file);
     const documentId = newServiceId('doc');
     const storageArea = metadata.storage_area || 'temporarios';
@@ -172,6 +179,7 @@ export const documentService = {
         id: documentId,
         pessoa_id,
         usuario_id: usuario_id ?? null,
+        turma_id: turma_id ?? null,
         url_armazenamento: storagePath,
         arquivo_nome: file.name,
         hash_sha256: hash,

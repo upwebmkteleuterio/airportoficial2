@@ -1,6 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { SlidePanel } from './ui/SlidePanel';
 import { User, MapPin, X, History, ExternalLink, Calendar } from 'lucide-react';
+import { FolderIcon } from './ui/FolderIcon';
+import { PasswordModal } from './ui/PasswordModal';
+import { SharedDocumentsPanel } from './SharedDocumentsPanel';
+import { DocumentAccessGrant } from '../services/documentAccessService';
 import { useQuery } from '@tanstack/react-query';
 import { classService } from '../services/classService';
 import { useClasses } from '../hooks/useClasses';
@@ -13,7 +17,7 @@ import { AnimatedTab, AnimatedTabs } from './ui/AnimatedTabs';
 interface StudentDetailsPanelProps {
   isOpen: boolean;
   onClose: () => void;
-  student: Usuario | null;
+  student: (Usuario & { profile_legacy_id?: string | null }) | null;
 }
 
 type StudentTab = 'personal' | 'address' | 'history';
@@ -21,10 +25,23 @@ type StudentTab = 'personal' | 'address' | 'history';
 export function StudentDetailsPanel({ isOpen, onClose, student }: StudentDetailsPanelProps) {
 
   const [activeTab, setActiveTab] = useState<StudentTab>('personal');
+  const [selectedTurmaId, setSelectedTurmaId] = useState<string | null>(null);
+  const [passwordModalOpen, setPasswordModalOpen] = useState(false);
+  const [documentsPanelOpen, setDocumentsPanelOpen] = useState(false);
+  const [accessGrant, setAccessGrant] = useState<DocumentAccessGrant | null>(null);
   const { classes } = useClasses();
   const { courses } = useCourses();
   const { companies } = useCompanies();
   const { setRoute, setSelectedClassId } = useUIStore();
+
+  useEffect(() => {
+    if (!isOpen) {
+      setSelectedTurmaId(null);
+      setPasswordModalOpen(false);
+      setDocumentsPanelOpen(false);
+      setAccessGrant(null);
+    }
+  }, [isOpen]);
 
   const historyQuery = useQuery({
     queryKey: ['matriculas_aluno', student?.id],
@@ -45,12 +62,19 @@ export function StudentDetailsPanel({ isOpen, onClose, student }: StudentDetails
     onClose();
   };
 
+  const handleOpenDocuments = (turmaId: string) => {
+    setSelectedTurmaId(turmaId);
+    setAccessGrant(null);
+    setPasswordModalOpen(true);
+  };
+
   if (!student) return null;
 
   const enrollmentCompanyId = historyQuery.data?.find((matricula) => matricula.empresa_b2b_id)?.empresa_b2b_id;
   const linkedCompanyId = student.empresa_id || enrollmentCompanyId;
 
   return (
+    <>
     <SlidePanel isOpen={isOpen} onClose={onClose} maxWidth="max-w-xl" direction="right" baseZIndex={70}>
       <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-800 shrink-0">
         <h3 className="font-display text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
@@ -214,7 +238,21 @@ export function StudentDetailsPanel({ isOpen, onClose, student }: StudentDetails
                               </span>
                             </div>
                           </div>
-                          <ExternalLink className="w-4 h-4 text-gray-400 group-hover:text-teal-500" />
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              title="Ver documentos desta turma"
+                              aria-label={`Ver documentos de ${course?.nome_curso || 'esta turma'} — turma ${turma.id_interno_escola}`}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                handleOpenDocuments(turma.id);
+                              }}
+                              className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2"
+                            >
+                              <FolderIcon title="Ver documentos desta turma" />
+                            </button>
+                            <ExternalLink className="w-4 h-4 text-gray-400 group-hover:text-teal-500" />
+                          </div>
                         </div>
                         
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4 text-xs">
@@ -274,5 +312,28 @@ export function StudentDetailsPanel({ isOpen, onClose, student }: StudentDetails
 
       </div>
     </SlidePanel>
+    <PasswordModal
+      isOpen={passwordModalOpen}
+      onClose={() => setPasswordModalOpen(false)}
+      onConfirm={(grant) => {
+        setAccessGrant(grant);
+        setDocumentsPanelOpen(true);
+      }}
+      targetUserId={student.id}
+      turmaId={selectedTurmaId}
+    />
+    <SharedDocumentsPanel
+      isOpen={documentsPanelOpen}
+      onClose={() => {
+        setDocumentsPanelOpen(false);
+        setAccessGrant(null);
+      }}
+      student={student}
+      accessGrant={accessGrant}
+      turmaId={selectedTurmaId}
+      contextLabel={selectedTurmaId ? `Turma ${getCourseDetails(selectedTurmaId)?.turma.id_interno_escola ?? selectedTurmaId}` : undefined}
+      baseZIndex={110}
+    />
+    </>
   );
 }

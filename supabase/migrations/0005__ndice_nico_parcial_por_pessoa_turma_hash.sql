@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX documentos_pessoa_turma_hash_key ON public.documentos (pessoa_id, turma_id, hash_sha256) WHERE turma_id IS NOT NULL;
