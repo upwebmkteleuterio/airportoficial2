@@ -28,6 +28,30 @@ export function normalizePdfStudentName(value: string) {
     .replace(/[^a-z0-9]/g, '');
 }
 
+function significantNameTokens(value: string, stripExtension = false) {
+  const name = stripExtension ? value.replace(/\.[^.]+$/, '') : value;
+  return name
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('pt-BR')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter((token) => token.length >= 3);
+}
+
+function matchPdfNameByFirstTwoTokens(candidateName: string, roster: HistoricalPdfRosterPerson[], stripExtension = false) {
+  const tokens = significantNameTokens(candidateName, stripExtension);
+  if (tokens.length < 2) return null;
+  const matches = roster.filter((person) => {
+    const personTokens = significantNameTokens(person.nome);
+    return personTokens.length >= 2 && personTokens[0] === tokens[0] && personTokens[1] === tokens[1];
+  });
+  if (matches.length === 1) return { kind: 'first-two' as const, candidates: matches, basis: 'first-two' as const };
+  if (matches.length > 1) return { kind: 'ambiguous' as const, candidates: matches, basis: 'first-two' as const };
+  return null;
+}
+
 export function matchPdfName(fileName: string, roster: HistoricalPdfRosterPerson[]) {
   const normalizedFileName = normalizePdfStudentName(fileName);
   if (!normalizedFileName) return { kind: 'none' as const, candidates: [] as HistoricalPdfRosterPerson[] };
@@ -40,6 +64,8 @@ export function matchPdfName(fileName: string, roster: HistoricalPdfRosterPerson
     .map((entry) => entry.person);
   if (partial.length === 1) return { kind: 'partial' as const, candidates: partial };
   if (partial.length > 1) return { kind: 'ambiguous' as const, candidates: partial };
+  const firstTwo = matchPdfNameByFirstTwoTokens(fileName, roster, true);
+  if (firstTwo) return firstTwo;
   return { kind: 'none' as const, candidates: [] as HistoricalPdfRosterPerson[] };
 }
 
@@ -64,8 +90,11 @@ export function matchPdfPath(relativePath: string, roster: HistoricalPdfRosterPe
     }
     const folderName = normalizePdfStudentName(nestedFolder);
     const candidates = roster.filter((person) => normalizePdfStudentName(person.nome) === folderName);
-    const kind = candidates.length === 1 ? 'exact' : candidates.length > 1 ? 'ambiguous' : 'none';
-    return { kind, candidates, source: 'folder' as const, pending: false };
+    if (candidates.length === 1) return { kind: 'exact' as const, candidates, source: 'folder' as const, pending: false };
+    if (candidates.length > 1) return { kind: 'ambiguous' as const, candidates, source: 'folder' as const, pending: false };
+    const firstTwo = matchPdfNameByFirstTwoTokens(nestedFolder, roster);
+    if (firstTwo) return { ...firstTwo, source: 'folder' as const, pending: false };
+    return { kind: 'none' as const, candidates: [] as HistoricalPdfRosterPerson[], source: 'folder' as const, pending: false };
   }
   return { ...matchPdfName(segments[0] ?? '', roster), source: 'filename' as const, pending: false };
 }
@@ -166,7 +195,7 @@ export const historicalPdfMigrationService = {
       .select('id, nome')
       .in('id', personIds);
     if (peopleError) throw serviceError('Não foi possível carregar o roster da turma', peopleError);
-    return (people ?? []) as HistoricalPdfRosterPerson[];
+    return ((people ?? []) as HistoricalPdfRosterPerson[]).sort((first, second) => first.nome.localeCompare(second.nome, 'pt-BR'));
   },
 
   importBatch: async (

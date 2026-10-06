@@ -187,7 +187,7 @@ export default function HistoricalPdfMigrationPanel() {
       const automaticAssignments: Record<string, string | null> = {};
       batch.files.forEach((draft) => {
         const match = matches[draft.key];
-        const person = !match.pending && (match.kind === 'exact' || match.kind === 'partial') ? match.candidates[0] : undefined;
+        const person = !match.pending && (match.kind === 'exact' || match.kind === 'partial' || match.kind === 'first-two') ? match.candidates[0] : undefined;
         automaticAssignments[draft.key] = person?.id ?? null;
       });
       updateBatch(batch.turma.id, (current) => ({
@@ -395,13 +395,17 @@ export default function HistoricalPdfMigrationPanel() {
       {batches.filter((batch) => batch.preview || batch.previewError || batch.files.length > 0).map((batch) => {
         const coveredPeople = new Set(batch.files.filter((draft) => !draft.excluded).map((draft) => assignedPerson(batch, draft)).filter((id): id is string => Boolean(id)));
         const readyCount = importableCount(batch);
-        const filesByPerson = new Map<string, DraftFile[]>();
+        let filesByPerson = new Map<string, DraftFile[]>();
         const unassignedFiles: DraftFile[] = [];
         batch.files.forEach((draft) => {
           const personId = draft.excluded ? null : assignedPerson(batch, draft);
           if (!personId) unassignedFiles.push(draft);
           else filesByPerson.set(personId, [...(filesByPerson.get(personId) ?? []), draft]);
         });
+        filesByPerson = new Map(batch.roster.flatMap((person) => {
+          const files = filesByPerson.get(person.id);
+          return files ? [[person.id, files] as [string, DraftFile[]]] : [];
+        }));
         const importedCount = batch.results?.filter((result) => result.status === 'Importado').length ?? 0;
         const failedCount = batch.results?.filter((result) => ['Erro', 'Conflito', 'Mais de um PDF para o aluno', 'PDF duplicado', 'Correspondência ambígua', 'Sem correspondência'].includes(result.status)).length ?? 0;
         return <section key={batch.turma.id} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -419,7 +423,7 @@ export default function HistoricalPdfMigrationPanel() {
                 <tbody>{batch.files.map((draft) => {
                   const match = batch.preview!.matches[draft.key];
                   const state = getFileState(batch, draft);
-                  const matchLabel = match.pending ? 'PENDENCIA — associação manual' : match.source === 'folder' ? `Pasta: ${match.kind === 'exact' ? 'nome exato' : match.kind === 'partial' ? 'prefixo inequívoco' : match.kind === 'ambiguous' ? 'ambígua' : 'sem correspondência'}` : match.kind === 'exact' ? 'Nome exato do arquivo' : match.kind === 'partial' ? 'Prefixo inequívoco do arquivo' : match.kind === 'ambiguous' ? 'Ambíguo — vários candidatos' : 'Sem correspondência';
+                  const matchLabel = match.pending ? 'PENDENCIA — associação manual' : 'basis' in match && match.basis === 'first-two' ? match.source === 'folder' ? 'Pasta: primeiros dois nomes' : 'Primeiros dois nomes' : match.source === 'folder' ? `Pasta: ${match.kind === 'exact' ? 'nome exato' : match.kind === 'partial' ? 'prefixo inequívoco' : match.kind === 'ambiguous' ? 'ambígua' : 'sem correspondência'}` : match.kind === 'exact' ? 'Nome exato do arquivo' : match.kind === 'partial' ? 'Prefixo inequívoco do arquivo' : match.kind === 'ambiguous' ? 'Ambíguo — vários candidatos' : 'Sem correspondência';
                   const assigned = assignedPerson(batch, draft) ?? '';
                   return <tr key={draft.key} className="border-t border-slate-200 align-top dark:border-slate-800"><td className="max-w-xs break-all px-3 py-3"><strong className="flex items-center gap-1"><FileText className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />{draft.path}</strong></td><td className="px-3 py-3"><strong>{matchLabel}</strong>{match.candidates.length > 0 && <ul className="mt-1 list-disc pl-4 text-slate-500">{match.candidates.map((person) => <li key={person.id}>{person.nome} · {person.id}</li>)}</ul>}</td><td className="px-3 py-3"><label className="sr-only" htmlFor={`student-${draft.key}`}>Associar {draft.path} ao aluno de {classLabel(batch.turma)}</label><select id={`student-${draft.key}`} value={assigned} onChange={(event) => updateBatch(batch.turma.id, (current) => ({ ...current, manualAssignments: { ...current.manualAssignments, [draft.key]: event.target.value } }))} disabled={draft.excluded || running} className="max-w-xs rounded border border-slate-300 bg-white px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-950"><option value="">Não associar — selecionar aluno</option>{batch.roster.map((person) => <option key={person.id} value={person.id}>{person.nome} · {person.id}</option>)}</select></td><td className="max-w-xs px-3 py-3"><strong className={state.blocked ? 'text-amber-700 dark:text-amber-300' : 'text-emerald-700 dark:text-emerald-300'}>{state.label}</strong><p className="mt-1 whitespace-normal">{state.message}</p></td><td className="px-3 py-3"><label className="inline-flex items-center gap-2"><input type="checkbox" checked={!draft.excluded} onChange={(event) => updateBatch(batch.turma.id, (current) => ({ ...current, files: current.files.map((item) => item.key === draft.key ? { ...item, excluded: !event.target.checked } : item) }))} disabled={running} className="h-4 w-4 rounded border-slate-300 text-teal-700 focus:ring-teal-500" /><span>{draft.excluded ? 'Fora' : 'Sim'}</span></label></td></tr>;
                 })}</tbody>
