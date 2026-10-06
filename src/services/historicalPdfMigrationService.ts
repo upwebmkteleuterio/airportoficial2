@@ -41,9 +41,41 @@ export function matchPdfName(fileName: string, roster: HistoricalPdfRosterPerson
   return { kind: 'none' as const, candidates: [] as HistoricalPdfRosterPerson[] };
 }
 
+function isPendingPdfFolder(folderName: string) {
+  const normalizedFolder = folderName
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .trim()
+    .toLocaleLowerCase('pt-BR');
+  return /^pendencia(?:[\s_-]*\d+)?$/.test(normalizedFolder);
+}
+
+export function matchPdfPath(relativePath: string, roster: HistoricalPdfRosterPerson[], selectedRootName?: string) {
+  const segments = relativePath.split('/').filter(Boolean);
+  if (selectedRootName && isPendingPdfFolder(selectedRootName)) {
+    return { ...matchPdfName('', roster), source: 'pending' as const, pending: true };
+  }
+  const nestedFolder = segments.length > 1 ? segments[0] : null;
+  if (nestedFolder) {
+    if (isPendingPdfFolder(nestedFolder)) {
+      return { ...matchPdfName('', roster), source: 'pending' as const, pending: true };
+    }
+    const folderName = normalizePdfStudentName(nestedFolder);
+    const candidates = roster.filter((person) => normalizePdfStudentName(person.nome) === folderName);
+    const kind = candidates.length === 1 ? 'exact' : candidates.length > 1 ? 'ambiguous' : 'none';
+    return { kind, candidates, source: 'folder' as const, pending: false };
+  }
+  return { ...matchPdfName(segments[0] ?? '', roster), source: 'filename' as const, pending: false };
+}
+
 export async function hashHistoricalPdf(file: File) {
   const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+export function historicalPdfDocumentGroupId(personId: string, relativePath: string) {
+  const normalizedPath = relativePath.normalize('NFC').replace(/\\/g, '/').toLocaleLowerCase('pt-BR');
+  return `historico-pdf:${personId}:${encodeURIComponent(normalizedPath)}`;
 }
 
 async function assertPeopleBelongToClass(turmaId: string, personIds: string[]) {
@@ -125,13 +157,14 @@ export const historicalPdfMigrationService = {
     return (data ?? []) as Documento[];
   },
 
-  importOne: async (turmaId: string, file: File, person: HistoricalPdfRosterPerson, onProgress?: (progress: number) => void): Promise<'importado' | 'ja_importado' | 'conflito'> => {
+  importOne: async (turmaId: string, file: File, person: HistoricalPdfRosterPerson, relativePath: string, onProgress?: (progress: number) => void): Promise<'importado' | 'ja_importado' | 'conflito'> => {
     await assertCanMigrateHistoricalPdfs();
     await assertPeopleBelongToClass(turmaId, [person.id]);
     const hash = await hashHistoricalPdf(file);
     const existing = await historicalPdfMigrationService.getUnifiedDocuments(turmaId, [person.id]);
     if (existing.some((document) => document.hash_sha256 === hash)) return 'ja_importado';
-    if (existing.length > 0) return 'conflito';
+    const groupId = historicalPdfDocumentGroupId(person.id, relativePath);
+    if (existing.some((document) => document.grupo_documento_id === groupId)) return 'conflito';
 
     await documentService.uploadFile({
       file,
@@ -143,7 +176,7 @@ export const historicalPdfMigrationService = {
       origem_cadastro: 'migracao',
       metodo_verificacao: 'nao_aplicavel',
       storage_area: 'oficiais',
-      grupo_documento_id: `${person.id}:${UNIFIED_DOCUMENT_TYPE}`,
+      grupo_documento_id: groupId,
       versao: 1,
       esta_atual: true,
     });

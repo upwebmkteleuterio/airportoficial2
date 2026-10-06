@@ -1,17 +1,16 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { CheckCircle2, FileText, LoaderCircle, Search, UploadCloud, X } from 'lucide-react';
-import { historicalPdfMigrationService, hashHistoricalPdf, matchPdfName, type HistoricalPdfClass, type HistoricalPdfRosterPerson } from '../services/historicalPdfMigrationService';
+import { historicalPdfDocumentGroupId, historicalPdfMigrationService, hashHistoricalPdf, matchPdfPath, type HistoricalPdfClass, type HistoricalPdfRosterPerson } from '../services/historicalPdfMigrationService';
 import type { Documento, UserRole } from '../types';
 import { useUIStore } from '../store/uiStore';
 
 type DraftFile = { key: string; file: File; path: string; excluded: boolean };
-type MatchResult = ReturnType<typeof matchPdfName>;
+type PathMatch = ReturnType<typeof matchPdfPath>;
 type PreviewData = {
   hashes: Record<string, string>;
-  matches: Record<string, MatchResult>;
+  matches: Record<string, PathMatch>;
   automaticAssignments: Record<string, string | null>;
-  automaticDuplicateKeys: Record<string, boolean>;
   documents: Documento[];
 };
 type FileResult = { key: string; fileName: string; studentName: string; status: string; message: string };
@@ -152,7 +151,8 @@ export default function HistoricalPdfMigrationPanel() {
     const errors: string[] = [];
     try {
       for (const [index, file] of files.entries()) {
-        const path = (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name;
+        const selectedPath = (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name;
+        const path = selectedPath.includes('/') ? selectedPath.split('/').slice(1).join('/') : selectedPath;
         updateBatch(turmaId, (batch) => ({ ...batch, validationStatus: `Validando entrada ${index + 1} de ${files.length}: ${path}` }));
         if (!isPdf(file)) {
           errors.push(`Ignorado: “${path}” não possui extensão PDF.`);
@@ -191,26 +191,16 @@ export default function HistoricalPdfMigrationPanel() {
       }
       updateBatch(batch.turma.id, (current) => ({ ...current, previewStatus: 'Correspondendo nomes dos arquivos somente ao roster desta turma…' }));
       await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
-      const matches = Object.fromEntries(batch.files.map((draft) => [draft.key, matchPdfName(draft.file.name, batch.roster)])) as Record<string, MatchResult>;
+      const matches = Object.fromEntries(batch.files.map((draft) => [draft.key, matchPdfPath(draft.path, batch.roster, batch.folderName)])) as Record<string, PathMatch>;
       const automaticAssignments: Record<string, string | null> = {};
-      const automaticCounts = new Map<string, number>();
-      Object.values(matches).forEach((match) => {
-        if ((match.kind === 'exact' || match.kind === 'partial') && match.candidates[0]) {
-          const personId = match.candidates[0].id;
-          automaticCounts.set(personId, (automaticCounts.get(personId) ?? 0) + 1);
-        }
-      });
-      const automaticDuplicateKeys: Record<string, boolean> = {};
       batch.files.forEach((draft) => {
         const match = matches[draft.key];
-        const person = (match.kind === 'exact' || match.kind === 'partial') ? match.candidates[0] : undefined;
-        const duplicate = Boolean(person && (automaticCounts.get(person.id) ?? 0) > 1);
-        automaticDuplicateKeys[draft.key] = duplicate;
-        automaticAssignments[draft.key] = person && !duplicate ? person.id : null;
+        const person = !match.pending && (match.kind === 'exact' || match.kind === 'partial') ? match.candidates[0] : undefined;
+        automaticAssignments[draft.key] = person?.id ?? null;
       });
       updateBatch(batch.turma.id, (current) => ({
         ...current,
-        preview: { hashes: Object.fromEntries(hashes), matches, automaticAssignments, automaticDuplicateKeys, documents },
+        preview: { hashes: Object.fromEntries(hashes), matches, automaticAssignments, documents },
         previewStatus: 'Prévia concluída. Nenhum arquivo foi enviado.',
       }));
     } catch (cause) {
@@ -227,7 +217,11 @@ export default function HistoricalPdfMigrationPanel() {
     const counts = new Map<string, number>();
     batch.files.filter((draft) => !draft.excluded).forEach((draft) => {
       const personId = assignedPerson(batch, draft);
-      if (personId) counts.set(personId, (counts.get(personId) ?? 0) + 1);
+      const hash = batch.preview?.hashes[draft.key];
+      if (personId && hash) {
+        const key = `${personId}:${hash}`;
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+      }
     });
     return counts;
   };
@@ -237,17 +231,18 @@ export default function HistoricalPdfMigrationPanel() {
     const personId = assignedPerson(batch, draft);
     const match = batch.preview?.matches[draft.key];
     if (!personId) {
-      if (batch.preview?.automaticDuplicateKeys[draft.key]) return { label: 'Mais de um PDF para o aluno', message: 'Vários PDFs correspondem automaticamente ao mesmo aluno. Associe manualmente um arquivo e deixe os demais de fora.', person: null, blocked: true };
+      if (match?.pending) return { label: 'PENDENCIA — revisão manual', message: 'Arquivos desta pasta nunca são associados automaticamente. Escolha um aluno desta turma ou exclua o arquivo.', person: null, blocked: true };
       const ambiguity = match?.kind === 'ambiguous';
       return { label: ambiguity ? 'Correspondência ambígua' : 'Sem correspondência', message: ambiguity ? 'Escolha explicitamente um aluno desta turma ou exclua este arquivo.' : 'Selecione explicitamente um aluno desta turma ou exclua este arquivo.', person: null, blocked: true };
     }
     const person = batch.roster.find((candidate) => candidate.id === personId) ?? null;
     if (!person) return { label: 'Aluno inválido', message: 'O aluno escolhido não pertence ao roster desta turma.', person: null, blocked: true };
-    if ((collisionCounts.get(personId) ?? 0) > 1) return { label: 'Mais de um PDF para o aluno', message: 'Há vários PDFs associados a este aluno. Desassocie ou exclua arquivos até restar apenas um.', person, blocked: true };
-    const existing = batch.preview?.documents.filter((document) => document.pessoa_id === personId) ?? [];
     const hash = batch.preview?.hashes[draft.key];
+    if (hash && (collisionCounts.get(`${personId}:${hash}`) ?? 0) > 1) return { label: 'PDF duplicado', message: 'Outro arquivo associado a este aluno possui o mesmo hash; os arquivos idênticos serão ignorados.', person, blocked: true };
+    const existing = batch.preview?.documents.filter((document) => document.pessoa_id === personId) ?? [];
     if (hash && existing.some((document) => document.hash_sha256 === hash)) return { label: 'Já importado', message: 'O mesmo hash já está registrado para este aluno; o arquivo será ignorado.', person, blocked: true };
-    if (existing.length > 0) return { label: 'Conflito', message: 'Este aluno já possui documento unificado com outro hash. Não será sobrescrito nem versionado.', person, blocked: true };
+    const groupId = historicalPdfDocumentGroupId(personId, draft.path);
+    if (existing.some((document) => document.grupo_documento_id === groupId)) return { label: 'Conflito', message: 'Este subcaminho já possui um documento diferente. O arquivo não será sobrescrito nem versionado.', person, blocked: true };
     return { label: 'Pronto para importar', message: 'Correspondência revisada. Nenhuma gravação foi feita nesta prévia.', person, blocked: false };
   };
 
@@ -275,7 +270,7 @@ export default function HistoricalPdfMigrationPanel() {
           fileResults.push({ key: draft.key, fileName: draft.path, studentName: state.person?.nome ?? 'Não associado', status: state.label, message: state.message });
           continue;
         }
-        const outcome = await historicalPdfMigrationService.importOne(batch.turma.id, draft.file, state.person, (percent) => {
+        const outcome = await historicalPdfMigrationService.importOne(batch.turma.id, draft.file, state.person, draft.path, (percent) => {
           setImportProgress({ classId: batch.turma.id, classLabel: classLabel(batch.turma), fileName: draft.path, index: index + 1, total: batch.files.length, stage: 'uploading', percent });
         });
         fileResults.push({
@@ -283,7 +278,7 @@ export default function HistoricalPdfMigrationPanel() {
           fileName: draft.path,
           studentName: state.person.nome,
           status: outcome === 'importado' ? 'Importado' : outcome === 'ja_importado' ? 'Já importado' : 'Conflito',
-          message: outcome === 'importado' ? 'Documento unificado enviado e registrado.' : outcome === 'ja_importado' ? 'O mesmo hash já estava registrado para este aluno.' : 'Já existe documento unificado com outro hash; nenhum arquivo foi sobrescrito.',
+          message: outcome === 'importado' ? 'Documento unificado enviado e registrado.' : outcome === 'ja_importado' ? 'O mesmo hash já estava registrado para este aluno.' : 'Este subcaminho já contém outro documento; nenhum arquivo foi sobrescrito ou versionado.',
         });
       } catch (cause) {
         fileResults.push({ key: draft.key, fileName: draft.path, studentName: state?.person?.nome ?? 'Não associado', status: 'Erro', message: cause instanceof Error ? cause.message : 'Falha ao enviar ou registrar o arquivo.' });
@@ -423,8 +418,15 @@ export default function HistoricalPdfMigrationPanel() {
         const collisionCounts = getCollisionCounts(batch);
         const coveredPeople = new Set(batch.files.filter((draft) => !draft.excluded).map((draft) => assignedPerson(batch, draft)).filter((id): id is string => Boolean(id)));
         const readyCount = importableCount(batch);
+        const filesByPerson = new Map<string, DraftFile[]>();
+        const unassignedFiles: DraftFile[] = [];
+        batch.files.forEach((draft) => {
+          const personId = draft.excluded ? null : assignedPerson(batch, draft);
+          if (!personId) unassignedFiles.push(draft);
+          else filesByPerson.set(personId, [...(filesByPerson.get(personId) ?? []), draft]);
+        });
         const importedCount = batch.results?.filter((result) => result.status === 'Importado').length ?? 0;
-        const failedCount = batch.results?.filter((result) => ['Erro', 'Conflito', 'Mais de um PDF para o aluno', 'Correspondência ambígua', 'Sem correspondência'].includes(result.status)).length ?? 0;
+        const failedCount = batch.results?.filter((result) => ['Erro', 'Conflito', 'Mais de um PDF para o aluno', 'PDF duplicado', 'Correspondência ambígua', 'Sem correspondência'].includes(result.status)).length ?? 0;
         return <section key={batch.turma.id} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-700 dark:text-slate-200">Prévia independente — {classLabel(batch.turma)}</h2>
           {batch.previewStatus && <p role="status" aria-live="polite" className="mb-3 flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">{preparing && !batch.preview && <LoaderCircle className="h-4 w-4 shrink-0 animate-spin" aria-hidden="true" />}{batch.previewStatus}</p>}
@@ -432,6 +434,7 @@ export default function HistoricalPdfMigrationPanel() {
           {batch.files.length > 0 && !batch.preview && <p className="mb-3 text-sm text-slate-600 dark:text-slate-300">A prévia será preparada junto com as demais turmas pela ação “Gerar prévias de todas as turmas”.</p>}
           {batch.preview && <>
             <div className="mb-4 grid gap-3 sm:grid-cols-3"><Summary label="Arquivos desta turma" value={String(batch.files.length)} /><Summary label="Prontos para importar" value={String(readyCount)} tone={readyCount ? 'success' : 'warning'} /><Summary label="Alunos sem arquivo associado" value={String(batch.roster.filter((person) => !coveredPeople.has(person.id)).length)} tone="warning" /></div>
+            <section aria-label={`Arquivos agrupados por aluno de ${classLabel(batch.turma)}`} className="mb-4 rounded-lg border border-slate-200 p-4 dark:border-slate-700"><h3 className="font-bold text-slate-800 dark:text-slate-100">Arquivos por aluno</h3><div className="mt-2 grid gap-2 sm:grid-cols-2">{Array.from(filesByPerson.entries()).map(([personId, drafts]) => { const person = batch.roster.find((candidate) => candidate.id === personId)!; return <div key={personId} className="rounded-md bg-slate-50 p-3 text-sm dark:bg-slate-950"><strong>{person.nome} · {drafts.length} PDF(s)</strong><ul className="mt-1 space-y-1 text-xs text-slate-600 dark:text-slate-300">{drafts.map((draft) => <li key={draft.key} className="break-all">{draft.path}{draft.excluded ? ' · fora do lote' : ''}</li>)}</ul></div>; })}{unassignedFiles.length > 0 && <div className="rounded-md bg-amber-50 p-3 text-sm dark:bg-amber-950/30"><strong>Sem aluno associado · {unassignedFiles.length} PDF(s)</strong><ul className="mt-1 space-y-1 text-xs">{unassignedFiles.map((draft) => <li key={draft.key} className="break-all">{draft.path}{draft.excluded ? ' · fora do lote' : ''}</li>)}</ul></div>}</div></section>
             <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
               <table className="min-w-[900px] text-left text-xs">
                 <caption className="sr-only">Conciliação de PDFs somente contra o roster de {classLabel(batch.turma)}</caption>
@@ -440,7 +443,7 @@ export default function HistoricalPdfMigrationPanel() {
                   const match = batch.preview!.matches[draft.key];
                   const state = getFileState(batch, draft, collisionCounts);
                   const hash = batch.preview!.hashes[draft.key];
-                  const matchLabel = match.kind === 'exact' ? 'Nome exato' : match.kind === 'partial' ? 'Prefixo inequívoco' : match.kind === 'ambiguous' ? 'Ambíguo — vários candidatos' : 'Sem correspondência';
+                  const matchLabel = match.pending ? 'PENDENCIA — associação manual' : match.source === 'folder' ? `Pasta: ${match.kind === 'exact' ? 'nome exato' : match.kind === 'partial' ? 'prefixo inequívoco' : match.kind === 'ambiguous' ? 'ambígua' : 'sem correspondência'}` : match.kind === 'exact' ? 'Nome exato do arquivo' : match.kind === 'partial' ? 'Prefixo inequívoco do arquivo' : match.kind === 'ambiguous' ? 'Ambíguo — vários candidatos' : 'Sem correspondência';
                   const assigned = assignedPerson(batch, draft) ?? '';
                   return <tr key={draft.key} className="border-t border-slate-200 align-top dark:border-slate-800"><td className="max-w-xs break-all px-3 py-3"><strong className="flex items-center gap-1"><FileText className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />{draft.path}</strong><code className="mt-1 block text-[10px] text-slate-500">SHA-256: {hash}</code></td><td className="px-3 py-3"><strong>{matchLabel}</strong>{match.candidates.length > 0 && <ul className="mt-1 list-disc pl-4 text-slate-500">{match.candidates.map((person) => <li key={person.id}>{person.nome} · {person.id}</li>)}</ul>}</td><td className="px-3 py-3"><label className="sr-only" htmlFor={`student-${draft.key}`}>Associar {draft.path} ao aluno de {classLabel(batch.turma)}</label><select id={`student-${draft.key}`} value={assigned} onChange={(event) => updateBatch(batch.turma.id, (current) => ({ ...current, manualAssignments: { ...current.manualAssignments, [draft.key]: event.target.value } }))} disabled={draft.excluded || running} className="max-w-xs rounded border border-slate-300 bg-white px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-950"><option value="">Não associar — selecionar aluno</option>{batch.roster.map((person) => <option key={person.id} value={person.id}>{person.nome} · {person.id}</option>)}</select></td><td className="max-w-xs px-3 py-3"><strong className={state.blocked ? 'text-amber-700 dark:text-amber-300' : 'text-emerald-700 dark:text-emerald-300'}>{state.label}</strong><p className="mt-1 whitespace-normal">{state.message}</p></td><td className="px-3 py-3"><label className="inline-flex items-center gap-2"><input type="checkbox" checked={!draft.excluded} onChange={(event) => updateBatch(batch.turma.id, (current) => ({ ...current, files: current.files.map((item) => item.key === draft.key ? { ...item, excluded: !event.target.checked } : item) }))} disabled={running} className="h-4 w-4 rounded border-slate-300 text-teal-700 focus:ring-teal-500" /><span>{draft.excluded ? 'Fora' : 'Sim'}</span></label></td></tr>;
                 })}</tbody>
