@@ -246,6 +246,7 @@ function ClassDetails() {
   const { courses } = useCourses();
   const { users } = useUsers();
   const { people: studentPeople } = usePeople({ studentOnly: true, activeOnly: true });
+  const { people: allPeople } = usePeople();
   const { companies } = useCompanies();
   const { documents, updateDocument, isLoading: isLoadingDocuments } = useDocuments();
   const directoryStudents = useMemo(() => studentPeople.map((person) => {
@@ -294,8 +295,9 @@ function ClassDetails() {
 
   const handleOpenDocuments = (student: any) => {
     if (isInstructor) return;
+    const person = allPeople.find((candidate) => candidate.id === student.id || candidate.profile_legacy_id === student.id);
     setAccessGrant(null);
-    setSelectedStudentForDocs(student);
+    setSelectedStudentForDocs(person ? { ...student, id: person.id, profile_legacy_id: person.profile_legacy_id } : student);
     setPasswordModalOpen(true);
   };
 

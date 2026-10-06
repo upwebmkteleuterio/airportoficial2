@@ -16,6 +16,7 @@ import {
   type MigrationRunResult,
 } from '../services/migrationService';
 import StudentMigrationPanel from '../components/StudentMigrationPanel';
+import HistoricalPdfMigrationPanel from '../components/HistoricalPdfMigrationPanel';
 
 const MAX_BATCH_SIZE = 3000;
 
@@ -383,16 +384,17 @@ function ReviewPanel({
 }
 
 export default function Migration() {
-  const [activeTab, setActiveTab] = useState<'turmas' | 'alunos'>('turmas');
+  const [activeTab, setActiveTab] = useState<'turmas' | 'alunos' | 'pdfs'>('turmas');
   return (
     <>
       <nav aria-label="Abas da migração" role="tablist" className="shrink-0 border-b border-slate-200 bg-slate-50 px-4 dark:border-slate-800 dark:bg-slate-950 md:px-8">
         <div className="mx-auto flex max-w-7xl gap-2">
           <button type="button" role="tab" onClick={() => setActiveTab('turmas')} aria-selected={activeTab === 'turmas'} className={`border-b-2 px-4 py-3 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-teal-500 ${activeTab === 'turmas' ? 'border-teal-600 text-teal-700 dark:text-teal-300' : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}>Turmas</button>
           <button type="button" role="tab" onClick={() => setActiveTab('alunos')} aria-selected={activeTab === 'alunos'} className={`border-b-2 px-4 py-3 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-teal-500 ${activeTab === 'alunos' ? 'border-teal-600 text-teal-700 dark:text-teal-300' : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}>Alunos</button>
+          <button type="button" role="tab" onClick={() => setActiveTab('pdfs')} aria-selected={activeTab === 'pdfs'} className={`border-b-2 px-4 py-3 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-teal-500 ${activeTab === 'pdfs' ? 'border-teal-600 text-teal-700 dark:text-teal-300' : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}>PDFs históricos</button>
         </div>
       </nav>
-      {activeTab === 'turmas' ? <TurmaMigration /> : <main className="flex-1 min-h-0 overflow-y-auto bg-slate-50 px-4 py-6 dark:bg-slate-950 md:px-8"><div className="mx-auto max-w-7xl"><StudentMigrationPanel /></div></main>}
+      {activeTab === 'turmas' ? <TurmaMigration /> : activeTab === 'alunos' ? <main className="flex-1 min-h-0 overflow-y-auto bg-slate-50 px-4 py-6 dark:bg-slate-950 md:px-8"><div className="mx-auto max-w-7xl"><StudentMigrationPanel /></div></main> : <main className="flex-1 min-h-0 overflow-y-auto bg-slate-50 px-4 py-6 dark:bg-slate-950 md:px-8"><div className="mx-auto max-w-7xl"><HistoricalPdfMigrationPanel /></div></main>}
     </>
   );
 }

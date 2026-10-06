@@ -38,6 +38,7 @@ const documentLabels: Record<string, string> = {
   'certificado ensino médio': 'Certificado de Ensino Médio',
   'antecedentes criminais - justiça federal': 'Antecedentes Criminais — Justiça Federal',
   'antecedentes criminais - justiça estadual': 'Antecedentes Criminais — Justiça Estadual',
+  'documento unificado': 'Documento unificado',
   'aso': 'ASO',
 };
 
