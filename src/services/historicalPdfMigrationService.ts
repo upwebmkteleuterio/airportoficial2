@@ -86,7 +86,7 @@ export const historicalPdfMigrationService = {
       .from('turmas')
       .select('id, id_interno_escola')
       .or(rangeFilters)
-      .order('id_interno_escola', { ascending: false })
+      .order('id_interno_escola', { ascending: true })
       .limit(15);
     if (error) throw serviceError('Não foi possível buscar as turmas', error);
     return (data ?? []) as HistoricalPdfClass[];
