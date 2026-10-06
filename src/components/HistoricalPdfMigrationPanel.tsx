@@ -1,17 +1,15 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { CheckCircle2, FileText, LoaderCircle, Search, UploadCloud, X } from 'lucide-react';
-import { historicalPdfDocumentGroupId, historicalPdfMigrationService, hashHistoricalPdf, matchPdfPath, type HistoricalPdfClass, type HistoricalPdfRosterPerson } from '../services/historicalPdfMigrationService';
-import type { Documento, UserRole } from '../types';
+import { historicalPdfMigrationService, matchPdfPath, type HistoricalPdfClass, type HistoricalPdfImportEntry, type HistoricalPdfRosterPerson } from '../services/historicalPdfMigrationService';
+import type { UserRole } from '../types';
 import { useUIStore } from '../store/uiStore';
 
 type DraftFile = { key: string; file: File; path: string; excluded: boolean };
 type PathMatch = ReturnType<typeof matchPdfPath>;
 type PreviewData = {
-  hashes: Record<string, string>;
   matches: Record<string, PathMatch>;
   automaticAssignments: Record<string, string | null>;
-  documents: Documento[];
 };
 type FileResult = { key: string; fileName: string; studentName: string; status: string; message: string };
 type ImportProgress = { classId: string; classLabel: string; fileName: string; index: number; total: number; stage: 'checking' | 'uploading'; percent: number | null };
@@ -146,32 +144,33 @@ export default function HistoricalPdfMigrationPanel() {
     if (files.length === 0 || validatingClassId || running || preparing) return;
     const folderName = (files[0] as File & { webkitRelativePath?: string }).webkitRelativePath?.split('/')[0] ?? 'Pasta selecionada';
     setValidatingClassId(turmaId);
-    updateBatch(turmaId, (batch) => ({ ...batch, folderName, files: [], validationStatus: `Validando ${files.length} entrada(s) da pasta…`, validationErrors: [], preview: null, previewStatus: '', previewError: '', manualAssignments: {}, results: null, importError: '' }));
+    updateBatch(turmaId, (batch) => ({ ...batch, folderName, files: [], validationStatus: `Verificando nome e tamanho de ${files.length} entrada(s)…`, validationErrors: [], preview: null, previewStatus: '', previewError: '', manualAssignments: {}, results: null, importError: '' }));
     const accepted: DraftFile[] = [];
     const errors: string[] = [];
     try {
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
       for (const [index, file] of files.entries()) {
         const selectedPath = (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name;
         const path = selectedPath.includes('/') ? selectedPath.split('/').slice(1).join('/') : selectedPath;
-        updateBatch(turmaId, (batch) => ({ ...batch, validationStatus: `Validando entrada ${index + 1} de ${files.length}: ${path}` }));
+        if ((index + 1) % 100 === 0 || index + 1 === files.length) {
+          updateBatch(turmaId, (batch) => ({ ...batch, validationStatus: `Verificando entrada ${index + 1} de ${files.length}: ${path}` }));
+          await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+        }
         if (!isPdf(file)) {
           errors.push(`Ignorado: “${path}” não possui extensão PDF.`);
           continue;
         }
-        try {
-          if (file.size === 0) throw new Error('o arquivo está vazio.');
-          const signature = new TextDecoder().decode(await file.slice(0, 5).arrayBuffer());
-          if (signature !== '%PDF-') throw new Error('o arquivo não contém uma assinatura PDF válida.');
-          accepted.push({ key: `${turmaId}:${nextFileKeyRef.current++}`, file, path, excluded: false });
-        } catch (cause) {
-          errors.push(`Rejeitado: “${path}” ${cause instanceof Error ? cause.message : 'não foi possível validar o arquivo.'}`);
+        if (file.size === 0) {
+          errors.push(`Rejeitado: “${path}” está vazio.`);
+          continue;
         }
+        accepted.push({ key: `${turmaId}:${nextFileKeyRef.current++}`, file, path, excluded: false });
       }
       updateBatch(turmaId, (batch) => ({
         ...batch,
         files: accepted,
         validationErrors: errors,
-        validationStatus: `Validação concluída: ${accepted.length} PDF(s) aceito(s) de ${files.length} entrada(s).`,
+        validationStatus: `Seleção concluída: ${accepted.length} arquivo(s) .pdf não vazio(s) de ${files.length} entrada(s). A assinatura PDF será verificada na confirmação.`,
       }));
     } finally {
       setValidatingClassId(null);
@@ -182,13 +181,6 @@ export default function HistoricalPdfMigrationPanel() {
     if (batch.files.length === 0) return;
     updateBatch(batch.turma.id, (current) => ({ ...current, preview: null, previewError: '', results: null, importError: '' }));
     try {
-      updateBatch(batch.turma.id, (current) => ({ ...current, previewStatus: 'Verificando documentos unificados existentes desta turma…' }));
-      const documents = await historicalPdfMigrationService.getUnifiedDocuments(batch.turma.id, batch.roster.map((person) => person.id));
-      const hashes: Array<readonly [string, string]> = [];
-      for (const [index, draft] of batch.files.entries()) {
-        updateBatch(batch.turma.id, (current) => ({ ...current, previewStatus: `Calculando hash SHA-256 do arquivo ${index + 1} de ${batch.files.length}: ${draft.path}` }));
-        hashes.push([draft.key, await hashHistoricalPdf(draft.file)]);
-      }
       updateBatch(batch.turma.id, (current) => ({ ...current, previewStatus: 'Correspondendo nomes dos arquivos somente ao roster desta turma…' }));
       await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
       const matches = Object.fromEntries(batch.files.map((draft) => [draft.key, matchPdfPath(draft.path, batch.roster, batch.folderName)])) as Record<string, PathMatch>;
@@ -200,11 +192,13 @@ export default function HistoricalPdfMigrationPanel() {
       });
       updateBatch(batch.turma.id, (current) => ({
         ...current,
-        preview: { hashes: Object.fromEntries(hashes), matches, automaticAssignments, documents },
+        preview: { matches, automaticAssignments },
         previewStatus: 'Prévia concluída. Nenhum arquivo foi enviado.',
       }));
+      return true;
     } catch (cause) {
       updateBatch(batch.turma.id, (current) => ({ ...current, previewStatus: 'A prévia não pôde ser concluída.', previewError: cause instanceof Error ? cause.message : 'Não foi possível gerar a prévia.' }));
+      return false;
     }
   };
 
@@ -213,20 +207,7 @@ export default function HistoricalPdfMigrationPanel() {
     return batch.preview?.automaticAssignments[draft.key] ?? null;
   };
 
-  const getCollisionCounts = (batch: ClassBatch) => {
-    const counts = new Map<string, number>();
-    batch.files.filter((draft) => !draft.excluded).forEach((draft) => {
-      const personId = assignedPerson(batch, draft);
-      const hash = batch.preview?.hashes[draft.key];
-      if (personId && hash) {
-        const key = `${personId}:${hash}`;
-        counts.set(key, (counts.get(key) ?? 0) + 1);
-      }
-    });
-    return counts;
-  };
-
-  const getFileState = (batch: ClassBatch, draft: DraftFile, collisionCounts: Map<string, number>): FileState => {
+  const getFileState = (batch: ClassBatch, draft: DraftFile): FileState => {
     if (draft.excluded) return { label: 'Fora do lote', message: 'Excluído explicitamente pelo operador.', person: null, blocked: true };
     const personId = assignedPerson(batch, draft);
     const match = batch.preview?.matches[draft.key];
@@ -237,55 +218,36 @@ export default function HistoricalPdfMigrationPanel() {
     }
     const person = batch.roster.find((candidate) => candidate.id === personId) ?? null;
     if (!person) return { label: 'Aluno inválido', message: 'O aluno escolhido não pertence ao roster desta turma.', person: null, blocked: true };
-    const hash = batch.preview?.hashes[draft.key];
-    if (hash && (collisionCounts.get(`${personId}:${hash}`) ?? 0) > 1) return { label: 'PDF duplicado', message: 'Outro arquivo associado a este aluno possui o mesmo hash; os arquivos idênticos serão ignorados.', person, blocked: true };
-    const existing = batch.preview?.documents.filter((document) => document.pessoa_id === personId) ?? [];
-    if (hash && existing.some((document) => document.hash_sha256 === hash)) return { label: 'Já importado', message: 'O mesmo hash já está registrado para este aluno; o arquivo será ignorado.', person, blocked: true };
-    const groupId = historicalPdfDocumentGroupId(personId, draft.path);
-    if (existing.some((document) => document.grupo_documento_id === groupId)) return { label: 'Conflito', message: 'Este subcaminho já possui um documento diferente. O arquivo não será sobrescrito nem versionado.', person, blocked: true };
-    return { label: 'Pronto para importar', message: 'Correspondência revisada. Nenhuma gravação foi feita nesta prévia.', person, blocked: false };
+    return { label: 'Correspondência pronta', message: 'A associação foi revisada. A assinatura PDF, o hash, as duplicidades e os conflitos serão verificados antes do envio após a confirmação.', person, blocked: false };
   };
 
   const importableCount = (batch: ClassBatch) => {
     if (!batch.preview) return 0;
-    const collisionCounts = getCollisionCounts(batch);
-    return batch.files.filter((draft) => !getFileState(batch, draft, collisionCounts).blocked).length;
+    return batch.files.filter((draft) => !getFileState(batch, draft).blocked).length;
   };
   const batchReady = (batch: ClassBatch) => Boolean(batch.preview && importableCount(batch) > 0 && !batch.results);
 
   const runOneBatch = async (batch: ClassBatch) => {
+    const entries: HistoricalPdfImportEntry[] = [];
     const fileResults: FileResult[] = [];
-    const collisionCounts = getCollisionCounts(batch);
-    updateBatch(batch.turma.id, (current) => ({ ...current, results: null, importError: '' }));
-    for (const [index, draft] of batch.files.entries()) {
-      setImportProgress({ classId: batch.turma.id, classLabel: classLabel(batch.turma), fileName: draft.path, index: index + 1, total: batch.files.length, stage: 'checking', percent: null });
-      let state: FileState | null = null;
-      try {
-        state = getFileState(batch, draft, collisionCounts);
-        if (draft.excluded) {
-          fileResults.push({ key: draft.key, fileName: draft.path, studentName: '—', status: 'Ignorado', message: state.message });
-          continue;
-        }
-        if (!state.person || state.blocked) {
-          fileResults.push({ key: draft.key, fileName: draft.path, studentName: state.person?.nome ?? 'Não associado', status: state.label, message: state.message });
-          continue;
-        }
-        const outcome = await historicalPdfMigrationService.importOne(batch.turma.id, draft.file, state.person, draft.path, (percent) => {
-          setImportProgress({ classId: batch.turma.id, classLabel: classLabel(batch.turma), fileName: draft.path, index: index + 1, total: batch.files.length, stage: 'uploading', percent });
-        });
-        fileResults.push({
-          key: draft.key,
-          fileName: draft.path,
-          studentName: state.person.nome,
-          status: outcome === 'importado' ? 'Importado' : outcome === 'ja_importado' ? 'Já importado' : 'Conflito',
-          message: outcome === 'importado' ? 'Documento unificado enviado e registrado.' : outcome === 'ja_importado' ? 'O mesmo hash já estava registrado para este aluno.' : 'Este subcaminho já contém outro documento; nenhum arquivo foi sobrescrito ou versionado.',
-        });
-      } catch (cause) {
-        fileResults.push({ key: draft.key, fileName: draft.path, studentName: state?.person?.nome ?? 'Não associado', status: 'Erro', message: cause instanceof Error ? cause.message : 'Falha ao enviar ou registrar o arquivo.' });
+    batch.files.forEach((draft) => {
+      const state = getFileState(batch, draft);
+      if (draft.excluded || state.blocked || !state.person) {
+        fileResults.push({ key: draft.key, fileName: draft.path, studentName: state.person?.nome ?? 'Não associado', status: draft.excluded ? 'Ignorado' : state.label, message: state.message });
+        return;
       }
-    }
-    updateBatch(batch.turma.id, (current) => ({ ...current, results: fileResults }));
+      entries.push({ key: draft.key, file: draft.file, person: state.person, relativePath: draft.path });
+    });
+    updateBatch(batch.turma.id, (current) => ({ ...current, results: null, importError: '' }));
+    const importedResults = await historicalPdfMigrationService.importBatch(batch.turma.id, entries, (entry, index, total, stage, percent) => {
+      setImportProgress({ classId: batch.turma.id, classLabel: classLabel(batch.turma), fileName: entry.relativePath, index, total, stage, percent });
+    });
+    fileResults.push(...importedResults);
+    const resultByKey = new Map(fileResults.map((result) => [result.key, result]));
+    const orderedResults = batch.files.map((draft) => resultByKey.get(draft.key)!).filter(Boolean);
+    updateBatch(batch.turma.id, (current) => ({ ...current, results: orderedResults }));
     setImportProgress(null);
+    return orderedResults;
   };
 
   const executeImport = async (targetBatches: ClassBatch[], all = false) => {
@@ -293,16 +255,29 @@ export default function HistoricalPdfMigrationPanel() {
     setRunning(true);
     setGlobalError('');
     setGlobalStatus(all ? `Iniciando importação sequencial de ${targetBatches.length} turma(s)…` : `Importando arquivos da ${classLabel(targetBatches[0].turma)}…`);
+    let importedCount = 0;
+    let failedClasses = 0;
+    let failedFiles = 0;
     try {
       for (const [index, batch] of targetBatches.entries()) {
         setGlobalStatus(`${all ? `Turma ${index + 1} de ${targetBatches.length}: ` : ''}Processando ${classLabel(batch.turma)}. Os arquivos são enviados sequencialmente.`);
         try {
-          await runOneBatch(batch);
+          const results = await runOneBatch(batch);
+          importedCount += results.filter((result) => result.status === 'Importado').length;
+          failedFiles += results.filter((result) => result.status === 'Erro').length;
         } catch (cause) {
+          failedClasses += 1;
           updateBatch(batch.turma.id, (current) => ({ ...current, importError: cause instanceof Error ? cause.message : 'Não foi possível concluir a importação desta turma.' }));
         }
       }
-      setGlobalStatus(all ? 'Importação sequencial concluída. Confira o resultado individual de cada turma e arquivo.' : 'Processamento concluído. Confira o resultado por arquivo.');
+      const failures = failedClasses + failedFiles;
+      if (failures > 0 && importedCount > 0) {
+        setGlobalStatus(`Importação parcial: ${importedCount} arquivo(s) importado(s), ${failedFiles} falha(s) em arquivo(s) e ${failedClasses} falha(s) de turma. Confira os resultados individuais.`);
+      } else if (failures > 0) {
+        setGlobalStatus(`Falha na importação: nenhum arquivo foi importado; ${failedFiles} falha(s) em arquivo(s) e ${failedClasses} falha(s) de turma. Confira os resultados individuais.`);
+      } else {
+        setGlobalStatus(`Importação concluída: ${importedCount} arquivo(s) importado(s). Confira os itens ignorados ou em conflito nos resultados individuais.`);
+      }
     } finally {
       setRunning(false);
       setImportProgress(null);
@@ -316,11 +291,14 @@ export default function HistoricalPdfMigrationPanel() {
     setGlobalError('');
     setGlobalStatus(`Gerando prévias independentes para ${eligible.length} turma(s)…`);
     try {
+      let failedPreviews = 0;
       for (const [index, batch] of eligible.entries()) {
-        setGlobalStatus(`Prévia ${index + 1} de ${eligible.length}: ${classLabel(batch.turma)}. Apenas roster, arquivos e documentos desta turma.`);
-        await prepareBatchPreview(batch);
+        setGlobalStatus(`Prévia ${index + 1} de ${eligible.length}: ${classLabel(batch.turma)}. Correspondência somente por caminhos e roster.`);
+        if (!await prepareBatchPreview(batch)) failedPreviews += 1;
       }
-      setGlobalStatus('Geração de prévias concluída. Revise cada turma antes de confirmar qualquer importação.');
+      setGlobalStatus(failedPreviews > 0
+        ? `Prévia parcial: ${eligible.length - failedPreviews} turma(s) concluída(s) e ${failedPreviews} falha(s). Revise os erros por turma antes de continuar.`
+        : 'Geração de prévias concluída. Revise cada turma antes de confirmar qualquer importação.');
     } finally {
       setPreparing(false);
     }
@@ -337,7 +315,7 @@ export default function HistoricalPdfMigrationPanel() {
       <header>
         <p className="text-xs font-bold uppercase tracking-[0.2em] text-teal-600 dark:text-teal-400">Importação documental controlada</p>
         <h1 className="mt-1 text-2xl font-extrabold text-slate-900 dark:text-white">Migração histórica de PDFs</h1>
-        <p className="mt-2 max-w-3xl text-sm text-slate-600 dark:text-slate-400">Adicione de uma a cinco turmas e associe uma pasta de PDFs a cada uma. Cada prévia é independente e somente leitura; os arquivos só são enviados após confirmação explícita.</p>
+        <p className="mt-2 max-w-3xl text-sm text-slate-600 dark:text-slate-400">Adicione de uma a cinco turmas e associe uma pasta de PDFs a cada uma. Cada prévia é independente e somente leitura; os arquivos só são enviados após confirmação explícita. A assinatura PDF, o hash e a verificação de duplicidade são feitos somente na confirmação, não ao selecionar a pasta.</p>
       </header>
 
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -400,22 +378,21 @@ export default function HistoricalPdfMigrationPanel() {
             <label htmlFor={`folder-${batch.turma.id}`} className="mt-4 flex min-h-24 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-slate-300 bg-slate-50 px-4 text-center transition hover:border-teal-500 focus-within:ring-2 focus-within:ring-teal-500 dark:border-slate-700 dark:bg-slate-950">
               <UploadCloud className="mb-2 h-6 w-6 text-teal-600" aria-hidden="true" />
               <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">{batch.folderName ? `Selecionar novamente a pasta “${batch.folderName}”` : 'Selecionar pasta de PDFs desta turma'}</span>
-              <span className="mt-1 text-xs text-slate-500">A pasta será vinculada somente a esta turma; subpastas são incluídas quando o navegador oferece suporte.</span>
+              <span className="mt-1 text-xs text-slate-500">A pasta será vinculada somente a esta turma; subpastas são incluídas quando o navegador oferece suporte. A assinatura PDF ainda não foi verificada.</span>
               <input id={`folder-${batch.turma.id}`} type="file" accept="application/pdf,.pdf" multiple {...({ webkitdirectory: '', directory: '' } as Record<string, string>)} className="sr-only" onChange={(event) => void handleFolder(batch.turma.id, event)} disabled={running || preparing || validatingClassId !== null} />
             </label>
             {batch.validationStatus && <p role="status" aria-live="polite" className="mt-3 flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">{validatingClassId === batch.turma.id && <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" />}{batch.validationStatus}</p>}
             {batch.validationErrors.length > 0 && <ul role="alert" className="mt-3 max-h-40 space-y-1 overflow-auto rounded-md bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">{batch.validationErrors.map((message, errorIndex) => <li key={`${errorIndex}-${message}`}>{message}</li>)}</ul>}
-            {batch.files.length > 0 && <div className="mt-3"><p className="text-sm text-slate-600 dark:text-slate-300">{batch.files.length} PDF(s) válidos mantidos na memória do navegador nesta turma:</p><ul aria-label={`PDFs aceitos da ${classLabel(batch.turma)}`} className="mt-2 max-h-48 space-y-1 overflow-auto rounded-md bg-slate-50 p-3 text-sm text-slate-600 dark:bg-slate-950 dark:text-slate-300">{batch.files.map((draft) => <li key={draft.key} className="break-all">{draft.path}</li>)}</ul></div>}
+            {batch.files.length > 0 && <div className="mt-3"><p className="text-sm text-slate-600 dark:text-slate-300">{batch.files.length} arquivo(s) .pdf não vazio(s) selecionado(s) nesta turma. A assinatura e a duplicidade serão verificadas antes do envio:</p><ul aria-label={`PDFs selecionados da ${classLabel(batch.turma)}`} className="mt-2 max-h-48 space-y-1 overflow-auto rounded-md bg-slate-50 p-3 text-sm text-slate-600 dark:bg-slate-950 dark:text-slate-300">{batch.files.map((draft) => <li key={draft.key} className="break-all">{draft.path}</li>)}</ul></div>}
           </article>)}
         </div>
-        {batchesAwaitingFiles.length > 0 && <p role="status" className="mt-4 rounded-md bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">Selecione uma pasta com ao menos um PDF válido para cada turma: {batchesAwaitingFiles.map((batch) => classLabel(batch.turma)).join('; ')}.</p>}
+        {batchesAwaitingFiles.length > 0 && <p role="status" className="mt-4 rounded-md bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">Selecione uma pasta com ao menos um arquivo .pdf não vazio para cada turma: {batchesAwaitingFiles.map((batch) => classLabel(batch.turma)).join('; ')}.</p>}
         {batches.length > 0 && <div className="mt-4 flex flex-wrap items-center gap-3"><button type="button" onClick={() => void generateAllPreviews()} disabled={preparing || running || validatingClassId !== null || batchesAwaitingFiles.length > 0 || !hasPreviewCandidates} aria-busy={preparing} className="inline-flex items-center gap-2 rounded-md bg-slate-800 px-4 py-2 text-sm font-bold text-white hover:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-700">{preparing ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <FileText className="h-4 w-4" aria-hidden="true" />}{preparing ? 'Gerando prévias…' : 'Gerar prévias de todas as turmas'}</button><p className="text-xs text-slate-500 dark:text-slate-400">{batches.length} turma(s) na fila; cada turma terá sua própria conciliação independente.</p></div>}
       </section>
 
-      {globalStatus && <p role="status" aria-live="polite" className="rounded-lg border border-teal-200 bg-teal-50 p-3 text-sm text-teal-900 dark:border-teal-900 dark:bg-teal-950/30 dark:text-teal-100">{globalStatus}</p>}
+      {globalStatus && <p role="status" aria-live="polite" className={`rounded-lg border p-3 text-sm ${globalStatus.startsWith('Prévia parcial:') || globalStatus.startsWith('Falha na importação:') || globalStatus.startsWith('Importação parcial:') ? 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100' : 'border-teal-200 bg-teal-50 text-teal-900 dark:border-teal-900 dark:bg-teal-950/30 dark:text-teal-100'}`}>{globalStatus}</p>}
 
       {batches.filter((batch) => batch.preview || batch.previewError || batch.files.length > 0).map((batch) => {
-        const collisionCounts = getCollisionCounts(batch);
         const coveredPeople = new Set(batch.files.filter((draft) => !draft.excluded).map((draft) => assignedPerson(batch, draft)).filter((id): id is string => Boolean(id)));
         const readyCount = importableCount(batch);
         const filesByPerson = new Map<string, DraftFile[]>();
@@ -438,14 +415,13 @@ export default function HistoricalPdfMigrationPanel() {
             <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
               <table className="min-w-[900px] text-left text-xs">
                 <caption className="sr-only">Conciliação de PDFs somente contra o roster de {classLabel(batch.turma)}</caption>
-                <thead className="bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"><tr><th className="px-3 py-2">Arquivo / hash SHA-256</th><th className="px-3 py-2">Correspondência desta turma</th><th className="px-3 py-2">Associar ao aluno</th><th className="px-3 py-2">Resultado previsto</th><th className="px-3 py-2">Incluir</th></tr></thead>
+                <thead className="bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"><tr><th className="px-3 py-2">Arquivo (assinatura e hash na confirmação)</th><th className="px-3 py-2">Correspondência desta turma</th><th className="px-3 py-2">Associar ao aluno</th><th className="px-3 py-2">Resultado previsto</th><th className="px-3 py-2">Incluir</th></tr></thead>
                 <tbody>{batch.files.map((draft) => {
                   const match = batch.preview!.matches[draft.key];
-                  const state = getFileState(batch, draft, collisionCounts);
-                  const hash = batch.preview!.hashes[draft.key];
+                  const state = getFileState(batch, draft);
                   const matchLabel = match.pending ? 'PENDENCIA — associação manual' : match.source === 'folder' ? `Pasta: ${match.kind === 'exact' ? 'nome exato' : match.kind === 'partial' ? 'prefixo inequívoco' : match.kind === 'ambiguous' ? 'ambígua' : 'sem correspondência'}` : match.kind === 'exact' ? 'Nome exato do arquivo' : match.kind === 'partial' ? 'Prefixo inequívoco do arquivo' : match.kind === 'ambiguous' ? 'Ambíguo — vários candidatos' : 'Sem correspondência';
                   const assigned = assignedPerson(batch, draft) ?? '';
-                  return <tr key={draft.key} className="border-t border-slate-200 align-top dark:border-slate-800"><td className="max-w-xs break-all px-3 py-3"><strong className="flex items-center gap-1"><FileText className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />{draft.path}</strong><code className="mt-1 block text-[10px] text-slate-500">SHA-256: {hash}</code></td><td className="px-3 py-3"><strong>{matchLabel}</strong>{match.candidates.length > 0 && <ul className="mt-1 list-disc pl-4 text-slate-500">{match.candidates.map((person) => <li key={person.id}>{person.nome} · {person.id}</li>)}</ul>}</td><td className="px-3 py-3"><label className="sr-only" htmlFor={`student-${draft.key}`}>Associar {draft.path} ao aluno de {classLabel(batch.turma)}</label><select id={`student-${draft.key}`} value={assigned} onChange={(event) => updateBatch(batch.turma.id, (current) => ({ ...current, manualAssignments: { ...current.manualAssignments, [draft.key]: event.target.value } }))} disabled={draft.excluded || running} className="max-w-xs rounded border border-slate-300 bg-white px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-950"><option value="">Não associar — selecionar aluno</option>{batch.roster.map((person) => <option key={person.id} value={person.id}>{person.nome} · {person.id}</option>)}</select></td><td className="max-w-xs px-3 py-3"><strong className={state.blocked ? 'text-amber-700 dark:text-amber-300' : 'text-emerald-700 dark:text-emerald-300'}>{state.label}</strong><p className="mt-1 whitespace-normal">{state.message}</p></td><td className="px-3 py-3"><label className="inline-flex items-center gap-2"><input type="checkbox" checked={!draft.excluded} onChange={(event) => updateBatch(batch.turma.id, (current) => ({ ...current, files: current.files.map((item) => item.key === draft.key ? { ...item, excluded: !event.target.checked } : item) }))} disabled={running} className="h-4 w-4 rounded border-slate-300 text-teal-700 focus:ring-teal-500" /><span>{draft.excluded ? 'Fora' : 'Sim'}</span></label></td></tr>;
+                  return <tr key={draft.key} className="border-t border-slate-200 align-top dark:border-slate-800"><td className="max-w-xs break-all px-3 py-3"><strong className="flex items-center gap-1"><FileText className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />{draft.path}</strong></td><td className="px-3 py-3"><strong>{matchLabel}</strong>{match.candidates.length > 0 && <ul className="mt-1 list-disc pl-4 text-slate-500">{match.candidates.map((person) => <li key={person.id}>{person.nome} · {person.id}</li>)}</ul>}</td><td className="px-3 py-3"><label className="sr-only" htmlFor={`student-${draft.key}`}>Associar {draft.path} ao aluno de {classLabel(batch.turma)}</label><select id={`student-${draft.key}`} value={assigned} onChange={(event) => updateBatch(batch.turma.id, (current) => ({ ...current, manualAssignments: { ...current.manualAssignments, [draft.key]: event.target.value } }))} disabled={draft.excluded || running} className="max-w-xs rounded border border-slate-300 bg-white px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-950"><option value="">Não associar — selecionar aluno</option>{batch.roster.map((person) => <option key={person.id} value={person.id}>{person.nome} · {person.id}</option>)}</select></td><td className="max-w-xs px-3 py-3"><strong className={state.blocked ? 'text-amber-700 dark:text-amber-300' : 'text-emerald-700 dark:text-emerald-300'}>{state.label}</strong><p className="mt-1 whitespace-normal">{state.message}</p></td><td className="px-3 py-3"><label className="inline-flex items-center gap-2"><input type="checkbox" checked={!draft.excluded} onChange={(event) => updateBatch(batch.turma.id, (current) => ({ ...current, files: current.files.map((item) => item.key === draft.key ? { ...item, excluded: !event.target.checked } : item) }))} disabled={running} className="h-4 w-4 rounded border-slate-300 text-teal-700 focus:ring-teal-500" /><span>{draft.excluded ? 'Fora' : 'Sim'}</span></label></td></tr>;
                 })}</tbody>
               </table>
             </div>

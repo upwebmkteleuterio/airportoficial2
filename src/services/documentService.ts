@@ -6,6 +6,7 @@ type UploadDocumentInput = Omit<Documento, 'id' | 'data_criacao' | 'url_armazena
   file: File;
   pessoa_id: string;
   usuario_id?: string | null;
+  hash_sha256?: string;
   onProgress?: (progress: number) => void;
 };
 
@@ -152,12 +153,12 @@ export const documentService = {
     return data as Documento;
   },
 
-  uploadFile: async ({ file, pessoa_id, usuario_id, onProgress, ...metadata }: UploadDocumentInput): Promise<Documento> => {
+  uploadFile: async ({ file, pessoa_id, usuario_id, onProgress, hash_sha256, ...metadata }: UploadDocumentInput): Promise<Documento> => {
     validateUploadType(file);
     const documentId = newServiceId('doc');
     const storageArea = metadata.storage_area || 'temporarios';
     const storagePath = `${pessoa_id}/${storageArea}/${documentId}-${safeFileName(file.name)}`;
-    const hash = await sha256(file);
+    const hash = hash_sha256 ?? await sha256(file);
     try {
       await uploadWithProgress(storagePath, file, onProgress);
     } catch (uploadError) {

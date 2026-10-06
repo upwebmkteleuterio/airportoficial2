@@ -7,6 +7,8 @@ export const UNIFIED_DOCUMENT_TYPE = 'Documento unificado';
 
 export type HistoricalPdfRosterPerson = Pick<Pessoa, 'id' | 'nome'>;
 export type HistoricalPdfClass = Pick<Turma, 'id' | 'id_interno_escola'>;
+export type HistoricalPdfImportEntry = { key: string; file: File; person: HistoricalPdfRosterPerson; relativePath: string };
+export type HistoricalPdfImportResult = { key: string; fileName: string; studentName: string; status: 'Importado' | 'Já importado' | 'Conflito' | 'Erro'; message: string };
 
 async function assertCanMigrateHistoricalPdfs() {
   const { data, error } = await supabase.auth.getUser();
@@ -68,8 +70,20 @@ export function matchPdfPath(relativePath: string, roster: HistoricalPdfRosterPe
   return { ...matchPdfName(segments[0] ?? '', roster), source: 'filename' as const, pending: false };
 }
 
-export async function hashHistoricalPdf(file: File) {
-  const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
+async function hashHistoricalPdf(file: File) {
+  if (file.size === 0) throw new Error('O arquivo está vazio.');
+  let bytes: ArrayBuffer;
+  try {
+    bytes = await file.arrayBuffer();
+  } catch (cause) {
+    if (cause instanceof Error && cause.name === 'NotReadableError') {
+      throw new Error('Não foi possível ler este arquivo. Verifique se ele continua disponível e tente selecioná-lo novamente.');
+    }
+    throw new Error('Não foi possível ler este arquivo. Tente selecioná-lo novamente.');
+  }
+  const signature = new Uint8Array(bytes, 0, Math.min(bytes.byteLength, 5));
+  if (new TextDecoder().decode(signature) !== '%PDF-') throw new Error('O arquivo não contém uma assinatura PDF válida.');
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
@@ -90,6 +104,17 @@ async function assertPeopleBelongToClass(turmaId: string, personIds: string[]) {
   if (personIds.some((personId) => !enrolledIds.has(personId))) {
     throw new Error('A pessoa escolhida não pertence à turma selecionada. Atualize o roster e tente novamente.');
   }
+}
+
+async function getUnifiedDocumentsForValidatedPeople(personIds: string[]): Promise<Documento[]> {
+  if (personIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from('documentos')
+    .select('*')
+    .in('pessoa_id', personIds)
+    .eq('tipo_documento', UNIFIED_DOCUMENT_TYPE);
+  if (error) throw serviceError('Não foi possível verificar documentos unificados já registrados', error);
+  return (data ?? []) as Documento[];
 }
 
 export const historicalPdfMigrationService = {
@@ -144,42 +169,62 @@ export const historicalPdfMigrationService = {
     return (people ?? []) as HistoricalPdfRosterPerson[];
   },
 
-  getUnifiedDocuments: async (turmaId: string, personIds: string[]): Promise<Documento[]> => {
+  importBatch: async (
+    turmaId: string,
+    entries: HistoricalPdfImportEntry[],
+    onProgress?: (entry: HistoricalPdfImportEntry, index: number, total: number, stage: 'checking' | 'uploading', percent: number | null) => void,
+  ): Promise<HistoricalPdfImportResult[]> => {
     await assertCanMigrateHistoricalPdfs();
-    await assertPeopleBelongToClass(turmaId, personIds);
-    if (personIds.length === 0) return [];
-    const { data, error } = await supabase
-      .from('documentos')
-      .select('*')
-      .in('pessoa_id', personIds)
-      .eq('tipo_documento', UNIFIED_DOCUMENT_TYPE);
-    if (error) throw serviceError('Não foi possível verificar documentos unificados já registrados', error);
-    return (data ?? []) as Documento[];
-  },
-
-  importOne: async (turmaId: string, file: File, person: HistoricalPdfRosterPerson, relativePath: string, onProgress?: (progress: number) => void): Promise<'importado' | 'ja_importado' | 'conflito'> => {
-    await assertCanMigrateHistoricalPdfs();
-    await assertPeopleBelongToClass(turmaId, [person.id]);
-    const hash = await hashHistoricalPdf(file);
-    const existing = await historicalPdfMigrationService.getUnifiedDocuments(turmaId, [person.id]);
-    if (existing.some((document) => document.hash_sha256 === hash)) return 'ja_importado';
-    const groupId = historicalPdfDocumentGroupId(person.id, relativePath);
-    if (existing.some((document) => document.grupo_documento_id === groupId)) return 'conflito';
-
-    await documentService.uploadFile({
-      file,
-      pessoa_id: person.id,
-      onProgress,
-      usuario_id: null,
-      tipo_documento: UNIFIED_DOCUMENT_TYPE,
-      status: DocumentStatus.APROVADO,
-      origem_cadastro: 'migracao',
-      metodo_verificacao: 'nao_aplicavel',
-      storage_area: 'oficiais',
-      grupo_documento_id: groupId,
-      versao: 1,
-      esta_atual: true,
+    const selectedPersonIds = [...new Set(entries.map((entry) => entry.person.id))];
+    await assertPeopleBelongToClass(turmaId, selectedPersonIds);
+    const documents = await getUnifiedDocumentsForValidatedPeople(selectedPersonIds);
+    const documentIndex = new Map<string, Array<Pick<Documento, 'hash_sha256' | 'grupo_documento_id'>>>();
+    documents.forEach((document) => {
+      const existing = documentIndex.get(document.pessoa_id) ?? [];
+      existing.push(document);
+      documentIndex.set(document.pessoa_id, existing);
     });
-    return 'importado';
+
+    const results: HistoricalPdfImportResult[] = [];
+    for (const [index, entry] of entries.entries()) {
+      onProgress?.(entry, index + 1, entries.length, 'checking', null);
+      try {
+        const hash = await hashHistoricalPdf(entry.file);
+        const personDocuments = documentIndex.get(entry.person.id) ?? [];
+        if (personDocuments.some((document) => document.hash_sha256 === hash)) {
+          results.push({ key: entry.key, fileName: entry.relativePath, studentName: entry.person.nome, status: 'Já importado', message: 'O mesmo hash já está registrado para este aluno; o arquivo foi ignorado.' });
+          continue;
+        }
+        const groupId = historicalPdfDocumentGroupId(entry.person.id, entry.relativePath);
+        if (personDocuments.some((document) => document.grupo_documento_id === groupId)) {
+          results.push({ key: entry.key, fileName: entry.relativePath, studentName: entry.person.nome, status: 'Conflito', message: 'Este subcaminho já possui um documento diferente. O arquivo não foi sobrescrito nem versionado.' });
+          continue;
+        }
+        onProgress?.(entry, index + 1, entries.length, 'uploading', null);
+        await documentService.uploadFile({
+          file: entry.file,
+          hash_sha256: hash,
+          pessoa_id: entry.person.id,
+          onProgress: (percent) => onProgress?.(entry, index + 1, entries.length, 'uploading', percent),
+          usuario_id: null,
+          tipo_documento: UNIFIED_DOCUMENT_TYPE,
+          status: DocumentStatus.APROVADO,
+          origem_cadastro: 'migracao',
+          metodo_verificacao: 'nao_aplicavel',
+          storage_area: 'oficiais',
+          grupo_documento_id: groupId,
+          versao: 1,
+          esta_atual: true,
+        });
+        personDocuments.push({ hash_sha256: hash, grupo_documento_id: groupId });
+        documentIndex.set(entry.person.id, personDocuments);
+        results.push({ key: entry.key, fileName: entry.relativePath, studentName: entry.person.nome, status: 'Importado', message: 'Documento unificado enviado e registrado.' });
+      } catch (cause) {
+        const message = cause instanceof Error ? cause.message : '';
+        const knownPdfError = message.startsWith('O arquivo está vazio.') || message.startsWith('Não foi possível ler este arquivo.') || message.startsWith('O arquivo não contém uma assinatura PDF válida.');
+        results.push({ key: entry.key, fileName: entry.relativePath, studentName: entry.person.nome, status: 'Erro', message: knownPdfError ? message : 'Não foi possível enviar ou registrar este arquivo. Verifique a conexão e tente novamente.' });
+      }
+    }
+    return results;
   },
 };
