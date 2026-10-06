@@ -19,7 +19,15 @@ function safeFileName(fileName: string) {
 }
 
 function validateUploadType(file: File) {
-  if (!allowedUploadTypes.has(file.type.toLowerCase())) {
+  const extension = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
+  const inferredMimeType = file.type ? file.type.toLowerCase() : {
+    '.pdf': 'application/pdf',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.png': 'image/png',
+    '.webp': 'image/webp',
+  }[extension];
+  if (!inferredMimeType || !allowedUploadTypes.has(inferredMimeType)) {
     throw new Error('Formato inválido. Envie apenas PDF, JPG, JPEG, PNG ou WEBP.');
   }
 }

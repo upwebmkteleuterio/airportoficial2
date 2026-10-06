@@ -4,6 +4,14 @@ import { documentService } from './documentService';
 import { serviceError } from './supabaseErrors';
 
 export const UNIFIED_DOCUMENT_TYPE = 'Documento unificado';
+export const MAX_HISTORICAL_FILE_BYTES = 20 * 1024 * 1024;
+
+const historicalFileKinds = {
+  pdf: { mimeType: 'application/pdf', extension: 'pdf' },
+  jpeg: { mimeType: 'image/jpeg', extension: 'jpg' },
+  png: { mimeType: 'image/png', extension: 'png' },
+  webp: { mimeType: 'image/webp', extension: 'webp' },
+} as const;
 
 export type HistoricalPdfRosterPerson = Pick<Pessoa, 'id' | 'nome'>;
 export type HistoricalPdfClass = Pick<Turma, 'id' | 'id_interno_escola'>;
@@ -15,7 +23,7 @@ async function assertCanMigrateHistoricalPdfs() {
   if (error || !data.user) throw new Error('Sessão não autenticada. Faça login novamente.');
   const { data: isPrivileged, error: privilegeError } = await supabase.rpc('is_privileged_user');
   if (privilegeError) throw serviceError('Não foi possível validar a permissão de migração', privilegeError);
-  if (isPrivileged !== true) throw new Error('A migração de PDFs está disponível somente para Gestor ou Equipe.');
+  if (isPrivileged !== true) throw new Error('A migração histórica de documentos é restrita a usuários autenticados com perfil Gestor ou Equipe.');
 }
 
 export function normalizePdfStudentName(value: string) {
@@ -99,8 +107,9 @@ export function matchPdfPath(relativePath: string, roster: HistoricalPdfRosterPe
   return { ...matchPdfName(segments[0] ?? '', roster), source: 'filename' as const, pending: false };
 }
 
-async function hashHistoricalPdf(file: File) {
+async function detectHistoricalFile(file: File) {
   if (file.size === 0) throw new Error('O arquivo está vazio.');
+  if (file.size > MAX_HISTORICAL_FILE_BYTES) throw new Error('O arquivo excede o limite de 20 MB.');
   let bytes: ArrayBuffer;
   try {
     bytes = await file.arrayBuffer();
@@ -110,10 +119,25 @@ async function hashHistoricalPdf(file: File) {
     }
     throw new Error('Não foi possível ler este arquivo. Tente selecioná-lo novamente.');
   }
-  const signature = new Uint8Array(bytes, 0, Math.min(bytes.byteLength, 5));
-  if (new TextDecoder().decode(signature) !== '%PDF-') throw new Error('O arquivo não contém uma assinatura PDF válida.');
+  const content = new Uint8Array(bytes);
+  const startsWith = (signature: number[], offset = 0) => signature.every((byte, index) => content[offset + index] === byte);
+  const isPdf = new TextDecoder().decode(content.subarray(0, 5)) === '%PDF-';
+  const kind = isPdf ? 'pdf'
+    : startsWith([0xff, 0xd8, 0xff]) ? 'jpeg'
+      : startsWith([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]) ? 'png'
+        : startsWith([0x52, 0x49, 0x46, 0x46]) && new TextDecoder().decode(content.subarray(8, 12)) === 'WEBP' ? 'webp'
+          : null;
+  if (!kind) throw new Error('O arquivo não contém uma assinatura válida de PDF, JPG, PNG ou WEBP.');
+  const detected = historicalFileKinds[kind];
+  const originalName = file.name;
+  const extensionIndex = originalName.lastIndexOf('.');
+  const baseName = extensionIndex > 0 ? originalName.slice(0, extensionIndex) : originalName;
+  const currentExtension = extensionIndex > 0 ? originalName.slice(extensionIndex + 1).toLocaleLowerCase('pt-BR') : '';
+  const extensionMatches = kind === 'jpeg' ? currentExtension === 'jpg' || currentExtension === 'jpeg' : currentExtension === detected.extension;
+  const fileName = extensionMatches && baseName ? originalName : `${baseName || 'documento'}.${detected.extension}`;
   const digest = await crypto.subtle.digest('SHA-256', bytes);
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+  const hash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+  return { hash, mimeType: detected.mimeType, fileName };
 }
 
 export function historicalPdfDocumentGroupId(turmaId: string, personId: string, relativePath: string) {
@@ -241,7 +265,8 @@ export const historicalPdfMigrationService = {
     for (const [index, entry] of entries.entries()) {
       onProgress?.(entry, index + 1, entries.length, 'checking', null);
       try {
-        const hash = await hashHistoricalPdf(entry.file);
+        const detected = await detectHistoricalFile(entry.file);
+        const { hash } = detected;
         const personDocuments = documentIndex.get(entry.person.id) ?? [];
         if (personDocuments.some((document) => document.hash_sha256 === hash)) {
           results.push({ key: entry.key, fileName: entry.relativePath, studentName: entry.person.nome, status: 'Já importado', message: 'O mesmo arquivo já está registrado para este aluno nesta turma; o registro foi ignorado.' });
@@ -259,7 +284,7 @@ export const historicalPdfMigrationService = {
           turma_id: turmaId,
           tipo_documento: UNIFIED_DOCUMENT_TYPE,
           hash_sha256: hash,
-          arquivo_nome: entry.file.name,
+          arquivo_nome: detected.fileName,
           status: DocumentStatus.APROVADO,
           origem_cadastro: 'migracao' as const,
           metodo_verificacao: 'nao_aplicavel' as const,
@@ -275,7 +300,7 @@ export const historicalPdfMigrationService = {
             storage_area: reusable.storage_area,
           })
           : await documentService.uploadFile({
-            file: entry.file,
+            file: new File([entry.file], detected.fileName, { type: detected.mimeType }),
             ...sharedMetadata,
             onProgress: (percent) => onProgress?.(entry, index + 1, entries.length, 'uploading', percent),
             storage_area: 'oficiais',
@@ -291,7 +316,7 @@ export const historicalPdfMigrationService = {
         results.push({ key: entry.key, fileName: entry.relativePath, studentName: entry.person.nome, status: 'Importado', message: 'Documento unificado enviado e registrado.' });
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : '';
-        const knownPdfError = message.startsWith('O arquivo está vazio.') || message.startsWith('Não foi possível ler este arquivo.') || message.startsWith('O arquivo não contém uma assinatura PDF válida.');
+        const knownPdfError = message.startsWith('O arquivo está vazio.') || message.startsWith('O arquivo excede o limite de ') || message.startsWith('Não foi possível ler este arquivo.') || message.startsWith('O arquivo não contém uma assinatura válida');
         results.push({ key: entry.key, fileName: entry.relativePath, studentName: entry.person.nome, status: 'Erro', message: knownPdfError ? message : 'Não foi possível enviar ou registrar este arquivo. Verifique a conexão e tente novamente.' });
       }
     }

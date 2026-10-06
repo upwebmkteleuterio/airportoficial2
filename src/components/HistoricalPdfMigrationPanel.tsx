@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { CheckCircle2, FileText, LoaderCircle, RotateCcw, Search, UploadCloud, X } from 'lucide-react';
-import { historicalPdfMigrationService, matchPdfPath, type HistoricalPdfClass, type HistoricalPdfImportEntry, type HistoricalPdfRosterPerson } from '../services/historicalPdfMigrationService';
+import { historicalPdfMigrationService, matchPdfPath, MAX_HISTORICAL_FILE_BYTES, type HistoricalPdfClass, type HistoricalPdfImportEntry, type HistoricalPdfRosterPerson } from '../services/historicalPdfMigrationService';
 import type { UserRole } from '../types';
 import { useUIStore } from '../store/uiStore';
 
@@ -35,8 +35,8 @@ function classLabel(turma: HistoricalPdfClass) {
   return `Turma · ID interno ${turma.id_interno_escola}`;
 }
 
-function isPdf(file: File) {
-  return file.name.toLocaleLowerCase('pt-BR').endsWith('.pdf');
+function hasSupportedExtension(file: File) {
+  return /\.(pdf|jpe?g|png|webp)$/i.test(file.name);
 }
 
 export default function HistoricalPdfMigrationPanel() {
@@ -156,12 +156,16 @@ export default function HistoricalPdfMigrationPanel() {
           updateBatch(turmaId, (batch) => ({ ...batch, validationStatus: `Verificando entrada ${index + 1} de ${files.length}: ${path}` }));
           await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
         }
-        if (!isPdf(file)) {
-          errors.push(`Ignorado: “${path}” não possui extensão PDF.`);
+        if (!hasSupportedExtension(file)) {
+          errors.push(`Ignorado: “${path}” não possui extensão PDF, JPG, JPEG, PNG ou WEBP.`);
           continue;
         }
         if (file.size === 0) {
           errors.push(`Rejeitado: “${path}” está vazio.`);
+          continue;
+        }
+        if (file.size > MAX_HISTORICAL_FILE_BYTES) {
+          errors.push(`Rejeitado: “${path}” excede o limite de 20 MB.`);
           continue;
         }
         accepted.push({ key: `${turmaId}:${nextFileKeyRef.current++}`, file, path, excluded: false });
@@ -170,7 +174,7 @@ export default function HistoricalPdfMigrationPanel() {
         ...batch,
         files: accepted,
         validationErrors: errors,
-        validationStatus: `Seleção concluída: ${accepted.length} arquivo(s) .pdf não vazio(s) de ${files.length} entrada(s). A assinatura PDF será verificada na confirmação.`,
+        validationStatus: `Seleção concluída: ${accepted.length} arquivo(s) não vazio(s) de ${files.length} entrada(s). A assinatura será verificada na confirmação.`,
       }));
     } finally {
       setValidatingClassId(null);
@@ -325,14 +329,14 @@ export default function HistoricalPdfMigrationPanel() {
     nextFileKeyRef.current = 0;
   };
 
-  if (!authorized) return <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200">A migração histórica de PDFs é restrita a usuários autenticados com perfil Gestor ou Equipe.</p>;
+  if (!authorized) return <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200">A migração histórica de documentos é restrita a usuários autenticados com perfil Gestor ou Equipe.</p>;
 
   return (
     <div className="space-y-6">
       <header>
         <p className="text-xs font-bold uppercase tracking-[0.2em] text-teal-600 dark:text-teal-400">Importação documental controlada</p>
-        <h1 className="mt-1 text-2xl font-extrabold text-slate-900 dark:text-white">Migração histórica de PDFs</h1>
-        <p className="mt-2 max-w-3xl text-sm text-slate-600 dark:text-slate-400">Adicione de uma a cinco turmas e associe uma pasta de PDFs a cada uma. Cada prévia é independente e somente leitura; os arquivos só são enviados após confirmação explícita. A assinatura PDF, o hash e a verificação de duplicidade são feitos somente na confirmação, não ao selecionar a pasta.</p>
+        <h1 className="mt-1 text-2xl font-extrabold text-slate-900 dark:text-white">Migração histórica de documentos</h1>
+        <p className="mt-2 max-w-3xl text-sm text-slate-600 dark:text-slate-400">Adicione de uma a cinco turmas e associe uma pasta de documentos (PDF, JPG, PNG ou WEBP) a cada uma. Cada prévia é independente e somente leitura; os arquivos só são enviados após confirmação explícita. A assinatura, o hash e a verificação de duplicidade são feitos somente na confirmação, não ao selecionar a pasta.</p>
       </header>
 
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -394,16 +398,16 @@ export default function HistoricalPdfMigrationPanel() {
             <div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-bold text-slate-900 dark:text-white">Turma {index + 1}: {classLabel(batch.turma)}</h3><p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{batch.roster.length} aluno(s) no roster desta turma.</p></div><button type="button" aria-label={`Remover ${classLabel(batch.turma)} da fila`} onClick={() => setBatches((current) => current.filter((item) => item.turma.id !== batch.turma.id))} disabled={running || preparing || validatingClassId !== null} className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:opacity-50 dark:border-slate-700"><X className="h-4 w-4" aria-hidden="true" />Remover</button></div>
             <label htmlFor={`folder-${batch.turma.id}`} className="mt-4 flex min-h-24 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-slate-300 bg-slate-50 px-4 text-center transition hover:border-teal-500 focus-within:ring-2 focus-within:ring-teal-500 dark:border-slate-700 dark:bg-slate-950">
               <UploadCloud className="mb-2 h-6 w-6 text-teal-600" aria-hidden="true" />
-              <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">{batch.folderName ? `Selecionar novamente a pasta “${batch.folderName}”` : 'Selecionar pasta de PDFs desta turma'}</span>
-              <span className="mt-1 text-xs text-slate-500">A pasta será vinculada somente a esta turma; subpastas são incluídas quando o navegador oferece suporte. A assinatura PDF ainda não foi verificada.</span>
-              <input id={`folder-${batch.turma.id}`} type="file" accept="application/pdf,.pdf" multiple {...({ webkitdirectory: '', directory: '' } as Record<string, string>)} className="sr-only" onChange={(event) => void handleFolder(batch.turma.id, event)} disabled={running || preparing || validatingClassId !== null} />
+              <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">{batch.folderName ? `Selecionar novamente a pasta “${batch.folderName}”` : 'Selecionar pasta de documentos desta turma'}</span>
+              <span className="mt-1 text-xs text-slate-500">A pasta será vinculada somente a esta turma; subpastas são incluídas quando o navegador oferece suporte. A assinatura do arquivo ainda não foi verificada.</span>
+              <input id={`folder-${batch.turma.id}`} type="file" accept="application/pdf,image/jpeg,image/png,image/webp,.pdf,.jpg,.jpeg,.png,.webp" multiple {...({ webkitdirectory: '', directory: '' } as Record<string, string>)} className="sr-only" onChange={(event) => void handleFolder(batch.turma.id, event)} disabled={running || preparing || validatingClassId !== null} />
             </label>
             {batch.validationStatus && <p role="status" aria-live="polite" className="mt-3 flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">{validatingClassId === batch.turma.id && <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" />}{batch.validationStatus}</p>}
             {batch.validationErrors.length > 0 && <ul role="alert" className="mt-3 max-h-40 space-y-1 overflow-auto rounded-md bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">{batch.validationErrors.map((message, errorIndex) => <li key={`${errorIndex}-${message}`}>{message}</li>)}</ul>}
-            {batch.files.length > 0 && <div className="mt-3"><p className="text-sm text-slate-600 dark:text-slate-300">{batch.files.length} arquivo(s) .pdf não vazio(s) selecionado(s) nesta turma. A assinatura e a duplicidade serão verificadas antes do envio:</p><ul aria-label={`PDFs selecionados da ${classLabel(batch.turma)}`} className="mt-2 max-h-48 space-y-1 overflow-auto rounded-md bg-slate-50 p-3 text-sm text-slate-600 dark:bg-slate-950 dark:text-slate-300">{batch.files.map((draft) => <li key={draft.key} className="break-all">{draft.path}</li>)}</ul></div>}
+            {batch.files.length > 0 && <div className="mt-3"><p className="text-sm text-slate-600 dark:text-slate-300">{batch.files.length} arquivo(s) (PDF ou imagem) não vazio(s) selecionado(s) nesta turma. A assinatura e a duplicidade serão verificadas antes do envio:</p><ul aria-label={`Arquivos selecionados da ${classLabel(batch.turma)}`} className="mt-2 max-h-48 space-y-1 overflow-auto rounded-md bg-slate-50 p-3 text-sm text-slate-600 dark:bg-slate-950 dark:text-slate-300">{batch.files.map((draft) => <li key={draft.key} className="break-all">{draft.path}</li>)}</ul></div>}
           </article>)}
         </div>
-        {batchesAwaitingFiles.length > 0 && <p role="status" className="mt-4 rounded-md bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">Selecione uma pasta com ao menos um arquivo .pdf não vazio para cada turma: {batchesAwaitingFiles.map((batch) => classLabel(batch.turma)).join('; ')}.</p>}
+        {batchesAwaitingFiles.length > 0 && <p role="status" className="mt-4 rounded-md bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">Selecione uma pasta com ao menos um arquivo (PDF, JPG, PNG ou WEBP) não vazio para cada turma: {batchesAwaitingFiles.map((batch) => classLabel(batch.turma)).join('; ')}.</p>}
         {batches.length > 0 && <div className="mt-4 flex flex-wrap items-center gap-3"><button type="button" onClick={() => void generateAllPreviews()} disabled={preparing || running || validatingClassId !== null || batchesAwaitingFiles.length > 0 || !hasPreviewCandidates} aria-busy={preparing} className="inline-flex items-center gap-2 rounded-md bg-slate-800 px-4 py-2 text-sm font-bold text-white hover:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-700">{preparing ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <FileText className="h-4 w-4" aria-hidden="true" />}{preparing ? 'Gerando prévias…' : 'Gerar prévias de todas as turmas'}</button><p className="text-xs text-slate-500 dark:text-slate-400">{batches.length} turma(s) na fila; cada turma terá sua própria conciliação independente.</p></div>}
       </section>
 
