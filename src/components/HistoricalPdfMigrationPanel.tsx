@@ -1,8 +1,8 @@
-import { useMemo, useState, type ChangeEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { CheckCircle2, FileText, LoaderCircle, Search, UploadCloud } from 'lucide-react';
-import { historicalPdfMigrationService, hashHistoricalPdf, matchPdfName, type HistoricalPdfRosterPerson } from '../services/historicalPdfMigrationService';
-import type { Documento, Turma, UserRole } from '../types';
+import { historicalPdfMigrationService, hashHistoricalPdf, matchPdfName, type HistoricalPdfClass, type HistoricalPdfRosterPerson } from '../services/historicalPdfMigrationService';
+import type { Documento, UserRole } from '../types';
 import { useUIStore } from '../store/uiStore';
 
 type DraftFile = { key: string; file: File; excluded: boolean };
@@ -16,12 +16,8 @@ type PreviewData = {
 };
 type FileResult = { key: string; fileName: string; studentName: string; status: string; message: string };
 
-function classLabel(turma: Turma) {
+function classLabel(turma: HistoricalPdfClass) {
   return `Turma ${turma.id_anac || '—'} · ID interno ${turma.id_interno_escola}`;
-}
-
-function classSearchText(turma: Turma) {
-  return `${turma.id_anac} ${turma.id_interno_escola} turma ${turma.id_interno_escola} ${turma.id}`.toLocaleLowerCase('pt-BR');
 }
 
 function isPdf(file: File) {
@@ -33,7 +29,12 @@ export default function HistoricalPdfMigrationPanel() {
   const role = user?.role as UserRole | undefined;
   const authorized = role === 'GESTOR' || role === 'EQUIPE';
   const [classSearch, setClassSearch] = useState('');
+  const [debouncedClassSearch, setDebouncedClassSearch] = useState('');
   const [classId, setClassId] = useState('');
+  const [selectedClass, setSelectedClass] = useState<HistoricalPdfClass | null>(null);
+  const [classPickerOpen, setClassPickerOpen] = useState(false);
+  const [activeClassIndex, setActiveClassIndex] = useState(-1);
+  const classSearchInputRef = useRef<HTMLInputElement>(null);
   const [drafts, setDrafts] = useState<DraftFile[]>([]);
   const [preview, setPreview] = useState<PreviewData | null>(null);
   const [manualAssignments, setManualAssignments] = useState<Record<string, string>>({});
@@ -42,10 +43,15 @@ export default function HistoricalPdfMigrationPanel() {
   const [error, setError] = useState('');
   const [results, setResults] = useState<FileResult[] | null>(null);
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedClassSearch(classSearch), 300);
+    return () => window.clearTimeout(timer);
+  }, [classSearch]);
+
   const classesQuery = useQuery({
-    queryKey: ['historical-pdf-migration', 'classes'],
-    queryFn: historicalPdfMigrationService.getClasses,
-    enabled: authorized,
+    queryKey: ['historical-pdf-migration', 'classes', debouncedClassSearch],
+    queryFn: () => historicalPdfMigrationService.searchClasses(debouncedClassSearch),
+    enabled: authorized && classPickerOpen && Boolean(debouncedClassSearch),
     retry: false,
   });
   const rosterQuery = useQuery({
@@ -55,10 +61,12 @@ export default function HistoricalPdfMigrationPanel() {
     retry: false,
   });
 
-  const filteredClasses = useMemo(() => {
-    const term = classSearch.trim().toLocaleLowerCase('pt-BR');
-    return (classesQuery.data ?? []).filter((turma) => !term || classSearchText(turma).includes(term));
-  }, [classSearch, classesQuery.data]);
+  const classOptions = classesQuery.data ?? [];
+  const searchIsCurrent = classSearch === debouncedClassSearch && Boolean(classSearch);
+
+  useEffect(() => {
+    setActiveClassIndex(-1);
+  }, [debouncedClassSearch, classesQuery.data]);
 
   const assignedPerson = (draft: DraftFile) => {
     if (Object.prototype.hasOwnProperty.call(manualAssignments, draft.key)) return manualAssignments[draft.key] || null;
@@ -77,13 +85,36 @@ export default function HistoricalPdfMigrationPanel() {
   const rosterById = useMemo(() => new Map((rosterQuery.data ?? []).map((person) => [person.id, person])), [rosterQuery.data]);
   const coveredPeople = useMemo(() => new Set(drafts.filter((draft) => !draft.excluded).map(assignedPerson).filter((id): id is string => Boolean(id))), [drafts, manualAssignments, preview]);
 
-  const setSelectedClass = (nextId: string) => {
-    setClassId(nextId);
+  const chooseClass = (turma: HistoricalPdfClass) => {
+    setClassId(turma.id);
+    setSelectedClass(turma);
+    setClassSearch('');
+    setClassPickerOpen(false);
+    setActiveClassIndex(-1);
+    classSearchInputRef.current?.blur();
     setDrafts([]);
     setPreview(null);
     setManualAssignments({});
     setResults(null);
     setError('');
+  };
+
+  const handleClassPickerKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    const currentOptions = searchIsCurrent ? classOptions : [];
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setClassPickerOpen(true);
+      setActiveClassIndex((index) => Math.min(index + 1, currentOptions.length - 1));
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setActiveClassIndex((index) => Math.max(index - 1, 0));
+    } else if (event.key === 'Enter' && classPickerOpen && currentOptions[activeClassIndex]) {
+      event.preventDefault();
+      chooseClass(currentOptions[activeClassIndex]);
+    } else if (event.key === 'Escape') {
+      setClassPickerOpen(false);
+      setActiveClassIndex(-1);
+    }
   };
 
   const handleFiles = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -225,20 +256,52 @@ export default function HistoricalPdfMigrationPanel() {
 
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <h2 className="mb-4 text-sm font-bold uppercase tracking-wide text-slate-700 dark:text-slate-200">1. Turma e roster</h2>
-        {classesQuery.isLoading ? <p role="status" className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300"><LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> Carregando turmas…</p> : null}
-        {classesQuery.isError && <p role="alert" className="text-sm text-rose-700 dark:text-rose-300">{(classesQuery.error as Error)?.message || 'Não foi possível carregar as turmas.'}</p>}
-        <div className="grid gap-3 md:grid-cols-2">
-          <label className="text-sm font-semibold text-slate-700 dark:text-slate-200">Buscar turma
-            <span className="relative mt-1 block"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" /><input type="search" value={classSearch} onChange={(event) => setClassSearch(event.target.value)} disabled={classesQuery.isLoading || running || previewing} className="w-full rounded-md border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 dark:border-slate-700 dark:bg-slate-950" placeholder="ANAC, ID interno ou código" /></span>
-          </label>
-          <label className="text-sm font-semibold text-slate-700 dark:text-slate-200">Turma selecionada
-            <select value={classId} onChange={(event) => setSelectedClass(event.target.value)} disabled={classesQuery.isLoading || running || previewing} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 dark:border-slate-700 dark:bg-slate-950">
-              <option value="">Escolha uma turma</option>
-              {filteredClasses.map((turma) => <option key={turma.id} value={turma.id}>{classLabel(turma)}</option>)}
-            </select>
-          </label>
+        <div className="max-w-xl">
+          <label htmlFor="historical-class-search" className="text-sm font-semibold text-slate-700 dark:text-slate-200">Buscar e selecionar turma</label>
+          <div className="relative mt-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
+            <input
+              ref={classSearchInputRef}
+              id="historical-class-search"
+              type="search"
+              role="combobox"
+              aria-autocomplete="list"
+              aria-expanded={classPickerOpen}
+              aria-controls="historical-class-options"
+              aria-activedescendant={searchIsCurrent && activeClassIndex >= 0 && classOptions[activeClassIndex] ? `historical-class-option-${activeClassIndex}` : undefined}
+              value={classPickerOpen ? classSearch : selectedClass ? classLabel(selectedClass) : classSearch}
+              onFocus={() => { setClassPickerOpen(true); setClassSearch(''); }}
+              onBlur={() => setClassPickerOpen(false)}
+              onChange={(event) => { setClassSearch(event.target.value.replace(/\D/g, '')); setClassPickerOpen(true); }}
+              onKeyDown={handleClassPickerKeyDown}
+              disabled={running || previewing}
+              className="w-full rounded-md border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 dark:border-slate-700 dark:bg-slate-950"
+              placeholder="Digite o ID ANAC ou interno"
+            />
+            {classPickerOpen && <div className="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-md border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900">
+              <ul id="historical-class-options" role="listbox" aria-label="Turmas encontradas" className="py-1">
+                {searchIsCurrent && classOptions.map((turma, index) => <li
+                  id={`historical-class-option-${index}`}
+                  key={turma.id}
+                  role="option"
+                  aria-selected={turma.id === classId}
+                  className={`cursor-pointer px-3 py-2 text-sm ${index === activeClassIndex ? 'bg-teal-50 dark:bg-teal-950' : 'hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onMouseEnter={() => setActiveClassIndex(index)}
+                  onClick={() => chooseClass(turma)}
+                >
+                  <span className="block font-semibold">ANAC: {turma.id_anac || '—'}</span>
+                  <span className="block text-xs text-slate-500 dark:text-slate-400">ID interno: {turma.id_interno_escola}</span>
+                </li>)}
+                {!classSearch && <li className="px-3 py-2 text-sm text-slate-500">Digite um número para buscar turmas.</li>}
+              </ul>
+              {classSearch && classSearch !== debouncedClassSearch && <p role="status" className="px-3 py-2 text-sm text-slate-500">Aguardando busca…</p>}
+              {classSearch && classSearch === debouncedClassSearch && classesQuery.isFetching && <p role="status" className="flex items-center gap-2 px-3 py-2 text-sm text-slate-600 dark:text-slate-300"><LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> Buscando turmas…</p>}
+              {classesQuery.isError && classSearch === debouncedClassSearch && <p role="alert" className="px-3 py-2 text-sm text-rose-700 dark:text-rose-300">{(classesQuery.error as Error)?.message || 'Não foi possível buscar as turmas.'}</p>}
+              {searchIsCurrent && !classesQuery.isFetching && !classesQuery.isError && classOptions.length === 0 && <p role="status" className="px-3 py-2 text-sm text-slate-500">Nenhuma turma corresponde à busca.</p>}
+            </div>}
+          </div>
         </div>
-        {classesQuery.data && filteredClasses.length === 0 && <p className="mt-2 text-sm text-slate-500">Nenhuma turma corresponde à busca.</p>}
         {classId && rosterQuery.isLoading && <p role="status" className="mt-3 flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300"><LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> Carregando matrículas e pessoas da turma…</p>}
         {rosterQuery.isError && <p role="alert" className="mt-3 text-sm text-rose-700 dark:text-rose-300">{(rosterQuery.error as Error)?.message || 'Não foi possível carregar o roster.'}</p>}
         {rosterQuery.data && <p role="status" className="mt-3 text-sm text-slate-600 dark:text-slate-300">{rosterQuery.data.length} aluno(s) no roster desta turma. Todas as matrículas são consideradas, sem filtro por status.</p>}

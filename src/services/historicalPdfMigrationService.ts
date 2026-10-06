@@ -6,6 +6,7 @@ import { serviceError } from './supabaseErrors';
 export const UNIFIED_DOCUMENT_TYPE = 'Documento unificado';
 
 export type HistoricalPdfRosterPerson = Pick<Pessoa, 'id' | 'nome'>;
+export type HistoricalPdfClass = Pick<Turma, 'id' | 'id_anac' | 'id_interno_escola'>;
 
 async function assertCanMigrateHistoricalPdfs() {
   const { data, error } = await supabase.auth.getUser();
@@ -60,11 +61,25 @@ async function assertPeopleBelongToClass(turmaId: string, personIds: string[]) {
 }
 
 export const historicalPdfMigrationService = {
-  getClasses: async (): Promise<Turma[]> => {
+  searchClasses: async (query: string): Promise<HistoricalPdfClass[]> => {
     await assertCanMigrateHistoricalPdfs();
-    const { data, error } = await supabase.from('turmas').select('*').order('id_interno_escola', { ascending: false });
-    if (error) throw serviceError('Não foi possível carregar as turmas', error);
-    return (data ?? []) as Turma[];
+    const numericQuery = query.replace(/\D/g, '').slice(0, 32);
+    if (!numericQuery) return [];
+
+    const internalId = Number(numericQuery);
+    let classQuery = supabase
+      .from('turmas')
+      .select('id, id_anac, id_interno_escola')
+      .ilike('id_anac', `%${numericQuery}%`);
+    if (Number.isSafeInteger(internalId)) {
+      classQuery = supabase
+        .from('turmas')
+        .select('id, id_anac, id_interno_escola')
+        .or(`id_anac.ilike.%${numericQuery}%,id_interno_escola.eq.${internalId}`);
+    }
+    const { data, error } = await classQuery.order('id_interno_escola', { ascending: false }).limit(15);
+    if (error) throw serviceError('Não foi possível buscar as turmas', error);
+    return (data ?? []) as HistoricalPdfClass[];
   },
 
   getRoster: async (turmaId: string): Promise<HistoricalPdfRosterPerson[]> => {
