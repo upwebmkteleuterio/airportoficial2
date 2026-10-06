@@ -77,34 +77,28 @@ export function matchPdfName(fileName: string, roster: HistoricalPdfRosterPerson
   return { kind: 'none' as const, candidates: [] as HistoricalPdfRosterPerson[] };
 }
 
-function isPendingPdfFolder(folderName: string) {
+export function isPendingFolderName(folderName: string): boolean {
   const normalizedFolder = folderName
     .normalize('NFD')
     .replace(/\p{M}/gu, '')
     .trim()
     .toLocaleLowerCase('pt-BR');
-  return /^pendencia(?:[\s_-]*\d+)?$/.test(normalizedFolder);
+  return /^pendencia(?:s)?(?:\d+|[\s_-].*)?$/.test(normalizedFolder);
 }
 
-export function matchPdfPath(relativePath: string, roster: HistoricalPdfRosterPerson[], selectedRootName?: string) {
+export function matchPdfPath(relativePath: string, roster: HistoricalPdfRosterPerson[]) {
   const segments = relativePath.split('/').filter(Boolean);
-  if (selectedRootName && isPendingPdfFolder(selectedRootName)) {
-    return { ...matchPdfName('', roster), source: 'pending' as const, pending: true };
-  }
   const nestedFolder = segments.length > 1 ? segments[0] : null;
   if (nestedFolder) {
-    if (isPendingPdfFolder(nestedFolder)) {
-      return { ...matchPdfName('', roster), source: 'pending' as const, pending: true };
-    }
     const folderName = normalizePdfStudentName(nestedFolder);
     const candidates = roster.filter((person) => normalizePdfStudentName(person.nome) === folderName);
-    if (candidates.length === 1) return { kind: 'exact' as const, candidates, source: 'folder' as const, pending: false };
-    if (candidates.length > 1) return { kind: 'ambiguous' as const, candidates, source: 'folder' as const, pending: false };
+    if (candidates.length === 1) return { kind: 'exact' as const, candidates, source: 'folder' as const };
+    if (candidates.length > 1) return { kind: 'ambiguous' as const, candidates, source: 'folder' as const };
     const firstTwo = matchPdfNameByFirstTwoTokens(nestedFolder, roster);
-    if (firstTwo) return { ...firstTwo, source: 'folder' as const, pending: false };
-    return { kind: 'none' as const, candidates: [] as HistoricalPdfRosterPerson[], source: 'folder' as const, pending: false };
+    if (firstTwo) return { ...firstTwo, source: 'folder' as const };
+    return { kind: 'none' as const, candidates: [] as HistoricalPdfRosterPerson[], source: 'folder' as const };
   }
-  return { ...matchPdfName(segments[0] ?? '', roster), source: 'filename' as const, pending: false };
+  return { ...matchPdfName(segments[0] ?? '', roster), source: 'filename' as const };
 }
 
 async function detectHistoricalFile(file: File) {
