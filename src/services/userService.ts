@@ -128,6 +128,14 @@ export const userService = {
     return data ? toUsuario(data as ProfileRow) : undefined;
   },
 
+  getNamesByLegacyIds: async (ids: string[]): Promise<Array<Pick<Usuario, 'id' | 'nome_completo'>>> => {
+    const uniqueIds = [...new Set(ids.filter(Boolean))];
+    if (uniqueIds.length === 0) return [];
+    const { data, error } = await supabase.from('profiles').select('legacy_id, nome_completo').in('legacy_id', uniqueIds);
+    if (error) throw serviceError('Não foi possível carregar os nomes dos coordenadores', error);
+    return (data ?? []).map((row) => ({ id: row.legacy_id, nome_completo: row.nome_completo }));
+  },
+
   create: async (user: CreateUserInput): Promise<Usuario> => {
     const payload = { ...user, id: user.id || newServiceId('user') };
     const { data, error } = await supabase.functions.invoke('create-user', { body: payload });

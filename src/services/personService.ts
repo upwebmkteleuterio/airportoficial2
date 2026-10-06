@@ -75,6 +75,34 @@ export const personService = {
     return (data ?? []).map((row) => toPerson(row as Pessoa));
   },
 
+  getPage: async (options: { page: number; pageSize: number; search?: string; activeOnly?: boolean; signal?: AbortSignal }): Promise<{ data: Pessoa[]; total: number }> => {
+    const page = Math.max(1, Math.floor(options.page));
+    const pageSize = Math.min(100, Math.max(1, Math.floor(options.pageSize)));
+    const from = (page - 1) * pageSize;
+    let query = supabase.from('pessoas').select('*', { count: 'exact' }).order('nome', { ascending: true }).range(from, from + pageSize - 1);
+    if (options.activeOnly) query = query.eq('ativo', true);
+    const term = options.search?.trim();
+    if (term) {
+      const safeTerm = sanitizeSearch(term);
+      const cpfTerm = normalizeCpf(term);
+      query = cpfTerm && cpfTerm.length >= 3
+        ? query.or(`nome.ilike.%${safeTerm}%,cpf.ilike.%${cpfTerm}%`)
+        : query.or(`nome.ilike.%${safeTerm}%,cpf.ilike.%${safeTerm}%`);
+    }
+    if (options.signal) query = query.abortSignal(options.signal);
+    const { data, count, error } = await query;
+    if (error) throw serviceError('Não foi possível carregar o diretório de pessoas', error);
+    return { data: (data ?? []).map((row) => toPerson(row as Pessoa)), total: count ?? 0 };
+  },
+
+  getNamesByIds: async (ids: string[]): Promise<Array<Pick<Pessoa, 'id' | 'nome'>>> => {
+    const uniqueIds = [...new Set(ids.filter(Boolean))];
+    if (uniqueIds.length === 0) return [];
+    const { data, error } = await supabase.from('pessoas').select('id, nome').in('id', uniqueIds);
+    if (error) throw serviceError('Não foi possível carregar os nomes das pessoas vinculadas', error);
+    return (data ?? []) as Array<Pick<Pessoa, 'id' | 'nome'>>;
+  },
+
   getStudents: async (search = ''): Promise<Pessoa[]> => {
     const people = await personService.getAll(search);
     const { data, error } = await supabase.from('turma_instrutores').select('instrutor_id');

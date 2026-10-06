@@ -38,6 +38,7 @@
 /* Draft resume and close confirmation overlays */
 /* Delete Confirmation Modal */
 import React, { useState, useMemo, useEffect, useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 import {
     Plus,
@@ -61,6 +62,8 @@ import {
 import { useClasses } from "../hooks/useClasses";
 import { useUsers } from "../hooks/useUsers";
 import { usePeople } from "../hooks/usePeople";
+import { personService } from "../services/personService";
+import { userService } from "../services/userService";
 import { useCourses } from "../hooks/useCourses";
 import { shiftService } from "../services/shifts";
 import { useAddresses } from "../hooks/useAddresses";
@@ -281,6 +284,21 @@ const DEFAULT_CLASS_FILTERS: ClassFilters = {
     startDateTo: "",
 };
 
+function NameCellSkeleton() {
+    return <span role="status" aria-label="Carregando nome" className="inline-block h-3.5 w-16 animate-pulse rounded bg-slate-200 align-middle dark:bg-slate-700" />;
+}
+
+function NameCellError({ onRetry }: { onRetry: () => void }) {
+    return (
+        <span className="inline-flex items-center gap-1 text-xs text-rose-700 dark:text-rose-300" role="alert">
+            Indisponível
+            <button type="button" onClick={(event) => { event.stopPropagation(); onRetry(); }} className="underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500" aria-label="Tentar carregar nome novamente">
+                Tentar novamente
+            </button>
+        </span>
+    );
+}
+
 export function Dashboard() {
     const {
         filters,
@@ -298,7 +316,6 @@ export function Dashboard() {
     const [currentPage, setCurrentPage] = useState(() => classListPage);
     const [activeDeadlineAlert, setActiveDeadlineAlert] = useState<ClassDeadlineAlertType | null>(null);
     const [isDeadlineAlertModalOpen, setIsDeadlineAlertModalOpen] = useState(false);
-    const [turmaInstructorsMap, setTurmaInstructorsMap] = useState<Record<string, { instrutor_id: string; funcao: string }[]>>({});
     const [advancedFilters, setAdvancedFilters] = useState<ClassFilters>({ ...DEFAULT_CLASS_FILTERS });
     const [draftAdvancedFilters, setDraftAdvancedFilters] = useState<ClassFilters>({ ...DEFAULT_CLASS_FILTERS });
     const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
@@ -342,19 +359,44 @@ export function Dashboard() {
     const [selectedClassToLaunch, setSelectedClassToLaunch] = useState<Turma | null>(null);
     const [isHelpOpen, setIsHelpOpen] = useState(false);
 
+    const [assignmentPeoplePage, setAssignmentPeoplePage] = useState(1);
+    const [assignmentPeopleSearch, setAssignmentPeopleSearch] = useState("");
+    const [coordinatorPeoplePage, setCoordinatorPeoplePage] = useState(1);
+    const [coordinatorPeopleSearch, setCoordinatorPeopleSearch] = useState("");
+    const selectionPageSize = 50;
     const {
-        users
-    } = useUsers();
-    const { people } = usePeople({ activeOnly: true });
+        users,
+        total: coordinatorPeopleTotal,
+        isFetching: isFetchingCoordinatorPeople,
+        isError: isCoordinatorPeopleError,
+        refetch: refetchCoordinatorPeople
+    } = useUsers({
+        page: coordinatorPeoplePage,
+        pageSize: selectionPageSize,
+        role: UserRole.INSTRUTOR,
+        status: "ativo",
+        search: coordinatorPeopleSearch
+    });
+    const {
+        people,
+        total: assignmentPeopleTotal,
+        isFetching: isFetchingAssignmentPeople,
+        isError: isAssignmentPeopleError,
+        refetch: refetchAssignmentPeople
+    } = usePeople({
+        activeOnly: true,
+        page: assignmentPeoplePage,
+        pageSize: selectionPageSize,
+        search: assignmentPeopleSearch
+    });
 
-    const instructorUsers = useMemo(() => users.filter(user => user.role === "INSTRUTOR" && user.status === "ativo").slice().sort(
+    const instructorUsers = useMemo(() => users.slice().sort(
         (first, second) => first.nome_completo.localeCompare(second.nome_completo, "pt-BR")
     ), [users]);
 
-    const directoryPeople = useMemo(() => people.filter(person => person.ativo).slice().sort(
+    const directoryPeople = useMemo(() => people.slice().sort(
         (first, second) => first.nome.localeCompare(second.nome, "pt-BR")
     ), [people]);
-    const assignmentPeople = directoryPeople;
 
     const {
         addresses
@@ -419,25 +461,67 @@ export function Dashboard() {
     const [formAplicador, setFormAplicador] = useState("");
     const [formStatusHistorico, setFormStatusHistorico] = useState<"" | "No prazo" | "Cancelado" | "Encerrado">("No prazo");
 
-    const applicatorPeople = directoryPeople;
+    const visibleClassIds = useMemo(() => classes.map((turma) => turma.id).sort(), [classes]);
+    const visibleApplicatorIds = useMemo(() => [...new Set(
+        classes.map((turma) => normalizeForeignKeyValue(turma.aplicador_id)).filter((id): id is string => Boolean(id))
+    )].sort(), [classes]);
+    const visibleCoordinatorIds = useMemo(() => [...new Set(
+        classes.flatMap((turma) => [turma.coordenador_ioad_id, turma.coordenador_iscr_id, turma.coordenador_icar_id])
+            .map((id) => normalizeForeignKeyValue(id)).filter((id): id is string => Boolean(id))
+    )].sort(), [classes]);
+    const turmaInstructorsQuery = useQuery({
+        queryKey: ["dashboard-class-instructors", visibleClassIds],
+        queryFn: async () => {
+            const relations = await getInstrutoresByTurmas(visibleClassIds);
+            return relations.reduce<Record<string, { instrutor_id: string; funcao: string }[]>>((map, relation) => {
+                (map[relation.turma_id] ??= []).push({ instrutor_id: relation.instrutor_id, funcao: relation.funcao });
+                return map;
+            }, Object.fromEntries(visibleClassIds.map((id) => [id, []])));
+        },
+        enabled: visibleClassIds.length > 0,
+        retry: false,
+    });
+    useEffect(() => {
+        if (isFetching && visibleClassIds.length > 0) void turmaInstructorsQuery.refetch();
+    }, [isFetching, visibleClassIds, turmaInstructorsQuery.refetch]);
+    const isClassRelationshipsPending = isFetching || turmaInstructorsQuery.isFetching;
+    const turmaInstructorsReady = visibleClassIds.length === 0 || (!isFetching && turmaInstructorsQuery.isSuccess && !turmaInstructorsQuery.isFetching);
+    const turmaInstructorsMap = turmaInstructorsReady ? turmaInstructorsQuery.data ?? {} : {};
+    const visibleTeamPersonIds = useMemo(() => [...new Set(
+        visibleClassIds.flatMap((id) => turmaInstructorsMap[id] ?? []).map((relation) => relation.instrutor_id).filter(Boolean)
+    )].sort(), [visibleClassIds, turmaInstructorsMap]);
+    const applicatorNamesQuery = useQuery({
+        queryKey: ["dashboard-person-names", "applicators", visibleApplicatorIds],
+        queryFn: () => personService.getNamesByIds(visibleApplicatorIds),
+        enabled: visibleApplicatorIds.length > 0,
+        retry: false,
+    });
+    const teamNamesQuery = useQuery({
+        queryKey: ["dashboard-person-names", "team", visibleTeamPersonIds],
+        queryFn: () => personService.getNamesByIds(visibleTeamPersonIds),
+        enabled: turmaInstructorsReady && visibleTeamPersonIds.length > 0,
+        retry: false,
+    });
+    const coordinatorNamesQuery = useQuery({
+        queryKey: ["dashboard-profile-names", visibleCoordinatorIds],
+        queryFn: () => userService.getNamesByLegacyIds(visibleCoordinatorIds),
+        enabled: visibleCoordinatorIds.length > 0,
+        retry: false,
+    });
+    const applicatorNames = useMemo(() => new Map((applicatorNamesQuery.data ?? []).map((person) => [person.id, person.nome])), [applicatorNamesQuery.data]);
+    const teamNames = useMemo(() => new Map((teamNamesQuery.data ?? []).map((person) => [person.id, person.nome])), [teamNamesQuery.data]);
+    const coordinatorNames = useMemo(() => new Map((coordinatorNamesQuery.data ?? []).map((profile) => [profile.id, profile.nome_completo])), [coordinatorNamesQuery.data]);
+    const applicatorPeople = useMemo(() => [...new Map([
+        ...directoryPeople.map((person) => [person.id, person] as const),
+        ...[formAplicador, ...selectedInstructors].filter(Boolean).map((id) => [id, { id, nome: directoryPeople.find((person) => person.id === id)?.nome ?? applicatorNames.get(id) ?? teamNames.get(id) ?? id } as typeof directoryPeople[number]] as const),
+    ]).values()], [applicatorNames, directoryPeople, formAplicador, selectedInstructors, teamNames]);
+    const selectableInstructorUsers = useMemo(() => [...new Map([
+        ...instructorUsers.map((user) => [user.id, user] as const),
+        ...[formIoad, formIscr, formIcar].filter(Boolean).map((id) => [id, { id, nome_completo: instructorUsers.find((user) => user.id === id)?.nome_completo ?? coordinatorNames.get(id) ?? id } as typeof instructorUsers[number]] as const),
+    ]).values()], [coordinatorNames, formIcar, formIoad, formIscr, instructorUsers]);
 
-    const resolveProfileId = (value: string | null | undefined, candidates: typeof users) => {
-        const normalizedValue = normalizeForeignKeyValue(value);
-
-        if (!normalizedValue)
-            return "";
-
-        if (candidates.length === 0)
-            return "";
-
-        return candidates.find(
-            user => user.id === normalizedValue || user.nome_completo === normalizedValue
-        )?.id || "";
-    };
-    const resolveDirectoryId = (value: string | null | undefined) => {
-        const normalizedValue = normalizeForeignKeyValue(value);
-        return directoryPeople.find(person => person.id === normalizedValue || person.nome === normalizedValue)?.id || "";
-    };
+    const resolveProfileId = (value: string | null | undefined) => normalizeForeignKeyValue(value);
+    const resolveDirectoryId = (value: string | null | undefined) => normalizeForeignKeyValue(value);
     const selectedApplicatorId = selectedInstructors.find((personId) => selectedInstructorFunctions[personId] === InstructorFuncao.APLICADOR_PROVA) || resolveDirectoryId(formAplicador);
 
     const [formVigilante, setFormVigilante] = useState(false);
@@ -690,9 +774,9 @@ export function Dashboard() {
         setSelectedInstructorFunctions(draft.selectedInstructorFunctions);
 
         setInstructorInput(draft.instructorInput);
-        setFormIoad(resolveProfileId(draft.formIoad, instructorUsers));
-        setFormIscr(resolveProfileId(draft.formIscr, instructorUsers));
-        setFormIcar(resolveProfileId(draft.formIcar, instructorUsers));
+        setFormIoad(resolveProfileId(draft.formIoad));
+        setFormIscr(resolveProfileId(draft.formIscr));
+        setFormIcar(resolveProfileId(draft.formIcar));
         setFormAplicador(resolveDirectoryId(draft.formAplicador));
         setFormStatusHistorico(draft.formStatusHistorico);
         setFormVigilante(draft.formVigilante);
@@ -929,12 +1013,13 @@ export function Dashboard() {
         });
     };
 
-    const getInstructorName = (instructorId: string) => directoryPeople.find(person => person.id === instructorId)?.nome || instructorUsers.find(instructor => instructor.id === instructorId)?.nome_completo || users.find(user => user.id === instructorId)?.nome_completo || instructorId;
-    const getUserName = (userId?: string | null) => directoryPeople.find(person => person.id === userId)?.nome || users.find(user => user.id === userId)?.nome_completo || userId || "Não aplicável";
+    const getInstructorName = (instructorId: string) => teamNames.get(instructorId) || instructorId;
+    const getUserName = (userId?: string | null) => userId ? applicatorNames.get(userId) || userId : "—";
+    const getCoordinatorName = (profileId?: string | null) => profileId ? coordinatorNames.get(profileId) || profileId : "—";
     const getCoordinatorNames = (turma: Turma) => ({
-        ioad: getInstructorName(turma.coordenador_ioad_id || ""),
-        iscr: getInstructorName(turma.coordenador_iscr_id || ""),
-        icar: getInstructorName(turma.coordenador_icar_id || ""),
+        ioad: getCoordinatorName(turma.coordenador_ioad_id),
+        iscr: getCoordinatorName(turma.coordenador_iscr_id),
+        icar: getCoordinatorName(turma.coordenador_icar_id),
         aplicador: getUserName(turma.aplicador_id),
     });
     const getClassAddressLabel = (turma: Turma) => {
@@ -967,39 +1052,6 @@ export function Dashboard() {
         };
     };
 
-    // Carrega os vínculos reais de turma_instrutores, incluindo a função persistida.
-    // Os nomes são resolvidos no render para evitar dependências instáveis.
-    useEffect(() => {
-        if (!classes.length) {
-            setTurmaInstructorsMap({});
-            return;
-        }
-
-        let cancelled = false;
-        const load = async () => {
-            try {
-                const relations = await getInstrutoresByTurmas(classes.map((turma) => turma.id));
-                const relationsByTurma = relations.reduce<Record<string, { instrutor_id: string; funcao: string }[]>>((map, relation) => {
-                    const turmaRelations = map[relation.turma_id] ?? [];
-                    turmaRelations.push({ instrutor_id: relation.instrutor_id, funcao: relation.funcao });
-                    map[relation.turma_id] = turmaRelations;
-                    return map;
-                }, {});
-                if (!cancelled) {
-                    setTurmaInstructorsMap(Object.fromEntries(
-                        classes.map((turma) => [turma.id, relationsByTurma[turma.id] ?? []])
-                    ));
-                }
-            } catch (error) {
-                console.warn("[turmas] falha ao carregar instrutores das turmas", { error });
-                if (!cancelled) {
-                    setTurmaInstructorsMap(Object.fromEntries(classes.map((turma) => [turma.id, []])));
-                }
-            }
-        };
-        void load();
-        return () => { cancelled = true; };
-    }, [classes, getInstrutoresByTurmas]);
 
     const handleSaveClass = async () => {
         if (classSubmitRef.current || isCreating || isUpdating) return;
@@ -1422,6 +1474,10 @@ export function Dashboard() {
                                     trColor
                                 } = getStatusPrazoNotas(item);
                                 const team = getClassTeam(item);
+                                const classRelations = turmaInstructorsMap[item.id] ?? [];
+                                const hasInstructorRelations = classRelations.some((relation) => relation.funcao === InstructorFuncao.INSTRUTOR_TUTOR);
+                                const hasGuestRelations = classRelations.some((relation) => relation.funcao === InstructorFuncao.CONVIDADO);
+                                const hasTeamApplicatorRelations = classRelations.some((relation) => relation.funcao === InstructorFuncao.APLICADOR_PROVA);
 
                                 return (
                                     <tr
@@ -1481,9 +1537,9 @@ export function Dashboard() {
                                                                 setSelectedInstructors([]);
                                                                 setSelectedInstructorFunctions({});
                                                                 setInstructorInput("");
-                                                                setFormIoad(resolveProfileId(item.coordenador_ioad_id, instructorUsers));
-                                                                setFormIscr(resolveProfileId(item.coordenador_iscr_id, instructorUsers));
-                                                                setFormIcar(resolveProfileId(item.coordenador_icar_id, instructorUsers));
+                                                                setFormIoad(resolveProfileId(item.coordenador_ioad_id));
+                                                                setFormIscr(resolveProfileId(item.coordenador_iscr_id));
+                                                                setFormIcar(resolveProfileId(item.coordenador_icar_id));
                                                                 setFormAplicador(resolveDirectoryId(item.aplicador_id));
                                                                 setFormNotes(item.anotacoes_turma || "");
                                                                 setFormVigilante(item.vigilante_sem_deslocamento);
@@ -1625,31 +1681,31 @@ export function Dashboard() {
                                         </td>)}
                                         {visibleColumns.ioad && (<td
                                             className="px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 font-sans">
-                                            {getInstructorName(item.coordenador_ioad_id || '')}
+                                            {!normalizeForeignKeyValue(item.coordenador_ioad_id) ? '—' : coordinatorNamesQuery.isFetching ? <NameCellSkeleton /> : coordinatorNamesQuery.isError ? <NameCellError onRetry={() => { void coordinatorNamesQuery.refetch(); }} /> : getCoordinatorName(item.coordenador_ioad_id)}
                                         </td>)}
                                         {visibleColumns.iscr && (<td
                                             className="px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 font-sans">
-                                            {getInstructorName(item.coordenador_iscr_id || '')}
+                                            {!normalizeForeignKeyValue(item.coordenador_iscr_id) ? '—' : coordinatorNamesQuery.isFetching ? <NameCellSkeleton /> : coordinatorNamesQuery.isError ? <NameCellError onRetry={() => { void coordinatorNamesQuery.refetch(); }} /> : getCoordinatorName(item.coordenador_iscr_id)}
                                         </td>)}
                                         {visibleColumns.icar && (<td
                                             className="px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 font-sans">
-                                            {getInstructorName(item.coordenador_icar_id || '')}
+                                            {!normalizeForeignKeyValue(item.coordenador_icar_id) ? '—' : coordinatorNamesQuery.isFetching ? <NameCellSkeleton /> : coordinatorNamesQuery.isError ? <NameCellError onRetry={() => { void coordinatorNamesQuery.refetch(); }} /> : getCoordinatorName(item.coordenador_icar_id)}
                                         </td>)}
                                         {visibleColumns.aplicador && (<td
                                             className="px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 font-sans">
-                                            {getUserName(item.aplicador_id)}
+                                            {!normalizeForeignKeyValue(item.aplicador_id) ? '—' : applicatorNamesQuery.isFetching ? <NameCellSkeleton /> : applicatorNamesQuery.isError ? <NameCellError onRetry={() => { void applicatorNamesQuery.refetch(); }} /> : getUserName(item.aplicador_id)}
                                         </td>)}
                                         {visibleColumns.instrutor && (<td
                                             className="min-w-[180px] max-w-xs whitespace-normal px-4 py-2 align-top border-r border-gray-200/30 dark:border-slate-800/30 font-sans">
-                                            {team.instrutor.join(', ') || '—'}
+                                            {isClassRelationshipsPending ? <NameCellSkeleton /> : turmaInstructorsQuery.isError ? <NameCellError onRetry={() => { void turmaInstructorsQuery.refetch(); }} /> : !hasInstructorRelations ? '—' : teamNamesQuery.isFetching ? <NameCellSkeleton /> : teamNamesQuery.isError ? <NameCellError onRetry={() => { void teamNamesQuery.refetch(); }} /> : team.instrutor.join(', ') || '—'}
                                         </td>)}
                                         {visibleColumns.convidado && (<td
                                             className="min-w-[180px] max-w-xs whitespace-normal px-4 py-2 align-top border-r border-gray-200/30 dark:border-slate-800/30 font-sans">
-                                            {team.convidado.join(', ') || '—'}
+                                            {isClassRelationshipsPending ? <NameCellSkeleton /> : turmaInstructorsQuery.isError ? <NameCellError onRetry={() => { void turmaInstructorsQuery.refetch(); }} /> : !hasGuestRelations ? '—' : teamNamesQuery.isFetching ? <NameCellSkeleton /> : teamNamesQuery.isError ? <NameCellError onRetry={() => { void teamNamesQuery.refetch(); }} /> : team.convidado.join(', ') || '—'}
                                         </td>)}
                                         {visibleColumns.aplicador_pr && (<td
                                             className="min-w-[180px] max-w-xs whitespace-normal px-4 py-2 align-top border-r border-gray-200/30 dark:border-slate-800/30 font-sans">
-                                            {team.aplicador.join(', ') || '—'}
+                                            {isClassRelationshipsPending ? <NameCellSkeleton /> : turmaInstructorsQuery.isError ? <NameCellError onRetry={() => { void turmaInstructorsQuery.refetch(); }} /> : ((hasTeamApplicatorRelations && teamNamesQuery.isFetching) || (Boolean(normalizeForeignKeyValue(item.aplicador_id)) && applicatorNamesQuery.isFetching)) ? <NameCellSkeleton /> : (hasTeamApplicatorRelations && teamNamesQuery.isError) ? <NameCellError onRetry={() => { void teamNamesQuery.refetch(); }} /> : (Boolean(normalizeForeignKeyValue(item.aplicador_id)) && applicatorNamesQuery.isError) ? <NameCellError onRetry={() => { void applicatorNamesQuery.refetch(); }} /> : team.aplicador.join(', ') || '—'}
                                         </td>)}
                                         {visibleColumns.vigia && (<td
                                             className="px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 font-sans">
@@ -2008,6 +2064,14 @@ export function Dashboard() {
                                         </button>
                                     </div>
                                 ))}
+                                <input
+                                    type="search"
+                                    aria-label="Pesquisar pessoas para atribuição"
+                                    value={assignmentPeopleSearch}
+                                    onChange={(event) => { setAssignmentPeopleSearch(event.target.value); setAssignmentPeoplePage(1); }}
+                                    placeholder="Pesquisar pessoas..."
+                                    className="w-full rounded border border-gray-200 bg-white px-2 py-1.5 text-xs text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                                />
                                 <select
                                     id="form-instructors-add-select"
                                     value=""
@@ -2022,8 +2086,15 @@ export function Dashboard() {
                                     className="w-full border-none bg-transparent p-1 text-sm text-slate-900 outline-none dark:text-white"
                                 >
                                     <option value="">Selecione uma pessoa...</option>
-                                    {assignmentPeople.map((person) => <option key={person.id} value={person.id}>{person.nome}</option>)}
+                                    {applicatorPeople.map((person) => <option key={person.id} value={person.id}>{person.nome}</option>)}
                                 </select>
+                                {isFetchingAssignmentPeople && <p className="text-[10px] text-slate-500" role="status">Carregando pessoas...</p>}
+                                {isAssignmentPeopleError && <div className="flex items-center justify-between gap-2 text-[10px] text-rose-700 dark:text-rose-300" role="alert"><span>Não foi possível carregar as pessoas.</span><button type="button" onClick={() => { void refetchAssignmentPeople(); }} disabled={isFetchingAssignmentPeople} className="underline disabled:opacity-50">Tentar novamente</button></div>}
+                                <div className="flex items-center justify-between text-[10px] text-gray-500">
+                                    <button type="button" disabled={assignmentPeoplePage <= 1 || isFetchingAssignmentPeople} onClick={() => setAssignmentPeoplePage((page) => Math.max(1, page - 1))} className="rounded px-2 py-1 disabled:opacity-40">Anterior</button>
+                                    <span aria-live="polite">{assignmentPeoplePage} / {Math.max(1, Math.ceil(assignmentPeopleTotal / selectionPageSize))}</span>
+                                    <button type="button" disabled={isFetchingAssignmentPeople || assignmentPeoplePage >= Math.ceil(assignmentPeopleTotal / selectionPageSize)} onClick={() => setAssignmentPeoplePage((page) => page + 1)} className="rounded px-2 py-1 disabled:opacity-40">Próxima</button>
+                                </div>
                             </div>
                         </div>
                         {}
@@ -2032,6 +2103,21 @@ export function Dashboard() {
                             <h4
                                 className="text-xs font-bold text-slate-800 dark:text-teal-400 flex items-center gap-2 uppercase tracking-wider">Coordenação
                                               </h4>
+                            <input
+                                type="search"
+                                aria-label="Pesquisar instrutores coordenadores"
+                                value={coordinatorPeopleSearch}
+                                onChange={(event) => { setCoordinatorPeopleSearch(event.target.value); setCoordinatorPeoplePage(1); }}
+                                placeholder="Pesquisar instrutores..."
+                                className="w-full rounded border border-gray-200 bg-white px-2 py-1.5 text-xs text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                            />
+                            {isFetchingCoordinatorPeople && <p className="text-[10px] text-slate-500" role="status">Carregando instrutores...</p>}
+                            {isCoordinatorPeopleError && <div className="flex items-center justify-between gap-2 text-[10px] text-rose-700 dark:text-rose-300" role="alert"><span>Não foi possível carregar os instrutores.</span><button type="button" onClick={() => { void refetchCoordinatorPeople(); }} disabled={isFetchingCoordinatorPeople} className="underline disabled:opacity-50">Tentar novamente</button></div>}
+                            <div className="flex items-center justify-between text-[10px] text-gray-500">
+                                <button type="button" disabled={coordinatorPeoplePage <= 1 || isFetchingCoordinatorPeople} onClick={() => setCoordinatorPeoplePage((page) => Math.max(1, page - 1))} className="rounded px-2 py-1 disabled:opacity-40">Anterior</button>
+                                <span aria-live="polite">{coordinatorPeoplePage} / {Math.max(1, Math.ceil(coordinatorPeopleTotal / selectionPageSize))}</span>
+                                <button type="button" disabled={isFetchingCoordinatorPeople || coordinatorPeoplePage >= Math.ceil(coordinatorPeopleTotal / selectionPageSize)} onClick={() => setCoordinatorPeoplePage((page) => page + 1)} className="rounded px-2 py-1 disabled:opacity-40">Próxima</button>
+                            </div>
                             <div className="space-y-3 font-sans">
                                 <div className="flex flex-col gap-1">
                                     <label
@@ -2043,7 +2129,7 @@ export function Dashboard() {
                                         onChange={e => setFormIoad(e.target.value)}
                                         className="w-full border border-gray-300 dark:border-slate-700 rounded px-3 py-2 text-sm bg-white dark:bg-slate-850 text-slate-900 dark:text-white focus:outline-none">
                                         <option value="">Não aplicável</option>
-                                        {instructorUsers.map(
+                                        {selectableInstructorUsers.map(
                                             instructor => (<option key={instructor.id} value={instructor.id}>{instructor.nome_completo}</option>)
                                         )}
                                     </select>
@@ -2058,7 +2144,7 @@ export function Dashboard() {
                                         onChange={e => setFormIscr(e.target.value)}
                                         className="w-full border border-gray-300 dark:border-slate-700 rounded px-3 py-2 text-sm bg-white dark:bg-slate-850 text-slate-900 dark:text-white focus:outline-none">
                                         <option value="">Não aplicável</option>
-                                        {instructorUsers.map(
+                                        {selectableInstructorUsers.map(
                                             instructor => (<option key={instructor.id} value={instructor.id}>{instructor.nome_completo}</option>)
                                         )}
                                     </select>
@@ -2073,7 +2159,7 @@ export function Dashboard() {
                                         onChange={e => setFormIcar(e.target.value)}
                                         className="w-full border border-gray-300 dark:border-slate-700 rounded px-3 py-2 text-sm bg-white dark:bg-slate-850 text-slate-900 dark:text-white focus:outline-none">
                                         <option value="">Não aplicável</option>
-                                        {instructorUsers.map(
+                                        {selectableInstructorUsers.map(
                                             instructor => (<option key={instructor.id} value={instructor.id}>{instructor.nome_completo}</option>)
                                         )}
                                     </select>
