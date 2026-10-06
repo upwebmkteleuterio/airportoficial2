@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { CheckCircle2, FileText, LoaderCircle, Search, UploadCloud, X } from 'lucide-react';
+import { CheckCircle2, FileText, LoaderCircle, RotateCcw, Search, UploadCloud, X } from 'lucide-react';
 import { historicalPdfMigrationService, matchPdfPath, type HistoricalPdfClass, type HistoricalPdfImportEntry, type HistoricalPdfRosterPerson } from '../services/historicalPdfMigrationService';
 import type { UserRole } from '../types';
 import { useUIStore } from '../store/uiStore';
@@ -307,6 +307,23 @@ export default function HistoricalPdfMigrationPanel() {
   const readyBatches = useMemo(() => batches.filter(batchReady), [batches]);
   const batchesAwaitingFiles = batches.filter((batch) => batch.files.length === 0);
   const hasPreviewCandidates = batches.some((batch) => batch.files.length > 0 && !batch.results);
+  const hasFinishedResults = batches.some((batch) => batch.results !== null);
+  const hasPendingWork = batches.some((batch) => batch.results === null && batch.files.length > 0);
+  const canStartNewMigration = batches.length > 0 && hasFinishedResults && !hasPendingWork && !running && !preparing;
+  const totalImported = batches.reduce((sum, batch) => sum + (batch.results?.filter((result) => result.status === 'Importado').length ?? 0), 0);
+
+  const startNewMigration = () => {
+    setBatches([]);
+    setSelectedClass(null);
+    setClassSearch('');
+    setDebouncedClassSearch('');
+    setClassPickerOpen(false);
+    setActiveClassIndex(-1);
+    setGlobalError('');
+    setGlobalStatus('');
+    setImportProgress(null);
+    nextFileKeyRef.current = 0;
+  };
 
   if (!authorized) return <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200">A migração histórica de PDFs é restrita a usuários autenticados com perfil Gestor ou Equipe.</p>;
 
@@ -438,7 +455,9 @@ export default function HistoricalPdfMigrationPanel() {
         </section>;
       })}
 
-      {batches.some((batch) => batch.preview) && <section className="rounded-xl border border-teal-300 bg-teal-50 p-5 dark:border-teal-900 dark:bg-teal-950/30"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-bold text-teal-950 dark:text-teal-100">Importação em lote</h2><p className="mt-1 text-sm text-teal-900 dark:text-teal-200">{readyBatches.length} turma(s) com arquivos prontos. Somente essas turmas serão importadas, uma por vez; falhas não interrompem as próximas.</p></div><button type="button" onClick={() => void executeImport(readyBatches, true)} disabled={running || preparing || readyBatches.length === 0} aria-busy={running} className="inline-flex items-center gap-2 rounded-md bg-teal-800 px-4 py-2 text-sm font-bold text-white hover:bg-teal-900 focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-50">{running ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <CheckCircle2 className="h-4 w-4" aria-hidden="true" />}{running ? 'Processando turmas sequencialmente…' : 'Confirmar e importar todas as turmas prontas'}</button></div></section>}
+      {batches.some((batch) => batch.preview) && !canStartNewMigration && <section className="rounded-xl border border-teal-300 bg-teal-50 p-5 dark:border-teal-900 dark:bg-teal-950/30"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-bold text-teal-950 dark:text-teal-100">Importação em lote</h2><p className="mt-1 text-sm text-teal-900 dark:text-teal-200">{readyBatches.length} turma(s) com arquivos prontos. Somente essas turmas serão importadas, uma por vez; falhas não interrompem as próximas.</p></div><button type="button" onClick={() => void executeImport(readyBatches, true)} disabled={running || preparing || readyBatches.length === 0} aria-busy={running} className="inline-flex items-center gap-2 rounded-md bg-teal-800 px-4 py-2 text-sm font-bold text-white hover:bg-teal-900 focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-50">{running ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <CheckCircle2 className="h-4 w-4" aria-hidden="true" />}{running ? 'Processando turmas sequencialmente…' : 'Confirmar e importar todas as turmas prontas'}</button></div></section>}
+
+      {canStartNewMigration && <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900"><h2 className="text-sm font-bold uppercase tracking-wide text-slate-700 dark:text-slate-200">Migração finalizada</h2><p className="mt-2 text-sm text-slate-600 dark:text-slate-400">{totalImported} arquivo(s) importado(s) nesta execução. Inicie uma nova migração para limpar a tela e selecionar novas turmas e pastas.</p><button type="button" onClick={startNewMigration} className="mt-4 inline-flex items-center gap-2 rounded-md bg-teal-700 px-4 py-2 text-sm font-bold text-white hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-500"> <RotateCcw className="h-4 w-4" aria-hidden="true" />Finalizar e iniciar nova migração</button></section>}
     </div>
   );
 }
