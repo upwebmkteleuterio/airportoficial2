@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type KeyboardEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { CheckCircle2, FileText, LoaderCircle, RotateCcw, Search, UploadCloud, X } from 'lucide-react';
-import { historicalPdfMigrationService, isEnrollmentFolderName, isPendingFolderName, matchPdfPath, MAX_HISTORICAL_FILE_BYTES, turmaNumberFromFolderName, type HistoricalPdfClass, type HistoricalPdfImportEntry, type HistoricalPdfRosterPerson } from '../services/historicalPdfMigrationService';
+import { historicalPdfMigrationService, isEnrollmentFolderName, isPendingFolderName, matchPdfPath, MAX_HISTORICAL_FILE_BYTES, suggestedPersonForMatch, turmaNumberFromFolderName, type HistoricalPdfClass, type HistoricalPdfImportEntry, type HistoricalPdfRosterPerson } from '../services/historicalPdfMigrationService';
 import type { UserRole } from '../types';
 import { useUIStore } from '../store/uiStore';
 
@@ -88,6 +88,15 @@ function classLabel(turma: HistoricalPdfClass) {
 
 function hasSupportedExtension(file: File) {
   return /\.(pdf|jpe?g|png|webp|docx?|xlsx?)$/i.test(file.name);
+}
+
+function describeMatch(match: PathMatch) {
+  const scope = match.source === 'folder' ? 'Pasta' : 'Arquivo';
+  if (match.kind === 'exact') return `${scope}: todos os nomes conferem`;
+  if (match.kind === 'partial') return `${scope}: nomes conferem — o aluno tem nomes a mais`;
+  if (match.kind === 'scored') return `${scope}: correspondência aproximada — ${match.score} nome(s) em comum`;
+  if (match.kind === 'ambiguous') return 'Ambíguo — vários candidatos';
+  return 'Sem correspondência';
 }
 
 export default function HistoricalPdfMigrationPanel() {
@@ -356,9 +365,7 @@ export default function HistoricalPdfMigrationPanel() {
       const matches = Object.fromEntries(batch.files.map((draft) => [draft.key, matchPdfPath(draft.path, batch.roster)])) as Record<string, PathMatch>;
       const automaticAssignments: Record<string, string | null> = {};
       batch.files.forEach((draft) => {
-        const match = matches[draft.key];
-        const person = (match.kind === 'exact' || match.kind === 'partial' || match.kind === 'first-two') ? match.candidates[0] : undefined;
-        automaticAssignments[draft.key] = person?.id ?? null;
+        automaticAssignments[draft.key] = suggestedPersonForMatch(matches[draft.key])?.id ?? null;
       });
       updateBatch(batch.turma.id, (current) => ({
         ...current,
@@ -637,9 +644,9 @@ export default function HistoricalPdfMigrationPanel() {
                 <tbody>{batch.files.map((draft) => {
                   const match = batch.preview!.matches[draft.key];
                   const state = getFileState(batch, draft);
-                  const matchLabel = 'basis' in match && match.basis === 'first-two' ? match.source === 'folder' ? 'Pasta: primeiros dois nomes' : 'Primeiros dois nomes' : match.source === 'folder' ? `Pasta: ${match.kind === 'exact' ? 'nome exato' : match.kind === 'partial' ? 'prefixo inequívoco' : match.kind === 'ambiguous' ? 'ambígua' : 'sem correspondência'}` : match.kind === 'exact' ? 'Nome exato do arquivo' : match.kind === 'partial' ? 'Prefixo inequívoco do arquivo' : match.kind === 'ambiguous' ? 'Ambíguo — vários candidatos' : 'Sem correspondência';
+                  const matchLabel = describeMatch(match);
                   const assigned = assignedPerson(batch, draft) ?? '';
-                  return <tr key={draft.key} className="border-t border-slate-200 align-top dark:border-slate-800"><td className="max-w-xs break-all px-3 py-3"><strong className="flex items-center gap-1"><FileText className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />{draft.path}</strong></td><td className="px-3 py-3"><strong>{matchLabel}</strong>{match.candidates.length > 0 && <ul className="mt-1 list-disc pl-4 text-slate-500">{match.candidates.map((person) => <li key={person.id}>{person.nome} · {person.id}</li>)}</ul>}</td><td className="px-3 py-3"><label className="sr-only" htmlFor={`student-${draft.key}`}>Associar {draft.path} ao aluno de {classLabel(batch.turma)}</label><select id={`student-${draft.key}`} value={assigned} onChange={(event) => updateBatch(batch.turma.id, (current) => ({ ...current, manualAssignments: { ...current.manualAssignments, [draft.key]: event.target.value } }))} disabled={draft.excluded || running} className="max-w-xs rounded border border-slate-300 bg-white px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-950"><option value="">Não associar — selecionar aluno</option>{batch.roster.map((person) => <option key={person.id} value={person.id}>{person.nome} · {person.id}</option>)}</select></td><td className="max-w-xs px-3 py-3"><strong className={state.blocked ? 'text-amber-700 dark:text-amber-300' : 'text-emerald-700 dark:text-emerald-300'}>{state.label}</strong><p className="mt-1 whitespace-normal">{state.message}</p></td><td className="px-3 py-3"><label className="inline-flex items-center gap-2"><input type="checkbox" checked={!draft.excluded} onChange={(event) => updateBatch(batch.turma.id, (current) => ({ ...current, files: current.files.map((item) => item.key === draft.key ? { ...item, excluded: !event.target.checked } : item) }))} disabled={running} className="h-4 w-4 rounded border-slate-300 text-teal-700 focus:ring-teal-500" /><span>{draft.excluded ? 'Fora' : 'Sim'}</span></label></td></tr>;
+                  return <tr key={draft.key} className="border-t border-slate-200 align-top dark:border-slate-800"><td className="max-w-xs break-all px-3 py-3"><strong className="flex items-center gap-1"><FileText className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />{draft.path}</strong></td><td className="px-3 py-3"><strong>{matchLabel}</strong>{match.candidates.length > 0 && <ul className="mt-1 list-disc pl-4 text-slate-500">{match.candidates.map((person) => <li key={person.id}>{person.nome} · {person.id}</li>)}</ul>}</td><td className="px-3 py-3"><label className="sr-only" htmlFor={`student-${draft.key}`}>Associar {draft.path} ao aluno de {classLabel(batch.turma)}</label><select id={`student-${draft.key}`} value={assigned} onChange={(event) => updateBatch(batch.turma.id, (current) => ({ ...current, manualAssignments: { ...current.manualAssignments, [draft.key]: event.target.value } }))} disabled={draft.excluded || running} className="max-w-xs rounded border border-slate-300 bg-white px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-950"><option value="">Não associar — selecionar aluno</option>{match.ranked.map((person) => <option key={person.id} value={person.id}>{person.nome} · {person.id}</option>)}</select></td><td className="max-w-xs px-3 py-3"><strong className={state.blocked ? 'text-amber-700 dark:text-amber-300' : 'text-emerald-700 dark:text-emerald-300'}>{state.label}</strong><p className="mt-1 whitespace-normal">{state.message}</p></td><td className="px-3 py-3"><label className="inline-flex items-center gap-2"><input type="checkbox" checked={!draft.excluded} onChange={(event) => updateBatch(batch.turma.id, (current) => ({ ...current, files: current.files.map((item) => item.key === draft.key ? { ...item, excluded: !event.target.checked } : item) }))} disabled={running} className="h-4 w-4 rounded border-slate-300 text-teal-700 focus:ring-teal-500" /><span>{draft.excluded ? 'Fora' : 'Sim'}</span></label></td></tr>;
                 })}</tbody>
               </table>
             </div>

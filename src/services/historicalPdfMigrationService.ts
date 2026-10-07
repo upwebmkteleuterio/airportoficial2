@@ -33,55 +33,123 @@ async function assertCanMigrateHistoricalPdfs() {
   if (isPrivileged !== true) throw new Error('A migração histórica de documentos é restrita a usuários autenticados com perfil Gestor ou Equipe.');
 }
 
-export function normalizePdfStudentName(value: string) {
-  return value
-    .replace(/\.[^.]+$/, '')
-    .replace(/[\s_-]*\d+\s*$/, '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLocaleLowerCase('pt-BR')
-    .replace(/[^a-z0-9]/g, '');
-}
+export type HistoricalNameMatchKind = 'exact' | 'partial' | 'scored' | 'ambiguous' | 'none';
+export type HistoricalNameMatch = {
+  kind: HistoricalNameMatchKind;
+  /** Vencedor único quando a correspondência é conclusiva; candidatos prováveis quando é ambígua. */
+  candidates: HistoricalPdfRosterPerson[];
+  source: 'folder' | 'filename';
+  /** Quantos nomes do caminho encontraram correspondente no melhor candidato. */
+  score: number;
+  /** Todo o roster da turma ordenado por pontuação, para orientar a escolha manual. */
+  ranked: HistoricalPdfRosterPerson[];
+};
 
-function significantNameTokens(value: string, stripExtension = false) {
+const nameConnectives = new Set(['de', 'da', 'do', 'das', 'dos', 'e']);
+
+function nameTokens(value: string, stripExtension: boolean) {
   const name = stripExtension ? value.replace(/\.[^.]+$/, '') : value;
   return name
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLocaleLowerCase('pt-BR')
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim()
-    .split(/\s+/)
-    .filter((token) => token.length >= 3);
+    .replace(/([a-z])(\d)/g, '$1 $2')
+    .replace(/(\d)([a-z])/g, '$1 $2')
+    .split(/[^a-z0-9]+/)
+    .filter((token) => token.length >= 3 && !/^\d+$/.test(token) && !nameConnectives.has(token));
 }
 
-function matchPdfNameByFirstTwoTokens(candidateName: string, roster: HistoricalPdfRosterPerson[], stripExtension = false) {
-  const tokens = significantNameTokens(candidateName, stripExtension);
-  if (tokens.length < 2) return null;
-  const matches = roster.filter((person) => {
-    const personTokens = significantNameTokens(person.nome);
-    return personTokens.length >= 2 && personTokens[0] === tokens[0] && personTokens[1] === tokens[1];
+function editDistance(first: string, second: string) {
+  let previousRow = Array.from({ length: second.length + 1 }, (_, index) => index);
+  for (let firstIndex = 1; firstIndex <= first.length; firstIndex += 1) {
+    const currentRow = [firstIndex];
+    for (let secondIndex = 1; secondIndex <= second.length; secondIndex += 1) {
+      const substitutionCost = first[firstIndex - 1] === second[secondIndex - 1] ? 0 : 1;
+      currentRow[secondIndex] = Math.min(
+        (previousRow[secondIndex] ?? 0) + 1,
+        (currentRow[secondIndex - 1] ?? 0) + 1,
+        (previousRow[secondIndex - 1] ?? 0) + substitutionCost,
+      );
+    }
+    previousRow = currentRow;
+  }
+  return previousRow[second.length] ?? 0;
+}
+
+/** Considera o mesmo nome quando difere em até uma letra (duas letras em nomes com 9+ caracteres). */
+function tokenMatchesName(first: string, second: string) {
+  if (first === second) return true;
+  const shortest = Math.min(first.length, second.length);
+  if (shortest < 5) return false;
+  const tolerance = shortest >= 9 ? 2 : 1;
+  if (Math.abs(first.length - second.length) > tolerance) return false;
+  return editDistance(first, second) <= tolerance;
+}
+
+type NameCandidate = { person: HistoricalPdfRosterPerson; score: number; exactCount: number; allPresent: boolean; nameTokenCount: number };
+
+function rankNameCandidates(name: string, roster: HistoricalPdfRosterPerson[], stripExtension: boolean): NameCandidate[] {
+  const tokens = nameTokens(name, stripExtension);
+  return roster.map((person) => {
+    const personTokens = nameTokens(person.nome, false);
+    let score = 0;
+    let exactCount = 0;
+    tokens.forEach((token) => {
+      if (personTokens.includes(token)) {
+        score += 1;
+        exactCount += 1;
+      } else if (personTokens.some((personToken) => tokenMatchesName(token, personToken))) {
+        score += 1;
+      }
+    });
+    return {
+      person,
+      score,
+      exactCount,
+      allPresent: tokens.length > 0 && score === tokens.length,
+      nameTokenCount: tokens.length,
+    };
   });
-  if (matches.length === 1) return { kind: 'first-two' as const, candidates: matches, basis: 'first-two' as const };
-  if (matches.length > 1) return { kind: 'ambiguous' as const, candidates: matches, basis: 'first-two' as const };
-  return null;
 }
 
-export function matchPdfName(fileName: string, roster: HistoricalPdfRosterPerson[]) {
-  const normalizedFileName = normalizePdfStudentName(fileName);
-  if (!normalizedFileName) return { kind: 'none' as const, candidates: [] as HistoricalPdfRosterPerson[] };
-  const normalizedRoster = roster.map((person) => ({ person, name: normalizePdfStudentName(person.nome) }));
-  const exact = normalizedRoster.filter((entry) => entry.name === normalizedFileName).map((entry) => entry.person);
-  if (exact.length === 1) return { kind: 'exact' as const, candidates: exact };
-  if (exact.length > 1) return { kind: 'ambiguous' as const, candidates: exact };
-  const partial = normalizedRoster
-    .filter((entry) => normalizedFileName.length >= 3 && entry.name.startsWith(normalizedFileName))
-    .map((entry) => entry.person);
-  if (partial.length === 1) return { kind: 'partial' as const, candidates: partial };
-  if (partial.length > 1) return { kind: 'ambiguous' as const, candidates: partial };
-  const firstTwo = matchPdfNameByFirstTwoTokens(fileName, roster, true);
-  if (firstTwo) return firstTwo;
-  return { kind: 'none' as const, candidates: [] as HistoricalPdfRosterPerson[] };
+function orderCandidates(candidates: NameCandidate[]) {
+  return candidates
+    .slice()
+    .sort((first, second) => second.score - first.score
+      || second.exactCount - first.exactCount
+      || first.person.nome.localeCompare(second.person.nome, 'pt-BR'));
+}
+
+function matchName(name: string, roster: HistoricalPdfRosterPerson[], stripExtension: boolean): Omit<HistoricalNameMatch, 'source'> {
+  const candidates = rankNameCandidates(name, roster, stripExtension);
+  const ranked = orderCandidates(candidates).map((candidate) => candidate.person);
+  const complete = candidates.filter((candidate) => candidate.allPresent);
+  if (complete.length === 1) {
+    const [winner] = complete;
+    const rosterTokenCount = nameTokens(winner.person.nome, false).length;
+    return {
+      kind: winner.nameTokenCount === rosterTokenCount ? 'exact' : 'partial',
+      candidates: [winner.person],
+      score: winner.score,
+      ranked,
+    };
+  }
+  if (complete.length > 1) {
+    const ordered = orderCandidates(complete);
+    return { kind: 'ambiguous', candidates: ordered.map((candidate) => candidate.person), score: ordered[0].score, ranked };
+  }
+  const topScore = candidates.reduce((highest, candidate) => Math.max(highest, candidate.score), 0);
+  const best = candidates.filter((candidate) => candidate.score === topScore && topScore >= 2 && candidate.exactCount >= 1);
+  if (best.length === 1) return { kind: 'scored', candidates: [best[0].person], score: topScore, ranked };
+  if (best.length > 1) {
+    const ordered = orderCandidates(best);
+    return { kind: 'ambiguous', candidates: ordered.map((candidate) => candidate.person), score: topScore, ranked };
+  }
+  return { kind: 'none', candidates: [], score: topScore, ranked };
+}
+
+export function suggestedPersonForMatch(match: HistoricalNameMatch): HistoricalPdfRosterPerson | null {
+  return match.kind === 'ambiguous' || match.kind === 'none' ? null : match.candidates[0] ?? null;
 }
 
 export function isPendingFolderName(folderName: string): boolean {
@@ -113,19 +181,15 @@ export function isEnrollmentFolderName(folderName: string): boolean {
   return normalizedFolder.includes('matricula');
 }
 
-export function matchPdfPath(relativePath: string, roster: HistoricalPdfRosterPerson[]) {
+export function matchPdfPath(relativePath: string, roster: HistoricalPdfRosterPerson[]): HistoricalNameMatch {
   const segments = relativePath.split('/').filter(Boolean);
-  const nestedFolder = segments.length > 1 ? segments[0] : null;
-  if (nestedFolder) {
-    const folderName = normalizePdfStudentName(nestedFolder);
-    const candidates = roster.filter((person) => normalizePdfStudentName(person.nome) === folderName);
-    if (candidates.length === 1) return { kind: 'exact' as const, candidates, source: 'folder' as const };
-    if (candidates.length > 1) return { kind: 'ambiguous' as const, candidates, source: 'folder' as const };
-    const firstTwo = matchPdfNameByFirstTwoTokens(nestedFolder, roster);
-    if (firstTwo) return { ...firstTwo, source: 'folder' as const };
-    return { kind: 'none' as const, candidates: [] as HistoricalPdfRosterPerson[], source: 'folder' as const };
+  if (segments.length === 0) return { kind: 'none', candidates: [], source: 'filename', score: 0, ranked: roster };
+  // A pasta do aluno tem prioridade; quando ela não corresponde a ninguém, o nome do arquivo decide.
+  for (const segment of segments.slice(0, -1)) {
+    const folderMatch = matchName(segment, roster, false);
+    if (folderMatch.kind !== 'none') return { ...folderMatch, source: 'folder' };
   }
-  return { ...matchPdfName(segments[0] ?? '', roster), source: 'filename' as const };
+  return { ...matchName(segments[segments.length - 1] ?? '', roster, true), source: 'filename' };
 }
 
 async function detectHistoricalFile(file: File) {
