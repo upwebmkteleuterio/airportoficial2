@@ -65,7 +65,7 @@ async function findEnrollmentDirectory(entry: FileSystemDirectoryEntry, depth = 
   return null;
 }
 
-async function readDirectoryFiles(entry: FileSystemDirectoryEntry, prefix: string): Promise<{ file: File; path: string }[]> {
+async function readDirectoryFiles(entry: FileSystemDirectoryEntry, prefix: string, unreadable: string[] = []): Promise<{ file: File; path: string }[]> {
   const collected: { file: File; path: string }[] = [];
   for (const child of await readAllDirectoryEntries(entry)) {
     const path = `${prefix}/${child.name}`;
@@ -73,10 +73,10 @@ async function readDirectoryFiles(entry: FileSystemDirectoryEntry, prefix: strin
       try {
         collected.push({ file: await getFileFromEntry(child as FileSystemFileEntry), path });
       } catch {
-        // Ignore only the file that could not be read.
+        unreadable.push(path);
       }
     } else if (child.isDirectory) {
-      collected.push(...await readDirectoryFiles(child as FileSystemDirectoryEntry, path));
+      collected.push(...await readDirectoryFiles(child as FileSystemDirectoryEntry, path, unreadable));
     }
   }
   return collected;
@@ -282,7 +282,8 @@ export default function HistoricalPdfMigrationPanel() {
             outcomes.push({ folderName: directory.name, status: 'ignorada', message: 'Pasta de matrícula dos alunos não encontrada nesta pasta de turma; nenhum arquivo foi considerado.' });
             continue;
           }
-          const files = await readDirectoryFiles(enrollment, enrollment.name);
+          const unreadable: string[] = [];
+          const files = await readDirectoryFiles(enrollment, enrollment.name, unreadable);
           const turma = await historicalPdfMigrationService.getClassByInternalId(turmaNumber);
           if (!turma) {
             outcomes.push({ folderName: directory.name, status: 'ignorada', message: `Turma ${turmaNumber} não encontrada no sistema; nenhum arquivo foi considerado.` });
@@ -313,12 +314,15 @@ export default function HistoricalPdfMigrationPanel() {
             }
             accepted.push({ key: `${turma.id}:${nextFileKeyRef.current++}`, file, path, excluded: false });
           }
+          unreadable.forEach((unreadablePath) => {
+            errors.push(`Não foi possível ler “${unreadablePath.split('/').slice(1).join('/')}”. O arquivo pode estar em uso, indisponível ou protegido; ele não foi considerado.`);
+          });
           created.push({
             turma,
             roster,
             folderName: enrollment.name,
             files: accepted,
-            validationStatus: `Pasta de matrícula “${enrollment.name}” localizada em ${directory.name}: ${accepted.length} arquivo(s) considerados de ${files.length} encontrado(s).${pendingCount > 0 ? ` ${pendingCount} arquivo(s) de pasta(s) de pendências foram desconsiderados automaticamente.` : ''} A assinatura será verificada na confirmação.`,
+            validationStatus: `Pasta de matrícula “${enrollment.name}” localizada em ${directory.name}: ${accepted.length} arquivo(s) considerados de ${files.length + unreadable.length} encontrado(s).${unreadable.length > 0 ? ` ${unreadable.length} arquivo(s) não puderam ser lidos.` : ''}${pendingCount > 0 ? ` ${pendingCount} arquivo(s) de pasta(s) de pendências foram desconsiderados automaticamente.` : ''} A assinatura será verificada na confirmação.`,
             validationErrors: errors,
             preview: null,
             previewStatus: '',
@@ -451,7 +455,7 @@ export default function HistoricalPdfMigrationPanel() {
 
   const generateAllPreviews = async () => {
     const eligible = batches.filter((batch) => batch.files.length > 0 && !batch.results);
-    if (preparing || running || eligible.length === 0 || batches.some((batch) => batch.files.length === 0)) return;
+    if (preparing || running || eligible.length === 0 || batches.some((batch) => batch.folderName === '')) return;
     setPreparing(true);
     setGlobalError('');
     setGlobalStatus(`Gerando prévias independentes para ${eligible.length} turma(s)…`);
@@ -470,7 +474,8 @@ export default function HistoricalPdfMigrationPanel() {
   };
 
   const readyBatches = useMemo(() => batches.filter(batchReady), [batches]);
-  const batchesAwaitingFiles = batches.filter((batch) => batch.files.length === 0);
+  const batchesWithoutFolder = batches.filter((batch) => batch.folderName === '');
+  const batchesWithoutDocuments = batches.filter((batch) => batch.folderName !== '' && batch.files.length === 0);
   const hasPreviewCandidates = batches.some((batch) => batch.files.length > 0 && !batch.results);
   const hasFinishedResults = batches.some((batch) => batch.results !== null);
   const hasPendingWork = batches.some((batch) => batch.results === null && batch.files.length > 0);
@@ -589,8 +594,14 @@ export default function HistoricalPdfMigrationPanel() {
             {batch.files.length > 0 && <div className="mt-3"><p className="text-sm text-slate-600 dark:text-slate-300">{batch.files.length} arquivo(s) não vazio(s) selecionado(s) nesta turma. A assinatura e a duplicidade serão verificadas antes do envio:</p><ul aria-label={`Arquivos selecionados da ${classLabel(batch.turma)}`} className="mt-2 max-h-48 space-y-1 overflow-auto rounded-md bg-slate-50 p-3 text-sm text-slate-600 dark:bg-slate-950 dark:text-slate-300">{batch.files.map((draft) => <li key={draft.key} className="break-all">{draft.path}</li>)}</ul></div>}
           </article>)}
         </div>
-        {batchesAwaitingFiles.length > 0 && <p role="status" className="mt-4 rounded-md bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">Selecione uma pasta com ao menos um documento (PDF, JPG, JPEG, PNG, WEBP, DOC, DOCX, XLS ou XLSX) não vazio para cada turma: {batchesAwaitingFiles.map((batch) => classLabel(batch.turma)).join('; ')}.</p>}
-        {batches.length > 0 && <div className="mt-4 flex flex-wrap items-center gap-3"><button type="button" onClick={() => void generateAllPreviews()} disabled={preparing || running || validatingClassId !== null || dropping || batchesAwaitingFiles.length > 0 || !hasPreviewCandidates} aria-busy={preparing} className="inline-flex items-center gap-2 rounded-md bg-slate-800 px-4 py-2 text-sm font-bold text-white hover:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-700">{preparing ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <FileText className="h-4 w-4" aria-hidden="true" />}{preparing ? 'Gerando prévias…' : 'Gerar prévias de todas as turmas'}</button><p className="text-xs text-slate-500 dark:text-slate-400">{batches.length} turma(s) na fila; cada turma terá sua própria conciliação independente.</p></div>}
+        {batchesWithoutFolder.length > 0 && <p role="status" className="mt-4 rounded-md bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">Selecione uma pasta com ao menos um documento (PDF, JPG, JPEG, PNG, WEBP, DOC, DOCX, XLS ou XLSX) não vazio para cada turma: {batchesWithoutFolder.map((batch) => classLabel(batch.turma)).join('; ')}.</p>}
+        {batchesWithoutDocuments.length > 0 && <div role="status" className="mt-4 rounded-md bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+          <p className="font-semibold">Turmas sem nenhum documento válido — elas ficam fora das prévias e da importação, sem travar as demais:</p>
+          <ul className="mt-1 list-disc pl-5">
+            {batchesWithoutDocuments.map((batch) => <li key={batch.turma.id}>{classLabel(batch.turma)}: a pasta de matrícula “{batch.folderName}” foi localizada, mas nenhum documento válido foi considerado. Veja o resumo e os avisos na ficha desta turma, acima.</li>)}
+          </ul>
+        </div>}
+        {batches.length > 0 && <div className="mt-4 flex flex-wrap items-center gap-3"><button type="button" onClick={() => void generateAllPreviews()} disabled={preparing || running || validatingClassId !== null || dropping || batchesWithoutFolder.length > 0 || !hasPreviewCandidates} aria-busy={preparing} className="inline-flex items-center gap-2 rounded-md bg-slate-800 px-4 py-2 text-sm font-bold text-white hover:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-700">{preparing ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <FileText className="h-4 w-4" aria-hidden="true" />}{preparing ? 'Gerando prévias…' : 'Gerar prévias de todas as turmas'}</button><p className="text-xs text-slate-500 dark:text-slate-400">{batches.length} turma(s) na fila; cada turma terá sua própria conciliação independente.</p></div>}
       </section>
 
       {globalStatus && <p role="status" aria-live="polite" className={`rounded-lg border p-3 text-sm ${globalStatus.startsWith('Prévia parcial:') || globalStatus.startsWith('Falha na importação:') || globalStatus.startsWith('Importação parcial:') ? 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100' : 'border-teal-200 bg-teal-50 text-teal-900 dark:border-teal-900 dark:bg-teal-950/30 dark:text-teal-100'}`}>{globalStatus}</p>}
