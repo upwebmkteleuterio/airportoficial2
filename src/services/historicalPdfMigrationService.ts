@@ -110,7 +110,7 @@ export function isEnrollmentFolderName(folderName: string): boolean {
     .normalize('NFD')
     .replace(/\p{M}/gu, '')
     .toLocaleLowerCase('pt-BR');
-  return normalizedFolder.includes('matricula') && normalizedFolder.includes('aluno');
+  return normalizedFolder.includes('matricula');
 }
 
 export function matchPdfPath(relativePath: string, roster: HistoricalPdfRosterPerson[]) {

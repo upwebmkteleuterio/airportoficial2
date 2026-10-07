@@ -279,7 +279,7 @@ export default function HistoricalPdfMigrationPanel() {
           }
           const enrollment = await findEnrollmentDirectory(directory);
           if (!enrollment) {
-            outcomes.push({ folderName: directory.name, status: 'ignorada', message: 'Pasta “matrícula do alunos” não encontrada nesta pasta de turma; nenhum arquivo foi considerado.' });
+            outcomes.push({ folderName: directory.name, status: 'ignorada', message: 'Pasta de matrícula dos alunos não encontrada nesta pasta de turma; nenhum arquivo foi considerado.' });
             continue;
           }
           const files = await readDirectoryFiles(enrollment, enrollment.name);
@@ -318,7 +318,7 @@ export default function HistoricalPdfMigrationPanel() {
             roster,
             folderName: enrollment.name,
             files: accepted,
-            validationStatus: `Pasta “matrícula do alunos” localizada em ${directory.name}: ${accepted.length} arquivo(s) considerados de ${files.length} encontrado(s).${pendingCount > 0 ? ` ${pendingCount} arquivo(s) de pasta(s) de pendências foram desconsiderados automaticamente.` : ''} A assinatura será verificada na confirmação.`,
+            validationStatus: `Pasta de matrícula “${enrollment.name}” localizada em ${directory.name}: ${accepted.length} arquivo(s) considerados de ${files.length} encontrado(s).${pendingCount > 0 ? ` ${pendingCount} arquivo(s) de pasta(s) de pendências foram desconsiderados automaticamente.` : ''} A assinatura será verificada na confirmação.`,
             validationErrors: errors,
             preview: null,
             previewStatus: '',
@@ -500,7 +500,7 @@ export default function HistoricalPdfMigrationPanel() {
       <header>
         <p className="text-xs font-bold uppercase tracking-[0.2em] text-teal-600 dark:text-teal-400">Importação documental controlada</p>
         <h1 className="mt-1 text-2xl font-extrabold text-slate-900 dark:text-white">Migração histórica de documentos</h1>
-        <p className="mt-2 max-w-3xl text-sm text-slate-600 dark:text-slate-400">Arraste várias pastas de turma para localizar automaticamente a pasta “matrícula do alunos” ou adicione até dez turmas pela busca. São aceitos documentos PDF, JPG, JPEG, PNG, WEBP, DOC, DOCX, XLS e XLSX. Cada prévia é independente e somente leitura; os arquivos só são enviados após confirmação explícita. A assinatura, o hash e a verificação de duplicidade são feitos somente na confirmação, não ao selecionar a pasta.</p>
+        <p className="mt-2 max-w-3xl text-sm text-slate-600 dark:text-slate-400">Arraste várias pastas de turma para localizar automaticamente a pasta de matrícula dos alunos (ex.: “2 - MATRICULA DO ALUNOS”, “Arqv 1-DOCs MATRÍCULA”) ou adicione até dez turmas pela busca. São aceitos documentos PDF, JPG, JPEG, PNG, WEBP, DOC, DOCX, XLS e XLSX. Cada prévia é independente e somente leitura; os arquivos só são enviados após confirmação explícita. A assinatura, o hash e a verificação de duplicidade são feitos somente na confirmação, não ao selecionar a pasta.</p>
       </header>
 
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -514,7 +514,7 @@ export default function HistoricalPdfMigrationPanel() {
           className={`mb-5 rounded-lg border-2 border-dashed p-5 text-center transition ${dropActive ? 'border-teal-500 bg-teal-50 dark:bg-teal-950/30' : 'border-slate-300 bg-slate-50 dark:border-slate-700 dark:bg-slate-950'} ${(running || preparing || validatingClassId !== null || dropping || addingClass) ? 'cursor-not-allowed opacity-60' : ''}`}
         >
           <UploadCloud className="mx-auto mb-2 h-7 w-7 text-teal-600 dark:text-teal-400" aria-hidden="true" />
-          <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Arraste aqui as pastas das turmas (ex.: TURMA 78, TURMA 79, TURMA 80). O sistema identifica a turma pelo número no nome da pasta e localiza automaticamente a pasta “matrícula do alunos”. Pastas sem essa subpasta são ignoradas com aviso.</p>
+          <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Arraste aqui as pastas das turmas (ex.: TURMA 78, TURMA 79, TURMA 80). O sistema identifica a turma pelo número no nome da pasta e localiza automaticamente a pasta de matrícula dos alunos (ex.: “2 - MATRICULA DO ALUNOS”, “Arqv 1-DOCs MATRÍCULA”). Pastas sem essa subpasta são ignoradas com aviso.</p>
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Para adicionar turma por turma, use a busca abaixo.</p>
         </div>
         {dropStatus && <p role="status" aria-live="polite" className="mb-3 flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">{dropping && <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" />}{dropStatus}</p>}
