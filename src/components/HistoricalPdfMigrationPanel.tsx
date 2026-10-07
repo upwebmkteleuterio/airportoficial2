@@ -12,7 +12,7 @@ type PreviewData = {
   automaticAssignments: Record<string, string | null>;
 };
 type FileResult = { key: string; fileName: string; studentName: string; status: string; message: string };
-type ImportProgress = { classId: string; classLabel: string; fileName: string; index: number; total: number; stage: 'checking' | 'uploading'; percent: number | null };
+type ImportProgress = { classLabel: string; classIndex: number; classTotal: number; fileName: string; index: number; total: number; stage: 'checking' | 'uploading'; percent: number | null };
 type ClassBatch = {
   turma: HistoricalPdfClass;
   roster: HistoricalPdfRosterPerson[];
@@ -392,7 +392,7 @@ export default function HistoricalPdfMigrationPanel() {
   };
   const batchReady = (batch: ClassBatch) => Boolean(batch.preview && importableCount(batch) > 0 && !batch.results);
 
-  const runOneBatch = async (batch: ClassBatch) => {
+  const runOneBatch = async (batch: ClassBatch, classIndex: number, classTotal: number) => {
     const entries: HistoricalPdfImportEntry[] = [];
     const fileResults: FileResult[] = [];
     batch.files.forEach((draft) => {
@@ -405,7 +405,7 @@ export default function HistoricalPdfMigrationPanel() {
     });
     updateBatch(batch.turma.id, (current) => ({ ...current, results: null, importError: '' }));
     const importedResults = await historicalPdfMigrationService.importBatch(batch.turma.id, entries, (entry, index, total, stage, percent) => {
-      setImportProgress({ classId: batch.turma.id, classLabel: classLabel(batch.turma), fileName: entry.relativePath, index, total, stage, percent });
+      setImportProgress({ classLabel: classLabel(batch.turma), classIndex, classTotal, fileName: entry.relativePath, index, total, stage, percent });
     });
     fileResults.push(...importedResults);
     const resultByKey = new Map(fileResults.map((result) => [result.key, result]));
@@ -415,19 +415,19 @@ export default function HistoricalPdfMigrationPanel() {
     return orderedResults;
   };
 
-  const executeImport = async (targetBatches: ClassBatch[], all = false) => {
+  const executeImport = async (targetBatches: ClassBatch[]) => {
     if (running || targetBatches.length === 0) return;
     setRunning(true);
     setGlobalError('');
-    setGlobalStatus(all ? `Iniciando importação sequencial de ${targetBatches.length} turma(s)…` : `Importando arquivos da ${classLabel(targetBatches[0].turma)}…`);
+    setGlobalStatus(`Iniciando importação sequencial de ${targetBatches.length} turma(s)…`);
     let importedCount = 0;
     let failedClasses = 0;
     let failedFiles = 0;
     try {
       for (const [index, batch] of targetBatches.entries()) {
-        setGlobalStatus(`${all ? `Turma ${index + 1} de ${targetBatches.length}: ` : ''}Processando ${classLabel(batch.turma)}. Os arquivos são enviados sequencialmente.`);
+        setGlobalStatus(`Turma ${index + 1} de ${targetBatches.length}: processando ${classLabel(batch.turma)}. Os arquivos são enviados sequencialmente.`);
         try {
-          const results = await runOneBatch(batch);
+          const results = await runOneBatch(batch, index + 1, targetBatches.length);
           importedCount += results.filter((result) => result.status === 'Importado').length;
           failedFiles += results.filter((result) => result.status === 'Erro').length;
         } catch (cause) {
@@ -633,15 +633,26 @@ export default function HistoricalPdfMigrationPanel() {
               </table>
             </div>
             <section aria-label={`Alunos sem arquivo de ${classLabel(batch.turma)}`} className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/30"><h3 className="font-bold text-amber-900 dark:text-amber-200">Alunos desta turma sem arquivo associado</h3><p className="mt-1 text-sm text-amber-800 dark:text-amber-300">{batch.roster.filter((person) => !coveredPeople.has(person.id)).map((person) => person.nome).join(', ') || 'Nenhum.'}</p></section>
-            {importProgress?.classId === batch.turma.id && <div role="status" aria-live="polite" aria-atomic="true" className="mt-4 space-y-2 rounded-lg border border-teal-200 bg-teal-50 p-3 text-sm text-teal-900 dark:border-teal-900 dark:bg-teal-950/30 dark:text-teal-100"><p>Arquivo {importProgress.index} de {importProgress.total}: <strong className="break-all">{importProgress.fileName}</strong> — {importProgress.stage === 'checking' ? 'Verificando autorização, vínculo com a turma, hash e duplicidade antes do envio.' : 'Enviando para o armazenamento: ' + importProgress.percent + '%'}</p>{importProgress.stage === 'uploading' && <progress className="h-2 w-full accent-teal-700" value={importProgress.percent ?? 0} max={100} aria-label="Progresso do envio do arquivo" />}</div>}
             {batch.importError && <p role="alert" className="mt-3 rounded-md bg-rose-50 p-3 text-sm text-rose-700 dark:bg-rose-950/30 dark:text-rose-300">Falha nesta turma: {batch.importError}. As demais turmas prontas continuam sendo processadas na importação global.</p>}
-            <div className="mt-4 flex flex-wrap items-center gap-3"><button type="button" onClick={() => void executeImport([batch])} disabled={running || readyCount === 0 || Boolean(batch.results) || preparing || dropping} aria-busy={running && importProgress?.classId === batch.turma.id} className="inline-flex items-center gap-2 rounded-md bg-teal-700 px-4 py-2 text-sm font-bold text-white hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-50">{running && importProgress?.classId === batch.turma.id ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <CheckCircle2 className="h-4 w-4" aria-hidden="true" />}{batch.results ? 'Importação desta turma concluída' : `Confirmar e importar ${readyCount} arquivo(s)`}</button><p className="text-xs text-slate-500 dark:text-slate-400">Somente documentos prontos desta turma serão enviados. Ambiguidades, duplicatas e conflitos não são sobrescritos.</p></div>
           </>}
           {batch.results && <div aria-live="polite" className="mt-5 border-t border-slate-200 pt-4 dark:border-slate-700"><h3 className="mb-3 text-sm font-bold text-slate-800 dark:text-slate-100">Resultado desta turma</h3><div className="mb-4 grid gap-3 sm:grid-cols-3"><Summary label="Importados" value={String(importedCount)} tone="success" /><Summary label="Falhas/conflitos/pendências" value={String(failedCount)} tone={failedCount ? 'warning' : 'success'} /><Summary label="Arquivos reportados" value={String(batch.results.length)} /></div><ul className="space-y-2">{batch.results.map((result) => <li key={result.key} className="rounded-md border border-slate-200 p-3 text-sm dark:border-slate-700"><strong className="break-all">{result.fileName}</strong> · {result.studentName} · <span className={result.status === 'Importado' ? 'font-bold text-emerald-700 dark:text-emerald-300' : 'font-bold text-amber-700 dark:text-amber-300'}>{result.status}</span><p className="mt-1 text-slate-600 dark:text-slate-300">{result.message}</p></li>)}</ul></div>}
         </section>;
       })}
 
-      {batches.some((batch) => batch.preview) && !canStartNewMigration && <section className="rounded-xl border border-teal-300 bg-teal-50 p-5 dark:border-teal-900 dark:bg-teal-950/30"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-bold text-teal-950 dark:text-teal-100">Importação em lote</h2><p className="mt-1 text-sm text-teal-900 dark:text-teal-200">{readyBatches.length} turma(s) com arquivos prontos. Somente essas turmas serão importadas, uma por vez; falhas não interrompem as próximas.</p></div><button type="button" onClick={() => void executeImport(readyBatches, true)} disabled={running || preparing || dropping || readyBatches.length === 0} aria-busy={running} className="inline-flex items-center gap-2 rounded-md bg-teal-800 px-4 py-2 text-sm font-bold text-white hover:bg-teal-900 focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-50">{running ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <CheckCircle2 className="h-4 w-4" aria-hidden="true" />}{running ? 'Processando turmas sequencialmente…' : 'Confirmar e importar todas as turmas prontas'}</button></div></section>}
+      {batches.some((batch) => batch.preview) && !canStartNewMigration && <section className="rounded-xl border border-teal-300 bg-teal-50 p-5 dark:border-teal-900 dark:bg-teal-950/30">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="font-bold text-teal-950 dark:text-teal-100">Importação em lote</h2>
+            <p className="mt-1 text-sm text-teal-900 dark:text-teal-200">{readyBatches.length} turma(s) com arquivos prontos. Somente essas turmas serão importadas, uma por vez; falhas não interrompem as próximas. Somente documentos prontos são enviados; ambiguidades, duplicatas e conflitos não são sobrescritos.</p>
+          </div>
+          <button type="button" onClick={() => void executeImport(readyBatches)} disabled={running || preparing || dropping || readyBatches.length === 0} aria-busy={running} className="inline-flex items-center gap-2 rounded-md bg-teal-800 px-4 py-2 text-sm font-bold text-white hover:bg-teal-900 focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-50">{running ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <CheckCircle2 className="h-4 w-4" aria-hidden="true" />}{running ? 'Processando turmas sequencialmente…' : 'Confirmar e importar todas as turmas prontas'}</button>
+        </div>
+        {importProgress && <div role="status" aria-live="polite" aria-atomic="true" className="mt-4 space-y-2 rounded-lg border border-teal-300 bg-white p-3 text-sm text-teal-900 dark:border-teal-800 dark:bg-slate-900 dark:text-teal-100">
+          <p>Turma {importProgress.classIndex} de {importProgress.classTotal}: <strong>{importProgress.classLabel}</strong></p>
+          <p>Arquivo {importProgress.index} de {importProgress.total}: <strong className="break-all">{importProgress.fileName}</strong> — {importProgress.stage === 'checking' ? 'Verificando autorização, vínculo com a turma, hash e duplicidade antes do envio.' : `Enviando para o armazenamento: ${importProgress.percent}%`}</p>
+          {importProgress.stage === 'uploading' && <progress className="h-2 w-full accent-teal-700" value={importProgress.percent ?? 0} max={100} aria-label="Progresso do envio do arquivo" />}
+        </div>}
+      </section>}
 
       {canStartNewMigration && <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900"><h2 className="text-sm font-bold uppercase tracking-wide text-slate-700 dark:text-slate-200">Migração finalizada</h2><p className="mt-2 text-sm text-slate-600 dark:text-slate-400">{totalImported} arquivo(s) importado(s) nesta execução. Inicie uma nova migração para limpar a tela e selecionar novas turmas e pastas.</p><button type="button" onClick={startNewMigration} className="mt-4 inline-flex items-center gap-2 rounded-md bg-teal-700 px-4 py-2 text-sm font-bold text-white hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-500"> <RotateCcw className="h-4 w-4" aria-hidden="true" />Finalizar e iniciar nova migração</button></section>}
     </div>
