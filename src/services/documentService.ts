@@ -10,7 +10,16 @@ type UploadDocumentInput = Omit<Documento, 'id' | 'data_criacao' | 'url_armazena
   onProgress?: (progress: number) => void;
 };
 
-const allowedUploadTypes = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
+const allowedUploadTypes = new Set([
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+]);
 type ReplacementOptions = Partial<Pick<Documento, 'status' | 'origem_cadastro' | 'metodo_verificacao' | 'storage_area'>>;
 const replacementLocks = new Set<string>();
 
@@ -26,9 +35,13 @@ function validateUploadType(file: File) {
     '.jpeg': 'image/jpeg',
     '.png': 'image/png',
     '.webp': 'image/webp',
+    '.doc': 'application/msword',
+    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    '.xls': 'application/vnd.ms-excel',
+    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   }[extension];
   if (!inferredMimeType || !allowedUploadTypes.has(inferredMimeType)) {
-    throw new Error('Formato inválido. Envie apenas PDF, JPG, JPEG, PNG ou WEBP.');
+    throw new Error('Formato inválido. Envie apenas PDF, JPG, JPEG, PNG, WEBP, DOC, DOCX, XLS ou XLSX.');
   }
 }
 

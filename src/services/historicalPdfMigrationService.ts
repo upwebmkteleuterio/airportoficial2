@@ -13,6 +13,13 @@ const historicalFileKinds = {
   webp: { mimeType: 'image/webp', extension: 'webp' },
 } as const;
 
+const officeFileKinds: Record<string, { mimeType: string }> = {
+  doc: { mimeType: 'application/msword' },
+  docx: { mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
+  xls: { mimeType: 'application/vnd.ms-excel' },
+  xlsx: { mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
+};
+
 export type HistoricalPdfRosterPerson = Pick<Pessoa, 'id' | 'nome'>;
 export type HistoricalPdfClass = Pick<Turma, 'id' | 'id_interno_escola'>;
 export type HistoricalPdfImportEntry = { key: string; file: File; person: HistoricalPdfRosterPerson; relativePath: string };
@@ -86,6 +93,26 @@ export function isPendingFolderName(folderName: string): boolean {
   return /^pendencia(?:s)?(?:\d+|[\s_-].*)?$/.test(normalizedFolder);
 }
 
+export function turmaNumberFromFolderName(folderName: string): number | null {
+  const normalizedFolder = folderName
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .toLocaleLowerCase('pt-BR')
+    .trim();
+  const numericName = normalizedFolder.match(/^(\d{1,6})$/);
+  if (numericName) return Number(numericName[1]);
+  const turmaNumber = normalizedFolder.match(/turma\D{0,3}(\d{1,6})/);
+  return turmaNumber ? Number(turmaNumber[1]) : null;
+}
+
+export function isEnrollmentFolderName(folderName: string): boolean {
+  const normalizedFolder = folderName
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .toLocaleLowerCase('pt-BR');
+  return normalizedFolder.includes('matricula') && normalizedFolder.includes('aluno');
+}
+
 export function matchPdfPath(relativePath: string, roster: HistoricalPdfRosterPerson[]) {
   const segments = relativePath.split('/').filter(Boolean);
   const nestedFolder = segments.length > 1 ? segments[0] : null;
@@ -121,17 +148,30 @@ async function detectHistoricalFile(file: File) {
       : startsWith([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]) ? 'png'
         : startsWith([0x52, 0x49, 0x46, 0x46]) && new TextDecoder().decode(content.subarray(8, 12)) === 'WEBP' ? 'webp'
           : null;
-  if (!kind) throw new Error('O arquivo não contém uma assinatura válida de PDF, JPG, PNG ou WEBP.');
-  const detected = historicalFileKinds[kind];
   const originalName = file.name;
   const extensionIndex = originalName.lastIndexOf('.');
   const baseName = extensionIndex > 0 ? originalName.slice(0, extensionIndex) : originalName;
   const currentExtension = extensionIndex > 0 ? originalName.slice(extensionIndex + 1).toLocaleLowerCase('pt-BR') : '';
-  const extensionMatches = kind === 'jpeg' ? currentExtension === 'jpg' || currentExtension === 'jpeg' : currentExtension === detected.extension;
-  const fileName = extensionMatches && baseName ? originalName : `${baseName || 'documento'}.${detected.extension}`;
+  let mimeType: string;
+  let fileName: string;
+  if (kind) {
+    const detected = historicalFileKinds[kind];
+    const extensionMatches = kind === 'jpeg' ? currentExtension === 'jpg' || currentExtension === 'jpeg' : currentExtension === detected.extension;
+    fileName = extensionMatches && baseName ? originalName : `${baseName || 'documento'}.${detected.extension}`;
+    mimeType = detected.mimeType;
+  } else {
+    const isOle2 = startsWith([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
+    const isZip = startsWith([0x50, 0x4b, 0x03, 0x04]);
+    const officeKind = officeFileKinds[currentExtension];
+    if ((!isOle2 && !isZip) || !officeKind) {
+      throw new Error('O arquivo não contém uma assinatura válida de PDF, JPG, JPEG, PNG, WEBP, DOC, DOCX, XLS ou XLSX.');
+    }
+    mimeType = officeKind.mimeType;
+    fileName = originalName;
+  }
   const digest = await crypto.subtle.digest('SHA-256', bytes);
   const hash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
-  return { hash, mimeType: detected.mimeType, fileName };
+  return { hash, mimeType, fileName };
 }
 
 export function historicalPdfDocumentGroupId(turmaId: string, personId: string, relativePath: string) {
@@ -195,6 +235,18 @@ export const historicalPdfMigrationService = {
       .limit(15);
     if (error) throw serviceError('Não foi possível buscar as turmas', error);
     return (data ?? []) as HistoricalPdfClass[];
+  },
+
+  getClassByInternalId: async (internalId: number): Promise<HistoricalPdfClass | null> => {
+    await assertCanMigrateHistoricalPdfs();
+    if (!Number.isSafeInteger(internalId) || internalId <= 0) return null;
+    const { data, error } = await supabase
+      .from('turmas')
+      .select('id, id_interno_escola')
+      .eq('id_interno_escola', internalId)
+      .maybeSingle();
+    if (error) throw serviceError('Não foi possível localizar a turma pelo ID interno', error);
+    return (data ?? null) as HistoricalPdfClass | null;
   },
 
   getRoster: async (turmaId: string): Promise<HistoricalPdfRosterPerson[]> => {
