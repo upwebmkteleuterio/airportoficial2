@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type KeyboardEvent, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { CheckCircle2, FileText, LoaderCircle, RotateCcw, Search, UploadCloud, X } from 'lucide-react';
+import { CheckCircle2, ChevronRight, FileText, LoaderCircle, RotateCcw, Search, UploadCloud, X } from 'lucide-react';
 import { historicalPdfMigrationService, isEnrollmentFolderName, isPendingFolderName, matchPdfPath, MAX_HISTORICAL_FILE_BYTES, suggestedPersonForMatch, turmaNumberFromFolderName, type HistoricalPdfClass, type HistoricalPdfImportEntry, type HistoricalPdfRosterPerson } from '../services/historicalPdfMigrationService';
 import type { UserRole } from '../types';
 import { useUIStore } from '../store/uiStore';
@@ -29,7 +29,7 @@ type ClassBatch = {
 };
 type FileState = { label: string; message: string; person: HistoricalPdfRosterPerson | null; blocked: boolean };
 
-const MAX_CLASSES = 10;
+const MAX_CLASSES = 20;
 
 type DropOutcome = { folderName: string; status: 'adicionada' | 'ignorada' | 'erro'; message: string };
 
@@ -97,6 +97,69 @@ function describeMatch(match: PathMatch) {
   if (match.kind === 'scored') return `${scope}: correspondência aproximada — ${match.score} nome(s) em comum`;
   if (match.kind === 'ambiguous') return 'Ambíguo — vários candidatos';
   return 'Sem correspondência';
+}
+
+function assignedPerson(batch: ClassBatch, draft: DraftFile) {
+  if (Object.prototype.hasOwnProperty.call(batch.manualAssignments, draft.key)) return batch.manualAssignments[draft.key] || null;
+  return batch.preview?.automaticAssignments[draft.key] ?? null;
+}
+
+function getFileState(batch: ClassBatch, draft: DraftFile): FileState {
+  if (draft.excluded) return { label: 'Fora do lote', message: 'Excluído explicitamente pelo operador.', person: null, blocked: true };
+  const personId = assignedPerson(batch, draft);
+  const match = batch.preview?.matches[draft.key];
+  if (!personId) {
+    const ambiguity = match?.kind === 'ambiguous';
+    return { label: ambiguity ? 'Correspondência ambígua' : 'Sem correspondência', message: ambiguity ? 'Escolha explicitamente um aluno desta turma ou exclua este arquivo.' : 'Selecione explicitamente um aluno desta turma ou exclua este arquivo.', person: null, blocked: true };
+  }
+  const person = batch.roster.find((candidate) => candidate.id === personId) ?? null;
+  if (!person) return { label: 'Aluno inválido', message: 'O aluno escolhido não pertence ao roster desta turma.', person: null, blocked: true };
+  return { label: 'Correspondência pronta', message: 'A associação foi revisada. A assinatura, o hash, as duplicidades e os conflitos serão verificados antes do envio após a confirmação.', person, blocked: false };
+}
+
+// O vínculo com o aluno é o que separa a conciliação em duas listas: arquivos
+// com aluno vinculado (tudo certo) e arquivos sem vínculo (pendência que exige
+// escolha manual). Marcar "Fora do lote" não muda a lista em que o arquivo está.
+function linkedPersonFor(batch: ClassBatch, draft: DraftFile) {
+  const personId = assignedPerson(batch, draft);
+  if (!personId) return null;
+  return batch.roster.find((candidate) => candidate.id === personId) ?? null;
+}
+
+function Accordion({ title, count, defaultOpen, children }: { title: string; count: number; defaultOpen?: boolean; children: ReactNode }) {
+  return (
+    <details open={defaultOpen} className="group mb-4 rounded-lg border border-slate-200 dark:border-slate-700">
+      <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg px-4 py-3 text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500 dark:text-slate-100 [&::-webkit-details-marker]:hidden">
+        <ChevronRight className="h-4 w-4 shrink-0 transition-transform group-open:rotate-90" aria-hidden="true" />
+        {title}
+        <span className="font-normal text-slate-500 dark:text-slate-400">· {count}</span>
+      </summary>
+      <div className="px-4 pb-4">{children}</div>
+    </details>
+  );
+}
+
+function ConciliationTable({ batch, files, running, updateBatch }: {
+  batch: ClassBatch;
+  files: DraftFile[];
+  running: boolean;
+  updateBatch: (turmaId: string, change: (batch: ClassBatch) => ClassBatch) => void;
+}) {
+  return (
+    <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
+      <table className="min-w-[900px] text-left text-xs">
+        <caption className="sr-only">Conciliação de documentos somente contra o roster de {classLabel(batch.turma)}</caption>
+        <thead className="bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"><tr><th className="px-3 py-2">Arquivo (assinatura e hash na confirmação)</th><th className="px-3 py-2">Correspondência desta turma</th><th className="px-3 py-2">Associar ao aluno</th><th className="px-3 py-2">Resultado previsto</th><th className="px-3 py-2">Incluir</th></tr></thead>
+        <tbody>{files.map((draft) => {
+          const match = batch.preview!.matches[draft.key];
+          const state = getFileState(batch, draft);
+          const matchLabel = describeMatch(match);
+          const assigned = assignedPerson(batch, draft) ?? '';
+          return <tr key={draft.key} className="border-t border-slate-200 align-top dark:border-slate-800"><td className="max-w-xs break-all px-3 py-3"><strong className="flex items-center gap-1"><FileText className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />{draft.path}</strong></td><td className="px-3 py-3"><strong>{matchLabel}</strong>{match.candidates.length > 0 && <ul className="mt-1 list-disc pl-4 text-slate-500">{match.candidates.map((person) => <li key={person.id}>{person.nome} · {person.id}</li>)}</ul>}</td><td className="px-3 py-3"><label className="sr-only" htmlFor={`student-${draft.key}`}>Associar {draft.path} ao aluno de {classLabel(batch.turma)}</label><select id={`student-${draft.key}`} value={assigned} onChange={(event) => updateBatch(batch.turma.id, (current) => ({ ...current, manualAssignments: { ...current.manualAssignments, [draft.key]: event.target.value } }))} disabled={draft.excluded || running} className="max-w-xs rounded border border-slate-300 bg-white px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-950"><option value="">Não associar — selecionar aluno</option>{match.ranked.map((person) => <option key={person.id} value={person.id}>{person.nome} · {person.id}</option>)}</select></td><td className="max-w-xs px-3 py-3"><strong className={state.blocked ? 'text-amber-700 dark:text-amber-300' : 'text-emerald-700 dark:text-emerald-300'}>{state.label}</strong><p className="mt-1 whitespace-normal">{state.message}</p></td><td className="px-3 py-3"><label className="inline-flex items-center gap-2"><input type="checkbox" checked={!draft.excluded} onChange={(event) => updateBatch(batch.turma.id, (current) => ({ ...current, files: current.files.map((item) => item.key === draft.key ? { ...item, excluded: !event.target.checked } : item) }))} disabled={running} className="h-4 w-4 rounded border-slate-300 text-teal-700 focus:ring-teal-500" /><span>{draft.excluded ? 'Fora' : 'Sim'}</span></label></td></tr>;
+        })}</tbody>
+      </table>
+    </div>
+  );
 }
 
 export default function HistoricalPdfMigrationPanel() {
@@ -379,24 +442,6 @@ export default function HistoricalPdfMigrationPanel() {
     }
   };
 
-  const assignedPerson = (batch: ClassBatch, draft: DraftFile) => {
-    if (Object.prototype.hasOwnProperty.call(batch.manualAssignments, draft.key)) return batch.manualAssignments[draft.key] || null;
-    return batch.preview?.automaticAssignments[draft.key] ?? null;
-  };
-
-  const getFileState = (batch: ClassBatch, draft: DraftFile): FileState => {
-    if (draft.excluded) return { label: 'Fora do lote', message: 'Excluído explicitamente pelo operador.', person: null, blocked: true };
-    const personId = assignedPerson(batch, draft);
-    const match = batch.preview?.matches[draft.key];
-    if (!personId) {
-      const ambiguity = match?.kind === 'ambiguous';
-      return { label: ambiguity ? 'Correspondência ambígua' : 'Sem correspondência', message: ambiguity ? 'Escolha explicitamente um aluno desta turma ou exclua este arquivo.' : 'Selecione explicitamente um aluno desta turma ou exclua este arquivo.', person: null, blocked: true };
-    }
-    const person = batch.roster.find((candidate) => candidate.id === personId) ?? null;
-    if (!person) return { label: 'Aluno inválido', message: 'O aluno escolhido não pertence ao roster desta turma.', person: null, blocked: true };
-    return { label: 'Correspondência pronta', message: 'A associação foi revisada. A assinatura, o hash, as duplicidades e os conflitos serão verificados antes do envio após a confirmação.', person, blocked: false };
-  };
-
   const importableCount = (batch: ClassBatch) => {
     if (!batch.preview) return 0;
     return batch.files.filter((draft) => !getFileState(batch, draft).blocked).length;
@@ -627,6 +672,8 @@ export default function HistoricalPdfMigrationPanel() {
           const files = filesByPerson.get(person.id);
           return files ? [[person.id, files] as [string, DraftFile[]]] : [];
         }));
+        const linkedFiles = batch.files.filter((draft) => linkedPersonFor(batch, draft) !== null);
+        const problemFiles = batch.files.filter((draft) => linkedPersonFor(batch, draft) === null);
         const importedCount = batch.results?.filter((result) => result.status === 'Importado').length ?? 0;
         const failedCount = batch.results?.filter((result) => ['Erro', 'Conflito', 'Mais de um PDF para o aluno', 'PDF duplicado', 'Correspondência ambígua', 'Sem correspondência'].includes(result.status)).length ?? 0;
         return <section key={batch.turma.id} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -636,20 +683,16 @@ export default function HistoricalPdfMigrationPanel() {
           {batch.files.length > 0 && !batch.preview && <p className="mb-3 text-sm text-slate-600 dark:text-slate-300">A prévia será preparada junto com as demais turmas pela ação “Gerar prévias de todas as turmas”.</p>}
           {batch.preview && <>
             <div className="mb-4 grid gap-3 sm:grid-cols-3"><Summary label="Arquivos desta turma" value={String(batch.files.length)} /><Summary label="Prontos para importar" value={String(readyCount)} tone={readyCount ? 'success' : 'warning'} /><Summary label="Alunos sem arquivo associado" value={String(batch.roster.filter((person) => !coveredPeople.has(person.id)).length)} tone="warning" /></div>
-            <section aria-label={`Arquivos agrupados por aluno de ${classLabel(batch.turma)}`} className="mb-4 rounded-lg border border-slate-200 p-4 dark:border-slate-700"><h3 className="font-bold text-slate-800 dark:text-slate-100">Arquivos por aluno</h3><div className="mt-2 grid gap-2 sm:grid-cols-2">{Array.from(filesByPerson.entries()).map(([personId, drafts]) => { const person = batch.roster.find((candidate) => candidate.id === personId)!; return <div key={personId} className="rounded-md bg-slate-50 p-3 text-sm dark:bg-slate-950"><strong>{person.nome} · {drafts.length} documento(s)</strong><ul className="mt-1 space-y-1 text-xs text-slate-600 dark:text-slate-300">{drafts.map((draft) => <li key={draft.key} className="break-all">{draft.path}{draft.excluded ? ' · fora do lote' : ''}</li>)}</ul></div>; })}{unassignedFiles.length > 0 && <div className="rounded-md bg-amber-50 p-3 text-sm dark:bg-amber-950/30"><strong>Sem aluno associado · {unassignedFiles.length} documento(s)</strong><ul className="mt-1 space-y-1 text-xs">{unassignedFiles.map((draft) => <li key={draft.key} className="break-all">{draft.path}{draft.excluded ? ' · fora do lote' : ''}</li>)}</ul></div>}</div></section>
-            <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
-              <table className="min-w-[900px] text-left text-xs">
-                <caption className="sr-only">Conciliação de documentos somente contra o roster de {classLabel(batch.turma)}</caption>
-                <thead className="bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"><tr><th className="px-3 py-2">Arquivo (assinatura e hash na confirmação)</th><th className="px-3 py-2">Correspondência desta turma</th><th className="px-3 py-2">Associar ao aluno</th><th className="px-3 py-2">Resultado previsto</th><th className="px-3 py-2">Incluir</th></tr></thead>
-                <tbody>{batch.files.map((draft) => {
-                  const match = batch.preview!.matches[draft.key];
-                  const state = getFileState(batch, draft);
-                  const matchLabel = describeMatch(match);
-                  const assigned = assignedPerson(batch, draft) ?? '';
-                  return <tr key={draft.key} className="border-t border-slate-200 align-top dark:border-slate-800"><td className="max-w-xs break-all px-3 py-3"><strong className="flex items-center gap-1"><FileText className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />{draft.path}</strong></td><td className="px-3 py-3"><strong>{matchLabel}</strong>{match.candidates.length > 0 && <ul className="mt-1 list-disc pl-4 text-slate-500">{match.candidates.map((person) => <li key={person.id}>{person.nome} · {person.id}</li>)}</ul>}</td><td className="px-3 py-3"><label className="sr-only" htmlFor={`student-${draft.key}`}>Associar {draft.path} ao aluno de {classLabel(batch.turma)}</label><select id={`student-${draft.key}`} value={assigned} onChange={(event) => updateBatch(batch.turma.id, (current) => ({ ...current, manualAssignments: { ...current.manualAssignments, [draft.key]: event.target.value } }))} disabled={draft.excluded || running} className="max-w-xs rounded border border-slate-300 bg-white px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-950"><option value="">Não associar — selecionar aluno</option>{match.ranked.map((person) => <option key={person.id} value={person.id}>{person.nome} · {person.id}</option>)}</select></td><td className="max-w-xs px-3 py-3"><strong className={state.blocked ? 'text-amber-700 dark:text-amber-300' : 'text-emerald-700 dark:text-emerald-300'}>{state.label}</strong><p className="mt-1 whitespace-normal">{state.message}</p></td><td className="px-3 py-3"><label className="inline-flex items-center gap-2"><input type="checkbox" checked={!draft.excluded} onChange={(event) => updateBatch(batch.turma.id, (current) => ({ ...current, files: current.files.map((item) => item.key === draft.key ? { ...item, excluded: !event.target.checked } : item) }))} disabled={running} className="h-4 w-4 rounded border-slate-300 text-teal-700 focus:ring-teal-500" /><span>{draft.excluded ? 'Fora' : 'Sim'}</span></label></td></tr>;
-                })}</tbody>
-              </table>
-            </div>
+            <Accordion title="Arquivos por aluno" count={batch.files.length}>
+              <section aria-label={`Arquivos agrupados por aluno de ${classLabel(batch.turma)}`}><div className="grid gap-2 sm:grid-cols-2">{Array.from(filesByPerson.entries()).map(([personId, drafts]) => { const person = batch.roster.find((candidate) => candidate.id === personId)!; return <div key={personId} className="rounded-md bg-slate-50 p-3 text-sm dark:bg-slate-950"><strong>{person.nome} · {drafts.length} documento(s)</strong><ul className="mt-1 space-y-1 text-xs text-slate-600 dark:text-slate-300">{drafts.map((draft) => <li key={draft.key} className="break-all">{draft.path}{draft.excluded ? ' · fora do lote' : ''}</li>)}</ul></div>; })}{unassignedFiles.length > 0 && <div className="rounded-md bg-amber-50 p-3 text-sm dark:bg-amber-950/30"><strong>Sem aluno associado · {unassignedFiles.length} documento(s)</strong><ul className="mt-1 space-y-1 text-xs">{unassignedFiles.map((draft) => <li key={draft.key} className="break-all">{draft.path}{draft.excluded ? ' · fora do lote' : ''}</li>)}</ul></div>}</div></section>
+            </Accordion>
+            <Accordion title="Correspondência pronta" count={linkedFiles.length}>
+              {linkedFiles.length > 0 ? <ConciliationTable batch={batch} files={linkedFiles} running={running} updateBatch={updateBatch} /> : <p className="text-sm text-slate-600 dark:text-slate-300">Nenhum arquivo com aluno vinculado nesta turma.</p>}
+            </Accordion>
+            {problemFiles.length > 0 && <Accordion title="Pendências de vínculo" count={problemFiles.length} defaultOpen={true}>
+              <p className="mb-2 text-sm text-amber-800 dark:text-amber-300">Estes arquivos não têm aluno vinculado. Escolha o aluno na lista ou marque “Fora” para deixá-los de lado.</p>
+              <ConciliationTable batch={batch} files={problemFiles} running={running} updateBatch={updateBatch} />
+            </Accordion>}
             <section aria-label={`Alunos sem arquivo de ${classLabel(batch.turma)}`} className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/30"><h3 className="font-bold text-amber-900 dark:text-amber-200">Alunos desta turma sem arquivo associado</h3><p className="mt-1 text-sm text-amber-800 dark:text-amber-300">{batch.roster.filter((person) => !coveredPeople.has(person.id)).map((person) => person.nome).join(', ') || 'Nenhum.'}</p></section>
             {batch.importError && <p role="alert" className="mt-3 rounded-md bg-rose-50 p-3 text-sm text-rose-700 dark:bg-rose-950/30 dark:text-rose-300">Falha nesta turma: {batch.importError}. As demais turmas prontas continuam sendo processadas na importação global.</p>}
           </>}
