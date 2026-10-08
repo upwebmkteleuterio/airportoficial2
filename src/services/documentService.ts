@@ -50,37 +50,63 @@ async function sha256(file: File) {
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
-async function uploadWithProgress(path: string, file: File, onProgress?: (progress: number) => void) {
-  const { data: sessionData } = await supabase.auth.getSession();
-  const accessToken = sessionData.session?.access_token;
-  if (!accessToken) throw new Error('Sessão expirada. Faça login novamente.');
+const UPLOAD_ATTEMPTS = 3;
 
-  const clientConfig = supabase as unknown as { supabaseUrl: string; supabaseKey: string };
-  const encodedPath = path.split('/').map((segment) => encodeURIComponent(segment)).join('/');
-  const uploadUrl = `${clientConfig.supabaseUrl}/storage/v1/object/documents/${encodedPath}`;
+async function resolveAccessToken() {
+  const { data } = await supabase.auth.getSession();
+  const accessToken = data.session?.access_token;
+  if (accessToken) return accessToken;
 
-  await new Promise<void>((resolve, reject) => {
+  // A sessão pode ter sido descartada enquanto a aba estava inativa: renovamos
+  // uma vez antes de interromper a fila de importação.
+  const { data: refreshed, error } = await supabase.auth.refreshSession();
+  const refreshedToken = refreshed.session?.access_token;
+  if (error || !refreshedToken) throw new Error('Sessão expirada. Faça login novamente.');
+  return refreshedToken;
+}
+
+function sendUpload(uploadUrl: string, apiKey: string, accessToken: string, file: File, onProgress?: (progress: number) => void) {
+  return new Promise<number>((resolve, reject) => {
     const request = new XMLHttpRequest();
     request.open('POST', uploadUrl);
     request.setRequestHeader('Authorization', `Bearer ${accessToken}`);
-    request.setRequestHeader('apikey', clientConfig.supabaseKey);
+    request.setRequestHeader('apikey', apiKey);
     request.setRequestHeader('x-upsert', 'false');
     request.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
     request.upload.onprogress = (event) => {
       if (event.lengthComputable) onProgress?.(Math.round((event.loaded / event.total) * 100));
     };
-    request.onload = () => {
-      if (request.status >= 200 && request.status < 300) {
-        onProgress?.(100);
-        resolve();
-      } else {
-        reject(new Error(`Falha no upload (${request.status})`));
-      }
-    };
+    request.onload = () => resolve(request.status);
     request.onerror = () => reject(new Error('Falha de conexão durante o upload.'));
     request.onabort = () => reject(new Error('Upload cancelado.'));
     request.send(file);
   });
+}
+
+async function uploadWithProgress(path: string, file: File, onProgress?: (progress: number) => void) {
+  const clientConfig = supabase as unknown as { supabaseUrl: string; supabaseKey: string };
+  const encodedPath = path.split('/').map((segment) => encodeURIComponent(segment)).join('/');
+  const uploadUrl = `${clientConfig.supabaseUrl}/storage/v1/object/documents/${encodedPath}`;
+
+  for (let attempt = 1; attempt <= UPLOAD_ATTEMPTS; attempt += 1) {
+    const accessToken = await resolveAccessToken();
+    const status = await sendUpload(uploadUrl, clientConfig.supabaseKey, accessToken, file, onProgress);
+
+    if (status >= 200 && status < 300) {
+      onProgress?.(100);
+      return;
+    }
+
+    if (status !== 401 && status !== 403) throw new Error(`Falha no upload (${status})`);
+    if (attempt === UPLOAD_ATTEMPTS) break;
+
+    // Token expirado ou revogado: renova a sessão e reenvia o mesmo arquivo, para
+    // não derrubar a importação inteira por uma oscilação de token.
+    const { data, error } = await supabase.auth.refreshSession();
+    if (error || !data.session) break;
+  }
+
+  throw new Error('Sessão expirada. Faça login novamente.');
 }
 
 export const documentService = {
