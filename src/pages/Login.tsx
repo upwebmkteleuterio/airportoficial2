@@ -2,8 +2,10 @@ import { useState, type FormEvent } from 'react';
 
 import { Eye, EyeOff, LockKeyhole, LogIn, Mail } from 'lucide-react';
 import { supabase } from '../integrations/supabase/client';
+import { useSessionContext } from '../contexts/SessionContext';
 
 export function Login() {
+  const { sessionExpired } = useSessionContext();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -54,6 +56,14 @@ export function Login() {
         </div>
 
         <div className="w-full bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-800 p-8 shadow-xl transition-all">
+          {sessionExpired && (
+            <p
+              role="status"
+              className="mb-5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200"
+            >
+              Sua sessão expirou e não foi possível renová-la automaticamente. Entre novamente para continuar.
+            </p>
+          )}
           <form onSubmit={handleSubmit} className="space-y-5" noValidate>
             <div>
               <label htmlFor="login-email" className="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">

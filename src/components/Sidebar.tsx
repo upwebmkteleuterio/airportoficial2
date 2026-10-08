@@ -46,13 +46,14 @@ function clearAuthenticationStorage() {
 export function Sidebar() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { clearSession } = useSessionContext();
+  const { clearSession, markIntentionalSignOut } = useSessionContext();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const { activeRoute, setRoute, resetAll, setSelectedClassId, sidebarCollapsed, toggleSidebar, userLogged } = useUIStore();
 
   const handleLogout = async () => {
     if (isLoggingOut) return;
     setIsLoggingOut(true);
+    markIntentionalSignOut();
 
     try {
       const { error } = await supabase.auth.signOut({ scope: 'global' });
