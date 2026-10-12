@@ -299,6 +299,7 @@ export async function parseStudentMigrationFile(file: File): Promise<StudentMigr
 function safeError(message: string): Error { return new Error(message.slice(0, 300)); }
 
 const STUDENT_PEOPLE_PAGE_SIZE = 1000;
+const STUDENT_MIGRATION_PAGE_SIZE = 1000;
 
 async function loadAllStudentPeople(): Promise<StudentPerson[]> {
   const people: StudentPerson[] = [];
@@ -320,6 +321,85 @@ async function loadAllStudentPeople(): Promise<StudentPerson[]> {
   }
 
   return people;
+}
+
+async function loadStudentTurmasByInternalIds(internals: number[]): Promise<StudentTurma[]> {
+  const turmas: StudentTurma[] = [];
+  let offset = 0;
+  let hasMore = true;
+  while (hasMore) {
+    const { data, error } = await supabase
+      .from('turmas')
+      .select('id,id_interno_escola,id_anac,data_termino')
+      .in('id_interno_escola', internals)
+      .order('id', { ascending: true })
+      .range(offset, offset + STUDENT_MIGRATION_PAGE_SIZE - 1);
+    if (error) throw safeError('Não foi possível carregar as turmas da migração.');
+    const page = (data ?? []) as StudentTurma[];
+    turmas.push(...page);
+    hasMore = page.length === STUDENT_MIGRATION_PAGE_SIZE;
+    if (hasMore) offset += page.length;
+  }
+  return turmas;
+}
+
+async function loadStudentTurmasByAnac(anacs: string[]): Promise<StudentTurma[]> {
+  const turmas: StudentTurma[] = [];
+  let offset = 0;
+  let hasMore = true;
+  while (hasMore) {
+    const { data, error } = await supabase
+      .from('turmas')
+      .select('id,id_interno_escola,id_anac,data_termino')
+      .in('id_anac', anacs)
+      .order('id', { ascending: true })
+      .range(offset, offset + STUDENT_MIGRATION_PAGE_SIZE - 1);
+    if (error) throw safeError('Não foi possível carregar as turmas da migração.');
+    const page = (data ?? []) as StudentTurma[];
+    turmas.push(...page);
+    hasMore = page.length === STUDENT_MIGRATION_PAGE_SIZE;
+    if (hasMore) offset += page.length;
+  }
+  return turmas;
+}
+
+async function loadAllStudentCompanies(): Promise<StudentCompany[]> {
+  const companies: StudentCompany[] = [];
+  let offset = 0;
+  let hasMore = true;
+  while (hasMore) {
+    const { data, error } = await supabase
+      .from('empresas')
+      .select('id,nome_fantasia,razao_social')
+      .order('id', { ascending: true })
+      .range(offset, offset + STUDENT_MIGRATION_PAGE_SIZE - 1);
+    if (error) throw safeError('Não foi possível carregar as empresas da migração.');
+    const page = (data ?? []) as StudentCompany[];
+    companies.push(...page);
+    hasMore = page.length === STUDENT_MIGRATION_PAGE_SIZE;
+    if (hasMore) offset += page.length;
+  }
+  return companies;
+}
+
+async function loadStudentMatriculasByClassIds(classIds: string[]): Promise<ExistingMatricula[]> {
+  const matriculas: ExistingMatricula[] = [];
+  let offset = 0;
+  let hasMore = true;
+  while (hasMore) {
+    const { data, error } = await supabase
+      .from('matriculas')
+      .select('id,aluno_id,turma_id')
+      .in('turma_id', classIds)
+      .order('id', { ascending: true })
+      .range(offset, offset + STUDENT_MIGRATION_PAGE_SIZE - 1);
+    if (error) throw safeError('Não foi possível consultar as matrículas existentes.');
+    const page = (data ?? []) as ExistingMatricula[];
+    matriculas.push(...page);
+    hasMore = page.length === STUDENT_MIGRATION_PAGE_SIZE;
+    if (hasMore) offset += page.length;
+  }
+  return matriculas;
 }
 
 function isUniqueConflict(error: unknown): boolean {
@@ -373,7 +453,7 @@ async function ensureMigrationCompanies(rows: StudentMigrationRow[], companies: 
     created = true;
   }
 
-  return created ? await companyService.getAll() as StudentCompany[] : companies;
+  return created ? await loadAllStudentCompanies() : companies;
 }
 
 function classForRow(row: StudentMigrationRow, byInternal: Map<number, StudentTurma>, byAnac: Map<string, StudentTurma>): StudentTurma {
@@ -391,15 +471,14 @@ export async function previewStudentMigrationBatch(rows: StudentMigrationRow[]):
   if (!selectedRows.length) return { rows: [], blockingCount: 0, warningCount: 0, missingCompanies: [], missingCompanyStudentCount: 0 };
   const internals = uniqueBy(selectedRows.map((row) => Number(row.normalized.turma)), String);
   const anacs = uniqueBy(selectedRows.map((row) => row.normalized.anac), (value) => normalizeStudentComparison(value));
-  const [internalQuery, anacQuery, people, companiesQuery] = await Promise.all([
-    supabase.from('turmas').select('id,id_interno_escola,id_anac,data_termino').in('id_interno_escola', internals),
-    supabase.from('turmas').select('id,id_interno_escola,id_anac,data_termino').in('id_anac', anacs),
+  const [internalClasses, anacClasses, people, companies] = await Promise.all([
+    loadStudentTurmasByInternalIds(internals),
+    loadStudentTurmasByAnac(anacs),
     loadAllStudentPeople(),
-    supabase.from('empresas').select('id,nome_fantasia,razao_social'),
+    loadAllStudentCompanies(),
   ]);
-  if (internalQuery.error || anacQuery.error || companiesQuery.error) throw safeError('Não foi possível validar as referências da migração.');
-  const byInternal = new Map(((internalQuery.data ?? []) as StudentTurma[]).map((turma) => [turma.id_interno_escola, turma]));
-  const byAnac = new Map(((anacQuery.data ?? []) as StudentTurma[]).map((turma) => [normalizeStudentComparison(turma.id_anac), turma]));
+  const byInternal = new Map(internalClasses.map((turma) => [turma.id_interno_escola, turma]));
+  const byAnac = new Map(anacClasses.map((turma) => [normalizeStudentComparison(turma.id_anac), turma]));
   const peopleByCpf = new Map<string, StudentPerson>();
   const duplicatePeopleCpfs = new Set<string>();
   people.forEach((person) => {
@@ -408,7 +487,6 @@ export async function previewStudentMigrationBatch(rows: StudentMigrationRow[]):
     if (peopleByCpf.has(cpf)) duplicatePeopleCpfs.add(cpf);
     peopleByCpf.set(cpf, person);
   });
-  const companies = (companiesQuery.data ?? []) as StudentCompany[];
   const previewRows = selectedRows.map((row) => {
     const previewRow: StudentMigrationRow = { ...row, problems: [...row.problems], warnings: [...row.warnings] };
     try {
@@ -498,16 +576,13 @@ export async function runStudentMigrationBatch(rows: StudentMigrationRow[], onPr
 
   const internals = uniqueBy(selectedRows.map((row) => Number(row.normalized.turma)), String);
   const anacs = uniqueBy(selectedRows.map((row) => row.normalized.anac), (value) => normalizeStudentComparison(value));
-  const [internalQuery, anacQuery, people, companiesQuery] = await Promise.all([
-    supabase.from('turmas').select('id,id_interno_escola,id_anac,data_termino').in('id_interno_escola', internals),
-    supabase.from('turmas').select('id,id_interno_escola,id_anac,data_termino').in('id_anac', anacs),
+  const [internalClasses, anacClasses, people, loadedCompanies] = await Promise.all([
+    loadStudentTurmasByInternalIds(internals),
+    loadStudentTurmasByAnac(anacs),
     // O CPF legado pode estar pontuado; a normalização acontece abaixo, após a leitura autorizada.
     loadAllStudentPeople(),
-    supabase.from('empresas').select('id,nome_fantasia,razao_social'),
+    loadAllStudentCompanies(),
   ]);
-  if (internalQuery.error || anacQuery.error || companiesQuery.error) throw safeError('Não foi possível carregar as referências da migração.');
-  const internalClasses = (internalQuery.data ?? []) as StudentTurma[];
-  const anacClasses = (anacQuery.data ?? []) as StudentTurma[];
   const byInternal = new Map(internalClasses.map((turma) => [turma.id_interno_escola, turma]));
   const byAnac = new Map(anacClasses.map((turma) => [normalizeStudentComparison(turma.id_anac), turma]));
   const peopleByCpf = new Map<string, StudentPerson>();
@@ -518,14 +593,11 @@ export async function runStudentMigrationBatch(rows: StudentMigrationRow[], onPr
     if (peopleByCpf.has(cpf)) duplicatePeopleCpfs.add(cpf);
     peopleByCpf.set(cpf, person);
   });
-  const companies = await ensureMigrationCompanies(selectedRows, (companiesQuery.data ?? []) as StudentCompany[]);
+  const companies = await ensureMigrationCompanies(selectedRows, loadedCompanies);
   const classIds = uniqueBy([...internalClasses, ...anacClasses], (turma) => turma.id).map((turma) => turma.id);
-  const { data: existingRows, error: existingError } = classIds.length
-    ? await supabase.from('matriculas').select('id,aluno_id,turma_id').in('turma_id', classIds)
-    : { data: [], error: null };
-  if (existingError) throw safeError('Não foi possível consultar as matrículas existentes.');
+  const existingRows = classIds.length ? await loadStudentMatriculasByClassIds(classIds) : [];
   const matriculasByKey = new Map<string, ExistingMatricula>();
-  ((existingRows ?? []) as ExistingMatricula[]).forEach((matricula) => matriculasByKey.set(`${matricula.aluno_id}|${matricula.turma_id}`, matricula));
+  existingRows.forEach((matricula) => matriculasByKey.set(`${matricula.aluno_id}|${matricula.turma_id}`, matricula));
 
   for (let index = 0; index < selectedRows.length; index += 1) {
     const row = selectedRows[index];
@@ -618,7 +690,11 @@ export async function runStudentMigrationBatch(rows: StudentMigrationRow[], onPr
           p_status_matricula: academic.status_matricula,
           p_criar_diario: false,
         });
-        if (error || !data) throw safeError('Não foi possível criar a matrícula histórica.');
+        if (error) {
+          if (isUniqueConflict(error)) throw safeError('A matrícula deste aluno já existe nesta turma.');
+          throw safeError('Não foi possível criar a matrícula histórica.');
+        }
+        if (!data) throw safeError('Não foi possível criar a matrícula histórica.');
         matriculasByKey.set(key, data as ExistingMatricula);
         results.push(resultMessage(row, turma, `${personMessage} Vínculo de matrícula criado com sucesso. Não foi criado diário de classe.${row.warnings.length ? ` ${row.warnings.join(' ')}` : ''}`));
       }
