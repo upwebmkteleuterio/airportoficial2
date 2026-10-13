@@ -10,6 +10,7 @@ import { DOCUMENT_TEMPLATE_ENTITIES, buildSampleData, getEntityLabel, shortcodeT
 import { DEFAULT_PAGE_CONFIG, normalizePageConfig } from '../../utils/documentPage';
 import { Modal } from '../ui/Modal';
 import { DocumentEditorToolbar } from './DocumentEditorToolbar';
+import { DocumentTableMenu } from './DocumentTableMenu';
 import { DocumentPreviewModal } from './DocumentPreviewModal';
 import { DocumentShortcodePanel } from './DocumentShortcodePanel';
 
@@ -104,18 +105,23 @@ export function DocumentTemplateEditor({ template, isSaving, onSave, onCancel }:
 
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <section aria-label="Editor de conteúdo" className="min-w-0">
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-t-xl border border-b-0 border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-950">
-            <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Conteúdo do documento</h2>
-            <div className="flex flex-wrap items-center gap-2">
-              <button type="button" onClick={() => setIsPageSetupOpen(true)} aria-label="Configurar margens da página" className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">
-                <Settings2 className="h-4 w-4" aria-hidden="true" /> Configurar página
-              </button>
-              <button type="button" onClick={() => setIsPreviewOpen(true)} disabled={!editor} aria-label="Pré-visualizar modelo" className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-teal-300 px-3 py-2 text-sm font-semibold text-teal-800 hover:bg-teal-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-teal-800 dark:text-teal-200 dark:hover:bg-teal-950/50">
-                <Eye className="h-4 w-4" aria-hidden="true" /> Pré-visualizar
-              </button>
+          <div className="sticky top-0 z-30 rounded-t-xl border border-b-0 border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-950">
+            <div className="flex flex-wrap items-center justify-between gap-3 px-3 py-2">
+              <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Conteúdo do documento</h2>
+              <div className="flex flex-wrap items-center gap-2">
+                <button type="button" onClick={() => setIsPageSetupOpen(true)} aria-label="Configurar margens da página" className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">
+                  <Settings2 className="h-4 w-4" aria-hidden="true" /> Configurar página
+                </button>
+                <button type="button" onClick={() => setIsPreviewOpen(true)} disabled={!editor} aria-label="Pré-visualizar modelo" className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-teal-300 px-3 py-2 text-sm font-semibold text-teal-800 hover:bg-teal-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-teal-800 dark:text-teal-200 dark:hover:bg-teal-950/50">
+                  <Eye className="h-4 w-4" aria-hidden="true" /> Pré-visualizar
+                </button>
+              </div>
             </div>
+            {editor && <>
+              <DocumentEditorToolbar editor={editor} />
+              <DocumentTableMenu editor={editor} />
+            </>}
           </div>
-          {editor && <DocumentEditorToolbar editor={editor} />}
           <div className="overflow-x-auto rounded-b-xl border border-slate-200 bg-slate-100 p-4 dark:border-slate-700 dark:bg-slate-950">
             <div
               className="mx-auto min-h-[297mm] w-[210mm] max-w-full bg-white text-slate-900 shadow-lg"

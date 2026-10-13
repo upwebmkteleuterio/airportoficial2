@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import type { Editor } from '@tiptap/react';
 import {
   AlignCenter, AlignJustify, AlignLeft, AlignRight, Bold, CaseLower, CaseUpper, Heading1, Heading2, Heading3,
-  ImagePlus, Italic, List, ListOrdered, Minus, Plus, Quote, Redo2, Strikethrough, Table2, Trash2, Underline, Undo2,
+  ImagePlus, Italic, List, ListOrdered, Quote, Redo2, Strikethrough, Table2, Underline, Undo2,
 } from 'lucide-react';
 import { imageFileToDataUrl } from '../../utils/documentImage';
 
@@ -34,7 +34,6 @@ export function DocumentEditorToolbar({ editor }: DocumentEditorToolbarProps) {
   };
 
   const addTable = () => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
-  const isInTable = editor.isActive('table');
 
   const button = (label: string, icon: React.ReactNode, action: () => void, active = false, disabled = false) => (
     <button key={label} type="button" onClick={action} disabled={disabled} aria-label={label} title={label} aria-pressed={active} className={buttonClass(active)}>
@@ -43,7 +42,7 @@ export function DocumentEditorToolbar({ editor }: DocumentEditorToolbarProps) {
   );
 
   return (
-    <div className="rounded-t-xl border border-b-0 border-slate-200 bg-slate-50 p-2 dark:border-slate-700 dark:bg-slate-950">
+    <div className="border-x border-slate-200 bg-slate-50 p-2 dark:border-slate-700 dark:bg-slate-950">
       <div className="flex flex-wrap items-center gap-1">
         {button('Desfazer', <Undo2 className="h-4 w-4" />, () => editor.chain().focus().undo().run(), false, !editor.can().undo())}
         {button('Refazer', <Redo2 className="h-4 w-4" />, () => editor.chain().focus().redo().run(), false, !editor.can().redo())}
@@ -72,14 +71,6 @@ export function DocumentEditorToolbar({ editor }: DocumentEditorToolbarProps) {
         {button('Inserir imagem', <ImagePlus className="h-4 w-4" />, () => fileInputRef.current?.click())}
         <input ref={fileInputRef} className="sr-only" type="file" accept="image/*" aria-label="Selecionar imagem para inserir" onChange={(event) => { void handleImage(event.target.files?.[0]); event.currentTarget.value = ''; }} />
         {button('Inserir tabela', <Table2 className="h-4 w-4" />, addTable)}
-        {isInTable && <>
-          <span className="mx-1 h-6 border-l border-slate-300 dark:border-slate-700" aria-hidden="true" />
-          {button('Adicionar linha abaixo', <Plus className="h-4 w-4" />, () => editor.chain().focus().addRowAfter().run())}
-          {button('Remover linha', <Minus className="h-4 w-4" />, () => editor.chain().focus().deleteRow().run())}
-          {button('Adicionar coluna à direita', <Plus className="h-4 w-4 rotate-90" />, () => editor.chain().focus().addColumnAfter().run())}
-          {button('Remover coluna', <Minus className="h-4 w-4 rotate-90" />, () => editor.chain().focus().deleteColumn().run())}
-          {button('Excluir tabela', <Trash2 className="h-4 w-4" />, () => editor.chain().focus().deleteTable().run())}
-        </>}
       </div>
       {imageError && <p role="alert" className="mt-2 text-sm text-red-700 dark:text-red-300">{imageError}</p>}
     </div>

@@ -167,3 +167,39 @@ select:not(:disabled) {
 .doc-render img { max-width: 100%; height: auto; }
 .doc-render a { color: #0f766e; text-decoration: underline; }
 .doc-render hr { border: none; border-top: 1px solid #cbd5e1; margin: 1.5em 0; }
+
+/* Tabelas dentro do editor de modelos de documento */
+.ProseMirror .tableWrapper { overflow-x: auto; }
+.ProseMirror table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  margin: 1em 0;
+}
+.ProseMirror th,
+.ProseMirror td {
+  position: relative;
+  min-width: 2.5rem;
+  border: 1px solid #cbd5e1;
+  padding: 6px 8px;
+  vertical-align: top;
+}
+.ProseMirror th { background: #f1f5f9; font-weight: 700; text-align: left; }
+.ProseMirror td > p, .ProseMirror th > p { margin: 0; }
+.ProseMirror .selectedCell::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(13, 148, 136, 0.15);
+  pointer-events: none;
+}
+.ProseMirror .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: -2px;
+  width: 4px;
+  background: #0d9488;
+  pointer-events: none;
+}
+.ProseMirror.resize-cursor { cursor: col-resize; }

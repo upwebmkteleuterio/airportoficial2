@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { MoreVertical } from 'lucide-react';
 
 export interface RowActionItem {
@@ -20,15 +21,48 @@ export function RowActionMenu({
   title = 'Ações',
 }: RowActionMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [openUpward, setOpenUpward] = useState(false);
+  const [position, setPosition] = useState({ top: 0, left: 0 });
   const menuRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+
+  useLayoutEffect(() => {
+    if (!isOpen) return;
+
+    const updatePosition = () => {
+      const rect = triggerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+
+      const menuWidth = menuRef.current?.offsetWidth ?? 192;
+      const menuHeight = menuRef.current?.offsetHeight ?? items.length * 32 + 8;
+      const opensLeft = rect.right + 8 + menuWidth > window.innerWidth - 8;
+      const left = opensLeft
+        ? Math.max(8, rect.left - 8 - menuWidth)
+        : Math.min(window.innerWidth - menuWidth - 8, rect.right + 8);
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      const opensUp = spaceBelow < menuHeight + 8 && spaceAbove > spaceBelow;
+      const top = opensUp
+        ? Math.max(8, rect.bottom - menuHeight)
+        : Math.min(window.innerHeight - menuHeight - 8, rect.top);
+
+      setPosition({ top, left });
+    };
+
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [isOpen, items.length]);
 
   useEffect(() => {
     if (!isOpen) return;
 
     const handleOutsideClick = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (!triggerRef.current?.contains(target) && !menuRef.current?.contains(target)) {
         setIsOpen(false);
       }
     };
@@ -48,19 +82,13 @@ export function RowActionMenu({
   }, [isOpen]);
 
   return (
-    <div ref={menuRef} className="relative" onClick={(event) => event.stopPropagation()}>
+    <>
       <button
         ref={triggerRef}
         type="button"
         onClick={(event) => {
           event.stopPropagation();
-          if (isOpen) {
-            setIsOpen(false);
-          } else {
-            const rect = triggerRef.current?.getBoundingClientRect();
-            setOpenUpward(Boolean(rect && window.innerHeight - rect.bottom < 160));
-            setIsOpen(true);
-          }
+          setIsOpen((open) => !open);
         }}
         aria-label={ariaLabel}
         title={title}
@@ -71,10 +99,13 @@ export function RowActionMenu({
         <MoreVertical className="h-4 w-4" aria-hidden="true" />
       </button>
 
-      {isOpen && (
+      {isOpen && createPortal(
         <div
+          ref={menuRef}
           role="menu"
-          className={`absolute left-full z-50 ml-2 w-48 rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-850 ${openUpward ? 'bottom-0' : 'top-0'}`}
+          onClick={(event) => event.stopPropagation()}
+          style={{ position: 'fixed', top: position.top, left: position.left }}
+          className="z-[100] w-48 rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-850"
         >
           {items.map((item) => (
             <button
@@ -98,8 +129,9 @@ export function RowActionMenu({
               {item.label}
             </button>
           ))}
-        </div>
+        </div>,
+        document.body,
       )}
-    </div>
+    </>
   );
 }
