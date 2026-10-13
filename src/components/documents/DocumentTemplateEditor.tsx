@@ -4,10 +4,11 @@ import TextAlign from '@tiptap/extension-text-align';
 import Image from '@tiptap/extension-image';
 import { TableKit } from '@tiptap/extension-table';
 import { useState } from 'react';
-import { Eye, Save, X } from 'lucide-react';
+import { Eye, Save, Settings2, X } from 'lucide-react';
 import type { DocumentPageConfig, DocumentTemplate, DocumentTemplateEntity, DocumentTemplateInput } from '../../types/documentTemplates';
 import { DOCUMENT_TEMPLATE_ENTITIES, getEntityLabel, shortcodeToken } from '../../utils/documentShortcodes';
 import { DEFAULT_PAGE_CONFIG, normalizePageConfig } from '../../utils/documentPage';
+import { Modal } from '../ui/Modal';
 import { DocumentEditorToolbar } from './DocumentEditorToolbar';
 import { DocumentPreviewModal } from './DocumentPreviewModal';
 import { DocumentShortcodePanel } from './DocumentShortcodePanel';
@@ -35,6 +36,7 @@ export function DocumentTemplateEditor({ template, isSaving, onSave, onCancel }:
     template ? normalizePageConfig(template.configuracao) : DEFAULT_PAGE_CONFIG,
   );
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [isPageSetupOpen, setIsPageSetupOpen] = useState(false);
   const editor = useEditor({
     shouldRerenderOnTransaction: true,
     extensions: [
@@ -91,28 +93,18 @@ export function DocumentTemplateEditor({ template, isSaving, onSave, onCancel }:
         </label>
       </div>
 
-      <section aria-labelledby="page-setup-title" className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
-        <h2 id="page-setup-title" className="text-base font-semibold text-slate-900 dark:text-white">Configuração da página</h2>
-        <div className="mt-3 flex flex-wrap items-end gap-4">
-          <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Formato
-            <input readOnly value="A4" aria-label="Formato do papel A4" className={`${fieldClass} w-28`} />
-          </label>
-          {marginLabels.map(({ key, label }) => (
-            <label key={key} className="text-sm font-medium text-slate-700 dark:text-slate-200">
-              Margem {label} (mm)
-              <input type="number" min={0} max={60} step={1} value={pageConfig.margens[key]} onChange={(event) => updateMargin(key, Math.min(60, Math.max(0, Number(event.target.value))))} aria-label={`Margem ${label} em milímetros`} className={`${fieldClass} w-28`} />
-            </label>
-          ))}
-        </div>
-      </section>
-
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <section aria-label="Editor de conteúdo" className="min-w-0">
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-t-xl border border-b-0 border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-950">
             <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Conteúdo do documento</h2>
-            <button type="button" onClick={() => setIsPreviewOpen(true)} disabled={!editor} aria-label="Pré-visualizar modelo" className="inline-flex items-center gap-2 rounded-lg border border-teal-300 px-3 py-2 text-sm font-semibold text-teal-800 hover:bg-teal-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-teal-800 dark:text-teal-200 dark:hover:bg-teal-950/50">
-              <Eye className="h-4 w-4" aria-hidden="true" /> Pré-visualizar
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" onClick={() => setIsPageSetupOpen(true)} aria-label="Configurar margens da página" className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">
+                <Settings2 className="h-4 w-4" aria-hidden="true" /> Configurar página
+              </button>
+              <button type="button" onClick={() => setIsPreviewOpen(true)} disabled={!editor} aria-label="Pré-visualizar modelo" className="inline-flex items-center gap-2 rounded-lg border border-teal-300 px-3 py-2 text-sm font-semibold text-teal-800 hover:bg-teal-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-teal-800 dark:text-teal-200 dark:hover:bg-teal-950/50">
+                <Eye className="h-4 w-4" aria-hidden="true" /> Pré-visualizar
+              </button>
+            </div>
           </div>
           {editor && <DocumentEditorToolbar editor={editor} />}
           <div className="overflow-x-auto rounded-b-xl border border-slate-200 bg-slate-100 p-4 dark:border-slate-700 dark:bg-slate-950">
@@ -139,6 +131,31 @@ export function DocumentTemplateEditor({ template, isSaving, onSave, onCancel }:
           pageConfig={pageConfig}
         />
       )}
+
+      <Modal isOpen={isPageSetupOpen} onClose={() => setIsPageSetupOpen(false)} ariaLabelledBy="page-setup-title">
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 id="page-setup-title" className="text-lg font-semibold text-slate-900 dark:text-white">Configuração da página</h2>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Formato A4. Ajuste as margens em milímetros.</p>
+            </div>
+            <button type="button" onClick={() => setIsPageSetupOpen(false)} aria-label="Fechar configuração da página" className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:text-slate-400 dark:hover:bg-slate-800">
+              <X className="h-5 w-5" aria-hidden="true" />
+            </button>
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-4">
+            {marginLabels.map(({ key, label }) => (
+              <label key={key} className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                Margem {label} (mm)
+                <input type="number" min={0} max={60} step={1} value={pageConfig.margens[key]} onChange={(event) => updateMargin(key, Math.min(60, Math.max(0, Number(event.target.value))))} aria-label={`Margem ${label} em milímetros`} className={fieldClass} />
+              </label>
+            ))}
+          </div>
+          <div className="mt-6 flex justify-end">
+            <button type="button" onClick={() => setIsPageSetupOpen(false)} className="rounded-lg bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500">Concluir</button>
+          </div>
+        </div>
+      </Modal>
 
       <div className="flex flex-wrap justify-end gap-3">
         <button type="button" onClick={onCancel} disabled={isSaving} aria-label="Cancelar edição" className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-200">

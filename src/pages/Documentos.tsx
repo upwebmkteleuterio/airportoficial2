@@ -71,7 +71,7 @@ export default function Documentos() {
   };
 
   return (
-    <div id="documentos-page" className="flex min-h-full flex-1 flex-col gap-6 p-4 sm:p-6">
+    <div id="documentos-page" className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto p-4 sm:p-6">
       <header>
         <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Documentos</h1>
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
