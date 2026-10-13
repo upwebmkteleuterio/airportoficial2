@@ -12,8 +12,10 @@ export function useDocumentSubjects(options: {
   enabled?: boolean;
 }) {
   const term = normalizeTerm(options.search);
+  // Turmas são buscadas pelo ID interno, que pode ter apenas dois dígitos.
+  const minLength = options.entity === 'TURMA' ? 2 : 3;
   const canSearch = Boolean(options.entity)
-    && (term.length >= 3 || Boolean(options.turmaId))
+    && (term.length >= minLength || Boolean(options.turmaId))
     && options.enabled !== false;
   const query = useInfiniteQuery({
     queryKey: ['document-subjects', options.entity, options.turmaId ?? null, term],
