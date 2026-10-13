@@ -151,7 +151,7 @@ export function SharedDocumentsPanel({ isOpen, onClose, student, accessGrant, tu
     : null;
 
   return (
-    <SlidePanel isOpen={isOpen} onClose={onClose} maxWidth="max-w-3xl" baseZIndex={baseZIndex}>
+    <SlidePanel isOpen={isOpen} onClose={onClose} maxWidth="max-w-4xl" baseZIndex={baseZIndex}>
       <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-800 shrink-0">
         <div>
           <h3 className="font-display text-lg font-bold text-slate-900 dark:text-white">
@@ -176,7 +176,7 @@ export function SharedDocumentsPanel({ isOpen, onClose, student, accessGrant, tu
 
       <div className="flex h-full overflow-hidden bg-slate-50 dark:bg-slate-900">
         {/* Sidebar com a lista de documentos reais */}
-        <div className="w-1/3 border-r border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-850 overflow-y-auto">
+        <div className="w-[37%] border-r border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-850 overflow-y-auto">
           <div className="p-4 space-y-2">
             {documentsQuery.isLoading && (
               <div className="flex items-center justify-center gap-2 py-8 text-sm text-gray-500 dark:text-slate-400">
@@ -210,20 +210,20 @@ export function SharedDocumentsPanel({ isOpen, onClose, student, accessGrant, tu
                 <button
                   key={entry.id}
                   onClick={() => setActiveDocId(entry.id)}
-                  className={`w-full text-left flex items-center justify-between p-3 rounded-lg transition-colors ${isActive ? 'bg-teal-50 dark:bg-slate-800 border-[#005f5f] border' : 'bg-white dark:bg-slate-850 border border-gray-200 dark:border-slate-700 hover:border-[#005f5f]'}`}
+                  className={`w-full text-left flex items-center justify-between gap-2 p-3 rounded-lg transition-colors cursor-pointer ${isActive ? 'bg-teal-50 dark:bg-slate-800 border-[#005f5f] border' : 'bg-white dark:bg-slate-850 border border-gray-200 dark:border-slate-700 hover:border-[#005f5f]'}`}
                 >
-                  <div className="flex items-center gap-3 min-w-0">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
                     <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${isActive ? 'bg-[#005f5f] text-white' : 'bg-teal-50 dark:bg-slate-800 text-[#005f5f] dark:text-teal-400'}`}>
                       {entry.kind === 'photo'
                         ? <ImageIcon className="w-4 h-4" />
                         : <FileText className="w-4 h-4" />}
                     </div>
-                    <div className="min-w-0">
-                      <h4 className={`text-xs font-bold truncate ${isActive ? 'text-[#005f5f] dark:text-white' : 'text-slate-800 dark:text-slate-200'}`}>
+                    <div className="min-w-0 flex-1">
+                      <h4 className={`text-xs font-bold line-clamp-2 leading-snug break-words ${isActive ? 'text-[#005f5f] dark:text-white' : 'text-slate-800 dark:text-slate-200'}`}>
                         {entry.label}
                         {document?.versao ? ` (v${document.versao})` : ''}
                       </h4>
-                      <p className="text-[10px] text-gray-500 dark:text-slate-400 truncate">
+                      <p className="text-[10px] text-gray-500 dark:text-slate-400 line-clamp-2 leading-snug break-words">
                         {fileName}
                       </p>
                     </div>
@@ -240,7 +240,7 @@ export function SharedDocumentsPanel({ isOpen, onClose, student, accessGrant, tu
         </div>
 
         {/* Visualizador com URL assinada */}
-        <div className="w-2/3 flex flex-col h-full">
+        <div className="w-[63%] flex flex-col h-full">
           <div className="p-4 border-b border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-850 flex items-center justify-between">
             <div className="min-w-0">
               <h4 className="font-bold text-slate-800 dark:text-slate-200 truncate">
