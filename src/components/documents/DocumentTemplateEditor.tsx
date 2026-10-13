@@ -6,7 +6,7 @@ import { TableKit } from '@tiptap/extension-table';
 import { useState } from 'react';
 import { Eye, Save, Settings2, X } from 'lucide-react';
 import type { DocumentPageConfig, DocumentTemplate, DocumentTemplateEntity, DocumentTemplateInput } from '../../types/documentTemplates';
-import { DOCUMENT_TEMPLATE_ENTITIES, getEntityLabel, shortcodeToken } from '../../utils/documentShortcodes';
+import { DOCUMENT_TEMPLATE_ENTITIES, buildSampleData, getEntityLabel, shortcodeToken } from '../../utils/documentShortcodes';
 import { DEFAULT_PAGE_CONFIG, normalizePageConfig } from '../../utils/documentPage';
 import { Modal } from '../ui/Modal';
 import { DocumentEditorToolbar } from './DocumentEditorToolbar';
@@ -82,7 +82,7 @@ export function DocumentTemplateEditor({ template, isSaving, onSave, onCancel }:
           {template ? (
             <div className={`${fieldClass} bg-slate-50 dark:bg-slate-950`} aria-label="Entidade principal somente leitura">{getEntityLabel(template.entidade_principal)}</div>
           ) : (
-            <select value={entity} onChange={(event) => setEntity(event.target.value as DocumentTemplateEntity)} aria-label="Entidade principal" className={fieldClass}>
+            <select value={entity} onChange={(event) => setEntity(event.target.value as DocumentTemplateEntity)} aria-label="Entidade principal" className={`${fieldClass} cursor-pointer`}>
               {DOCUMENT_TEMPLATE_ENTITIES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
             </select>
           )}
@@ -98,10 +98,10 @@ export function DocumentTemplateEditor({ template, isSaving, onSave, onCancel }:
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-t-xl border border-b-0 border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-950">
             <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Conteúdo do documento</h2>
             <div className="flex flex-wrap items-center gap-2">
-              <button type="button" onClick={() => setIsPageSetupOpen(true)} aria-label="Configurar margens da página" className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">
+              <button type="button" onClick={() => setIsPageSetupOpen(true)} aria-label="Configurar margens da página" className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">
                 <Settings2 className="h-4 w-4" aria-hidden="true" /> Configurar página
               </button>
-              <button type="button" onClick={() => setIsPreviewOpen(true)} disabled={!editor} aria-label="Pré-visualizar modelo" className="inline-flex items-center gap-2 rounded-lg border border-teal-300 px-3 py-2 text-sm font-semibold text-teal-800 hover:bg-teal-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-teal-800 dark:text-teal-200 dark:hover:bg-teal-950/50">
+              <button type="button" onClick={() => setIsPreviewOpen(true)} disabled={!editor} aria-label="Pré-visualizar modelo" className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-teal-300 px-3 py-2 text-sm font-semibold text-teal-800 hover:bg-teal-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-teal-800 dark:text-teal-200 dark:hover:bg-teal-950/50">
                 <Eye className="h-4 w-4" aria-hidden="true" /> Pré-visualizar
               </button>
             </div>
@@ -127,7 +127,8 @@ export function DocumentTemplateEditor({ template, isSaving, onSave, onCancel }:
           isOpen={isPreviewOpen}
           onClose={() => setIsPreviewOpen(false)}
           html={editor.getHTML()}
-          entity={template?.entidade_principal ?? entity}
+          data={buildSampleData(template?.entidade_principal ?? entity)}
+          isSampleData
           pageConfig={pageConfig}
         />
       )}
@@ -139,7 +140,7 @@ export function DocumentTemplateEditor({ template, isSaving, onSave, onCancel }:
               <h2 id="page-setup-title" className="text-lg font-semibold text-slate-900 dark:text-white">Configuração da página</h2>
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Formato A4. Ajuste as margens em milímetros.</p>
             </div>
-            <button type="button" onClick={() => setIsPageSetupOpen(false)} aria-label="Fechar configuração da página" className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:text-slate-400 dark:hover:bg-slate-800">
+            <button type="button" onClick={() => setIsPageSetupOpen(false)} aria-label="Fechar configuração da página" className="cursor-pointer rounded-lg p-2 text-slate-500 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:text-slate-400 dark:hover:bg-slate-800">
               <X className="h-5 w-5" aria-hidden="true" />
             </button>
           </div>
@@ -152,16 +153,16 @@ export function DocumentTemplateEditor({ template, isSaving, onSave, onCancel }:
             ))}
           </div>
           <div className="mt-6 flex justify-end">
-            <button type="button" onClick={() => setIsPageSetupOpen(false)} className="rounded-lg bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500">Concluir</button>
+            <button type="button" onClick={() => setIsPageSetupOpen(false)} className="cursor-pointer rounded-lg bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500">Concluir</button>
           </div>
         </div>
       </Modal>
 
       <div className="flex flex-wrap justify-end gap-3">
-        <button type="button" onClick={onCancel} disabled={isSaving} aria-label="Cancelar edição" className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-200">
+        <button type="button" onClick={onCancel} disabled={isSaving} aria-label="Cancelar edição" className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-200">
           <X className="h-4 w-4" aria-hidden="true" /> Cancelar
         </button>
-        <button type="submit" disabled={!nome.trim() || !editor || isSaving} aria-label="Salvar modelo" className="inline-flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-50">
+        <button type="submit" disabled={!nome.trim() || !editor || isSaving} aria-label="Salvar modelo" className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-50">
           <Save className="h-4 w-4" aria-hidden="true" /> {isSaving ? 'Salvando...' : 'Salvar'}
         </button>
       </div>

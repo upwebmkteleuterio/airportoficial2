@@ -13,7 +13,7 @@ interface DocumentEditorToolbarProps {
 export function DocumentEditorToolbar({ editor }: DocumentEditorToolbarProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [imageError, setImageError] = useState('');
-  const buttonClass = (active = false) => `inline-flex h-9 min-w-9 items-center justify-center rounded-md border px-2 text-slate-700 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-200 ${active ? 'border-teal-300 bg-teal-50 text-teal-800 dark:border-teal-800 dark:bg-teal-950/50 dark:text-teal-200' : 'border-transparent hover:bg-slate-100 dark:hover:bg-slate-800'}`;
+  const buttonClass = (active = false) => `inline-flex h-9 min-w-9 cursor-pointer items-center justify-center rounded-md border px-2 text-slate-700 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-200 ${active ? 'border-teal-300 bg-teal-50 text-teal-800 dark:border-teal-800 dark:bg-teal-950/50 dark:text-teal-200' : 'border-transparent hover:bg-slate-100 dark:hover:bg-slate-800'}`;
 
   const transformSelection = (transform: (text: string) => string) => {
     const { from, to } = editor.state.selection;

@@ -50,6 +50,13 @@ body {
   transition: background-color 0.3s, color 0.3s;
 }
 
+/* O Tailwind v4 usa cursor: default em botões; restaura a mãozinha em elementos clicáveis. */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+select:not(:disabled) {
+  cursor: pointer;
+}
+
 /* Custom modern scrollbar for high-density grids */
 .custom-scrollbar::-webkit-scrollbar {
   width: 6px;
@@ -136,3 +143,27 @@ body {
     z-index: 9999999 !important;
   }
 }
+
+/* Folha de renderização de documentos (usada na geração de PDF) */
+.doc-render {
+  color: #0f172a;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 12pt;
+  line-height: 1.5;
+  word-break: break-word;
+}
+.doc-render h1 { font-size: 2em; font-weight: 700; margin: 0 0 0.6em; }
+.doc-render h2 { font-size: 1.5em; font-weight: 700; margin: 0 0 0.6em; }
+.doc-render h3 { font-size: 1.25em; font-weight: 700; margin: 0 0 0.6em; }
+.doc-render h4, .doc-render h5, .doc-render h6 { font-size: 1em; font-weight: 700; margin: 0 0 0.6em; }
+.doc-render p { margin: 0 0 1em; }
+.doc-render ul { list-style: disc; margin: 0 0 1em; padding-left: 2em; }
+.doc-render ol { list-style: decimal; margin: 0 0 1em; padding-left: 2em; }
+.doc-render blockquote { margin: 1em 0; padding: 0.5em 1em; border-left: 4px solid #cbd5e1; color: #475569; }
+.doc-render pre { margin: 0 0 1em; padding: 0.75em 1em; background: #f1f5f9; border-radius: 6px; font-family: "JetBrains Mono", monospace; font-size: 0.9em; white-space: pre-wrap; }
+.doc-render table { width: 100%; border-collapse: collapse; margin: 1em 0; }
+.doc-render th, .doc-render td { border: 1px solid #cbd5e1; padding: 6px 8px; text-align: left; vertical-align: top; }
+.doc-render th { background: #f1f5f9; font-weight: 700; }
+.doc-render img { max-width: 100%; height: auto; }
+.doc-render a { color: #0f766e; text-decoration: underline; }
+.doc-render hr { border: none; border-top: 1px solid #cbd5e1; margin: 1.5em 0; }

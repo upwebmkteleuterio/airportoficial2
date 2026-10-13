@@ -52,7 +52,7 @@ export function DocumentShortcodePanel({ entity, onInsert }: DocumentShortcodePa
                       type="button"
                       onClick={() => onInsert(field.key)}
                       aria-label={`Inserir ${field.label} (${shortcodeToken(field.key)})`}
-                      className="block w-full rounded-lg border border-slate-200 px-3 py-2 text-left transition hover:border-teal-400 hover:bg-teal-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:border-slate-700 dark:hover:border-teal-700 dark:hover:bg-slate-800"
+                      className="block w-full cursor-pointer rounded-lg border border-slate-200 px-3 py-2 text-left transition hover:border-teal-400 hover:bg-teal-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:border-slate-700 dark:hover:border-teal-700 dark:hover:bg-slate-800"
                     >
                       <span className="block text-sm font-medium text-slate-800 dark:text-slate-100">{field.label}</span>
                       <span className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">{shortcodeToken(field.key)}</span>
