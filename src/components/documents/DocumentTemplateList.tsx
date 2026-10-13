@@ -128,15 +128,23 @@ export function DocumentTemplateList({
       ) : (
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900" aria-busy={isFetching}>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-left text-sm">
+            <table className="w-full min-w-[880px] table-fixed text-left text-sm">
+              <colgroup>
+                <col className="w-14" />
+                <col />
+                <col className="w-40" />
+                <col className="w-56" />
+                <col className="w-36" />
+                <col className="w-40" />
+              </colgroup>
               <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-950 dark:text-slate-400">
                 <tr>
-                  <th scope="col" className="w-12 px-3 py-3"><span className="sr-only">Ações</span></th>
-                  <th scope="col" className="px-5 py-3">Nome</th>
-                  <th scope="col" className="px-5 py-3">Tipo de registro</th>
-                  <th scope="col" className="px-5 py-3">Descrição</th>
-                  <th scope="col" className="px-5 py-3">Atualizado em</th>
-                  <th scope="col" className="px-5 py-3 text-right"><span className="sr-only">Gerar documento</span></th>
+                  <th scope="col" className="px-3 py-3"><span className="sr-only">Ações</span></th>
+                  <th scope="col" className="px-4 py-3">Nome</th>
+                  <th scope="col" className="px-4 py-3">Tipo de registro</th>
+                  <th scope="col" className="px-4 py-3">Descrição</th>
+                  <th scope="col" className="px-4 py-3">Atualizado em</th>
+                  <th scope="col" className="px-4 py-3 text-right"><span className="sr-only">Gerar documento</span></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
@@ -154,7 +162,7 @@ export function DocumentTemplateList({
                     aria-label={`Editar modelo ${template.nome}`}
                     className="cursor-pointer text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-teal-500 dark:text-slate-200 dark:hover:bg-slate-800/50"
                   >
-                    <td className="w-12 px-3 py-4">
+                    <td className="px-3 py-4">
                       <RowActionMenu
                         ariaLabel={`Ações de ${template.nome}`}
                         items={[
@@ -164,11 +172,11 @@ export function DocumentTemplateList({
                         ]}
                       />
                     </td>
-                    <td className="px-5 py-4 font-semibold text-slate-900 dark:text-white">{template.nome}</td>
-                    <td className="px-5 py-4">{getEntityLabel(template.entidade_principal)}</td>
-                    <td className="max-w-xs truncate px-5 py-4 text-slate-500 dark:text-slate-400">{template.descricao || '—'}</td>
-                    <td className="whitespace-nowrap px-5 py-4">{new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short' }).format(new Date(template.updated_at))}</td>
-                    <td className="px-5 py-4">
+                    <td className="break-words px-4 py-4 font-semibold text-slate-900 dark:text-white">{template.nome}</td>
+                    <td className="px-4 py-4">{getEntityLabel(template.entidade_principal)}</td>
+                    <td className="truncate px-4 py-4 text-slate-500 dark:text-slate-400">{template.descricao || '—'}</td>
+                    <td className="whitespace-nowrap px-4 py-4">{new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short' }).format(new Date(template.updated_at))}</td>
+                    <td className="px-4 py-4">
                       <div className="flex justify-end">
                         <button
                           type="button"
