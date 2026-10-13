@@ -5,17 +5,19 @@
 
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { documentTemplateService } from '../services/documentTemplateService';
+import type { DocumentTemplateEntity } from '../types/documentTemplates';
 
 interface DocumentTemplateListOptions {
   page: number;
   pageSize: number;
   search: string;
+  entity?: DocumentTemplateEntity | '';
 }
 
-export function useDocumentTemplateList({ page, pageSize, search }: DocumentTemplateListOptions) {
+export function useDocumentTemplateList({ page, pageSize, search, entity = '' }: DocumentTemplateListOptions) {
   const query = useQuery({
-    queryKey: ['document-templates', 'page', { page, pageSize, search }],
-    queryFn: ({ signal }) => documentTemplateService.list({ page, pageSize, search, signal }),
+    queryKey: ['document-templates', 'page', { page, pageSize, search, entity }],
+    queryFn: ({ signal }) => documentTemplateService.list({ page, pageSize, search, entity: entity || null, signal }),
     placeholderData: keepPreviousData,
   });
 

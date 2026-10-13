@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { Copy, Edit3, FileText, Loader2, Plus, Search, Trash2 } from 'lucide-react';
-import type { DocumentTemplate } from '../../types/documentTemplates';
-import { getEntityLabel } from '../../utils/documentShortcodes';
+import { Copy, Edit3, FileDown, FileText, Loader2, Plus, Search, Trash2 } from 'lucide-react';
+import type { DocumentTemplate, DocumentTemplateEntity } from '../../types/documentTemplates';
+import { DOCUMENT_TEMPLATE_ENTITIES, getEntityLabel } from '../../utils/documentShortcodes';
 import { ConfirmDeleteModal } from '../ui/ConfirmDeleteModal';
 import { PaginationFooter } from '../ui/PaginationFooter';
 import { RowActionMenu } from '../ui/RowActionMenu';
@@ -12,16 +12,19 @@ interface DocumentTemplateListProps {
   page: number;
   pageSize: number;
   search: string;
+  entityFilter: DocumentTemplateEntity | '';
   isLoading: boolean;
   isFetching: boolean;
   isError: boolean;
   isSaving: boolean;
   isDeleting: boolean;
   onSearchChange: (value: string) => void;
+  onEntityFilterChange: (value: DocumentTemplateEntity | '') => void;
   onPageChange: (page: number) => void;
   onRetry: () => void;
   onCreate: () => void;
   onGenerate: () => void;
+  onGenerateFor: (template: DocumentTemplate) => void;
   onEdit: (template: DocumentTemplate) => void;
   onDuplicate: (template: DocumentTemplate) => void;
   onDelete: (id: string) => Promise<void>;
@@ -35,16 +38,19 @@ export function DocumentTemplateList({
   page,
   pageSize,
   search,
+  entityFilter,
   isLoading,
   isFetching,
   isError,
   isSaving,
   isDeleting,
   onSearchChange,
+  onEntityFilterChange,
   onPageChange,
   onRetry,
   onCreate,
   onGenerate,
+  onGenerateFor,
   onEdit,
   onDuplicate,
   onDelete,
@@ -54,18 +60,34 @@ export function DocumentTemplateList({
   return (
     <section className="flex flex-col gap-4" aria-label="Modelos de documento">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <label className="relative block w-full sm:max-w-sm">
-          <span className="sr-only">Buscar modelo pelo nome</span>
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
-          <input
-            type="search"
-            value={search}
-            onChange={(event) => onSearchChange(event.target.value)}
-            placeholder="Buscar por nome..."
-            aria-label="Buscar modelo pelo nome"
-            className="w-full rounded-lg border border-slate-300 bg-white py-2.5 pl-9 pr-3 text-sm text-slate-900 outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
-          />
-        </label>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <label className="relative block w-full sm:max-w-sm">
+            <span className="sr-only">Buscar modelo pelo nome</span>
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
+            <input
+              type="search"
+              value={search}
+              onChange={(event) => onSearchChange(event.target.value)}
+              placeholder="Buscar por nome..."
+              aria-label="Buscar modelo pelo nome"
+              className="w-full rounded-lg border border-slate-300 bg-white py-2.5 pl-9 pr-3 text-sm text-slate-900 outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+            />
+          </label>
+          <label className="block">
+            <span className="sr-only">Filtrar por tipo de registro</span>
+            <select
+              value={entityFilter}
+              onChange={(event) => onEntityFilterChange(event.target.value as DocumentTemplateEntity | '')}
+              aria-label="Filtrar por tipo de registro"
+              className="w-full cursor-pointer rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus-visible:ring-2 focus-visible:ring-teal-500 sm:w-auto dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+            >
+              <option value="">Todos os tipos</option>
+              {DOCUMENT_TEMPLATE_ENTITIES.map((item) => (
+                <option key={item.value} value={item.value}>{item.label}</option>
+              ))}
+            </select>
+          </label>
+        </div>
         <div className="flex flex-wrap items-center justify-end gap-3">
           {isFetching && !isLoading && (
             <span role="status" className="flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">
@@ -100,8 +122,8 @@ export function DocumentTemplateList({
       ) : templates.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center dark:border-slate-700 dark:bg-slate-900">
           <FileText className="mx-auto h-9 w-9 text-slate-400" aria-hidden="true" />
-          <p className="mt-3 font-semibold text-slate-800 dark:text-slate-100">{search ? 'Nenhum modelo encontrado' : 'Nenhum modelo de documento'}</p>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{search ? 'Tente ajustar a busca.' : 'Crie um modelo para começar.'}</p>
+          <p className="mt-3 font-semibold text-slate-800 dark:text-slate-100">{search || entityFilter ? 'Nenhum modelo encontrado' : 'Nenhum modelo de documento'}</p>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{search || entityFilter ? 'Tente ajustar a busca ou o filtro.' : 'Crie um modelo para começar.'}</p>
         </div>
       ) : (
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900" aria-busy={isFetching}>
@@ -114,6 +136,7 @@ export function DocumentTemplateList({
                   <th scope="col" className="px-5 py-3">Tipo de registro</th>
                   <th scope="col" className="px-5 py-3">Descrição</th>
                   <th scope="col" className="px-5 py-3">Atualizado em</th>
+                  <th scope="col" className="px-5 py-3 text-right"><span className="sr-only">Gerar documento</span></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
@@ -145,6 +168,22 @@ export function DocumentTemplateList({
                     <td className="px-5 py-4">{getEntityLabel(template.entidade_principal)}</td>
                     <td className="max-w-xs truncate px-5 py-4 text-slate-500 dark:text-slate-400">{template.descricao || '—'}</td>
                     <td className="whitespace-nowrap px-5 py-4">{new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short' }).format(new Date(template.updated_at))}</td>
+                    <td className="px-5 py-4">
+                      <div className="flex justify-end">
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onGenerateFor(template);
+                          }}
+                          aria-label={`Gerar PDF para ${template.nome}`}
+                          title="Gerar PDF"
+                          className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-teal-300 px-3 py-2 text-xs font-semibold text-teal-800 transition hover:bg-teal-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:border-teal-800 dark:text-teal-200 dark:hover:bg-teal-950/50"
+                        >
+                          <FileDown className="h-4 w-4" aria-hidden="true" /> Gerar PDF
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>

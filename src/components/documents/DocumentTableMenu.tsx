@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Editor } from '@tiptap/react';
 import { BubbleMenu } from '@tiptap/react/menus';
 import {
@@ -30,12 +30,27 @@ interface DocumentTableMenuProps {
   editor: Editor;
 }
 
+// Referências estáveis: o BubbleMenu reenvia as opções ao plugin sempre que estas props
+// mudam de identidade, e o editor re-renderiza a cada transação — identidades novas
+// criariam um ciclo infinito de atualizações.
+const appendToBody = () => document.body;
+
 export function DocumentTableMenu({ editor }: DocumentTableMenuProps) {
   const [scrollTarget, setScrollTarget] = useState<ScrollTarget | null>(null);
 
   useEffect(() => {
     setScrollTarget(findScrollParent(editor.view.dom));
   }, [editor]);
+
+  const shouldShowTableMenu = useCallback(
+    ({ editor: current }: { editor: Editor }) => current.isActive('table'),
+    [],
+  );
+
+  const menuOptions = useMemo(
+    () => ({ strategy: 'fixed' as const, placement: 'top' as const, offset: 8, scrollTarget }),
+    [scrollTarget],
+  );
 
   if (!scrollTarget) return null;
 
@@ -71,9 +86,9 @@ export function DocumentTableMenu({ editor }: DocumentTableMenuProps) {
   return (
     <BubbleMenu
       editor={editor}
-      shouldShow={({ editor: current }) => current.isActive('table')}
-      appendTo={() => document.body}
-      options={{ strategy: 'fixed', placement: 'top', offset: 8, scrollTarget }}
+      shouldShow={shouldShowTableMenu}
+      appendTo={appendToBody}
+      options={menuOptions}
       updateDelay={100}
     >
       <div

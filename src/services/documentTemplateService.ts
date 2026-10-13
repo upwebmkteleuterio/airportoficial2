@@ -5,7 +5,7 @@
 
 import { supabase } from '../integrations/supabase/client';
 import { serviceError } from './supabaseErrors';
-import type { DocumentTemplate, DocumentTemplateInput } from '../types/documentTemplates';
+import type { DocumentTemplate, DocumentTemplateEntity, DocumentTemplateInput } from '../types/documentTemplates';
 
 const TABLE = 'document_templates';
 
@@ -23,7 +23,7 @@ export const documentTemplateService = {
     return (data ?? []) as DocumentTemplate[];
   },
 
-  list: async (options: { page: number; pageSize: number; search?: string; signal?: AbortSignal }): Promise<{ items: DocumentTemplate[]; total: number }> => {
+  list: async (options: { page: number; pageSize: number; search?: string; entity?: DocumentTemplateEntity | null; signal?: AbortSignal }): Promise<{ items: DocumentTemplate[]; total: number }> => {
     const page = Number.isFinite(options.page) ? Math.max(1, Math.floor(options.page)) : 1;
     const pageSize = Number.isFinite(options.pageSize)
       ? Math.min(1000, Math.max(1, Math.floor(options.pageSize)))
@@ -33,6 +33,7 @@ export const documentTemplateService = {
     let query = supabase.from(TABLE).select('*', { count: 'exact' });
     const term = options.search?.replace(/[%_\\(),.]/g, ' ').replace(/[^0-9A-Za-zÀ-ÿ -]/g, ' ').slice(0, 100).trim();
     if (term) query = query.ilike('nome', `%${term}%`);
+    if (options.entity) query = query.eq('entidade_principal', options.entity);
     query = query.order('updated_at', { ascending: false }).range(from, to);
     if (options.signal) query = query.abortSignal(options.signal);
     const { data, count, error } = await query;

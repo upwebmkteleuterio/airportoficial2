@@ -10,6 +10,15 @@ import type { DocumentTemplateEntity } from '../types/documentTemplates';
 export interface DocumentSubjectOption {
   id: string;
   label: string;
+  hint?: string;
+}
+
+export interface DocumentSubjectPage {
+  items: DocumentSubjectOption[];
+  total: number;
+  offset: number;
+  limit: number;
+  hasMore: boolean;
 }
 
 type Row = Record<string, unknown>;
@@ -29,22 +38,28 @@ const formatDecimal = (value: unknown): string => {
   return Number.isFinite(numeric) ? numeric.toLocaleString('pt-BR') : String(value);
 };
 
+const normalizeSearchTerm = (search?: string): string =>
+  (search ?? '').replace(/[^0-9A-Za-zÀ-ÿ .@/-]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 100);
+
 async function fetchBy(table: string, column: string, value: string): Promise<Row | null> {
   const { data, error } = await supabase.from(table).select('*').eq(column, value).maybeSingle();
   if (error) throw serviceError('Não foi possível carregar dados para o documento', error);
   return (data as Row | null) ?? null;
 }
 
-async function fetchManyBy(table: string, column: string, value: string): Promise<Row[]> {
-  const { data, error } = await supabase.from(table).select('*').eq(column, value);
-  if (error) throw serviceError('Não foi possível carregar dados para o documento', error);
-  return (data as Row[] | null) ?? [];
+async function fetchAllBy(table: string, column: string, value: string): Promise<Row[]> {
+  const rows: Row[] = [];
+  for (let offset = 0; ; offset += 1000) {
+    const { data, error } = await supabase.from(table).select('*').eq(column, value).range(offset, offset + 999);
+    if (error) throw serviceError('Não foi possível carregar dados para o documento', error);
+    const page = (data as Row[] | null) ?? [];
+    rows.push(...page);
+    if (page.length < 1000) return rows;
+  }
 }
 
 function fillAlunoProfile(data: Record<string, string>, profile: Row | null) {
   if (!profile) return;
-  data['aluno.nome'] = text(profile.nome_completo);
-  data['aluno.cpf'] = text(profile.cpf);
   data['aluno.rg'] = text(profile.rg);
   data['aluno.orgao_expedicao_rg'] = text(profile.orgao_expedicao_rg);
   data['aluno.data_nascimento'] = formatDate(profile.data_nascimento);
@@ -63,8 +78,6 @@ function fillAlunoProfile(data: Record<string, string>, profile: Row | null) {
 
 function fillInstrutorProfile(data: Record<string, string>, profile: Row | null) {
   if (!profile) return;
-  data['instrutor.nome'] = text(profile.nome_completo);
-  data['instrutor.cpf'] = text(profile.cpf);
   data['instrutor.rg'] = text(profile.rg);
   data['instrutor.data_nascimento'] = formatDate(profile.data_nascimento);
   data['instrutor.email'] = text(profile.email);
@@ -138,9 +151,7 @@ function fillConcessionaria(data: Record<string, string>, concessionaria: Row | 
 async function loadTurmaContext(data: Record<string, string>, turmaId: string) {
   const turma = await fetchBy('turmas', 'id', turmaId);
   fillTurma(data, turma);
-  if (turma?.curso_id) {
-    fillCurso(data, await fetchBy('cursos', 'id', String(turma.curso_id)));
-  }
+  if (turma?.curso_id) fillCurso(data, await fetchBy('cursos', 'id', String(turma.curso_id)));
   return turma;
 }
 
@@ -155,30 +166,53 @@ export async function buildDocumentData({ entity, subjectId, turmaId }: BuildDoc
   const data: Record<string, string> = {};
 
   if (entity === 'ALUNO') {
-    const profile = await fetchBy('profiles', 'legacy_id', subjectId);
+    const pessoa = await fetchBy('pessoas', 'id', subjectId);
+    data['aluno.nome'] = text(pessoa?.nome);
+    data['aluno.cpf'] = text(pessoa?.cpf);
+    for (const field of ['rg', 'orgao_expedicao_rg', 'data_nascimento', 'nome_mae', 'nome_pai', 'email', 'telefone', 'cep', 'endereco', 'numero', 'bairro', 'cidade', 'estado', 'grau_ensino']) {
+      data[`aluno.${field}`] = '';
+    }
+    const profile = pessoa?.profile_legacy_id
+      ? await fetchBy('profiles', 'legacy_id', String(pessoa.profile_legacy_id))
+      : null;
     fillAlunoProfile(data, profile);
 
-    let empresaId = profile?.empresa_id ? String(profile.empresa_id) : null;
-
+    let matricula: Row | null = null;
+    let contextoTurmaId = turmaId ?? null;
     if (turmaId) {
-      const matriculas = await fetchManyBy('matriculas', 'aluno_id', subjectId);
-      const matriculaTurma = matriculas.find((row) => text(row.turma_id) === turmaId) ?? null;
-      fillMatricula(data, matriculaTurma);
-      await loadTurmaContext(data, turmaId);
-      if (matriculaTurma?.empresa_b2b_id) empresaId = String(matriculaTurma.empresa_b2b_id);
+      const matriculas = await fetchAllBy('matriculas', 'aluno_id', subjectId);
+      matricula = matriculas.find((row) => text(row.turma_id) === turmaId) ?? null;
+    } else {
+      const { data: rows, error } = await supabase.from('matriculas').select('*')
+        .eq('aluno_id', subjectId).order('created_at', { ascending: false })
+        .order('codigo_re', { ascending: false }).limit(1);
+      if (error) throw serviceError('Não foi possível carregar dados para o documento', error);
+      matricula = ((rows as Row[] | null) ?? [])[0] ?? null;
+      contextoTurmaId = matricula?.turma_id ? String(matricula.turma_id) : null;
     }
-
-    if (empresaId) fillEmpresa(data, await fetchBy('empresas', 'id', empresaId));
+    fillMatricula(data, matricula);
+    if (contextoTurmaId) await loadTurmaContext(data, contextoTurmaId);
+    const empresaId = matricula?.empresa_b2b_id ?? profile?.empresa_id;
+    if (empresaId) fillEmpresa(data, await fetchBy('empresas', 'id', String(empresaId)));
     return data;
   }
 
   if (entity === 'INSTRUTOR') {
-    const profile = await fetchBy('profiles', 'legacy_id', subjectId);
+    const pessoa = await fetchBy('pessoas', 'id', subjectId);
+    data['instrutor.nome'] = text(pessoa?.nome);
+    data['instrutor.cpf'] = text(pessoa?.cpf);
+    data['instrutor.rg'] = '';
+    data['instrutor.data_nascimento'] = '';
+    data['instrutor.email'] = '';
+    data['instrutor.telefone'] = '';
+    const profile = pessoa?.profile_legacy_id
+      ? await fetchBy('profiles', 'legacy_id', String(pessoa.profile_legacy_id))
+      : null;
     fillInstrutorProfile(data, profile);
 
     if (turmaId) {
       await loadTurmaContext(data, turmaId);
-      const vinculos = await fetchManyBy('turma_instrutores', 'instrutor_id', subjectId);
+      const vinculos = await fetchAllBy('turma_instrutores', 'instrutor_id', subjectId);
       const vinculo = vinculos.find((row) => text(row.turma_id) === turmaId);
       data['instrutor.funcao'] = text(vinculo?.funcao);
     }
@@ -205,46 +239,111 @@ export async function buildDocumentData({ entity, subjectId, turmaId }: BuildDoc
   return data;
 }
 
-async function listProfilesByRole(role: string): Promise<DocumentSubjectOption[]> {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('legacy_id, nome_completo')
-    .eq('role', role)
-    .eq('status', 'ativo')
-    .not('legacy_id', 'is', null)
-    .order('nome_completo', { ascending: true });
-
-  if (error) throw serviceError('Não foi possível carregar a lista de pessoas', error);
-
-  return (data ?? [])
-    .map((row) => ({ id: text(row.legacy_id), label: text(row.nome_completo) || text(row.legacy_id) }))
-    .filter((option) => option.id);
+function emptySubjectPage(offset: number, limit: number): DocumentSubjectPage {
+  return { items: [], total: 0, offset, limit, hasMore: false };
 }
 
-/** Lista os registros que podem ser o "sujeito" de um documento, por entidade. */
-export async function listDocumentSubjects(entity: DocumentTemplateEntity): Promise<DocumentSubjectOption[]> {
-  if (entity === 'ALUNO') return listProfilesByRole('ALUNO');
-  if (entity === 'INSTRUTOR') return listProfilesByRole('INSTRUTOR');
-  if (entity === 'COORDENADOR') return listProfilesByRole('COORDENADOR');
+function option(id: unknown, label: unknown, hint?: unknown): DocumentSubjectOption {
+  const result: DocumentSubjectOption = { id: text(id), label: text(label) };
+  if (hint !== null && hint !== undefined && text(hint)) result.hint = text(hint);
+  return result;
+}
 
-  if (entity === 'TURMA') {
-    const { data, error } = await supabase
-      .from('turmas')
-      .select('id, id_anac, cidade, uf')
-      .order('id_anac', { ascending: true });
-    if (error) throw serviceError('Não foi possível carregar a lista de turmas', error);
-    return (data ?? []).map((row) => ({
-      id: text(row.id),
-      label: `${text(row.id_anac)} — ${text(row.cidade)}/${text(row.uf)}`.trim(),
-    }));
+export async function searchDocumentSubjects(params: {
+  entity: DocumentTemplateEntity;
+  search?: string;
+  turmaId?: string | null;
+  offset?: number;
+  limit?: number;
+}): Promise<DocumentSubjectPage> {
+  const offset = Math.max(0, Math.floor(params.offset ?? 0));
+  const limit = Math.min(1000, Math.max(1, Math.floor(params.limit ?? 1000)));
+  const term = normalizeSearchTerm(params.search);
+  const turmaApplies = Boolean(params.turmaId) && ['ALUNO', 'INSTRUTOR', 'COORDENADOR'].includes(params.entity);
+  const digitsOnly = /^\d+$/.test(term);
+  if (term.length < 3 && !turmaApplies) return emptySubjectPage(offset, limit);
+
+  try {
+    let query: any;
+    let idColumn = 'id';
+    let labelColumn = 'nome';
+    let hintColumn = 'cpf';
+
+    if (params.entity === 'ALUNO' || params.entity === 'INSTRUTOR') {
+      query = supabase.from('pessoas').select('id, nome, cpf', { count: 'exact' });
+      if (params.entity === 'ALUNO') {
+        query = query.or('papel.is.null,papel.eq.ALUNO').eq('ativo', true).eq('visivel_diretorio', true);
+      } else {
+        query = query.eq('papel', 'INSTRUTOR').eq('ativo', true);
+      }
+      if (term) query = digitsOnly ? query.ilike('cpf', `%${term}%`) : query.ilike('nome', `%${term}%`);
+      if (turmaApplies && params.turmaId) {
+        const relation = params.entity === 'ALUNO' ? 'matriculas' : 'turma_instrutores';
+        const relationId = params.entity === 'ALUNO' ? 'aluno_id' : 'instrutor_id';
+        const relations = await fetchAllBy(relation, 'turma_id', params.turmaId);
+        const ids = Array.from(new Set(relations.map((row) => text(row[relationId])).filter(Boolean)));
+        if (!ids.length) return emptySubjectPage(offset, limit);
+        query = query.in('id', ids);
+      }
+    } else if (params.entity === 'COORDENADOR') {
+      query = supabase.from('profiles').select('legacy_id, nome_completo, cpf', { count: 'exact' })
+        .eq('role', 'COORDENADOR').not('legacy_id', 'is', null);
+      idColumn = 'legacy_id';
+      labelColumn = 'nome_completo';
+      if (term) query = digitsOnly ? query.ilike('cpf', `%${term}%`) : query.ilike('nome_completo', `%${term}%`);
+      if (turmaApplies && params.turmaId) {
+        const turma = await fetchBy('turmas', 'id', params.turmaId);
+        const ids = [turma?.coordenador_ioad_id, turma?.coordenador_iscr_id, turma?.coordenador_icar_id]
+          .map(text).filter(Boolean);
+        if (!ids.length) return emptySubjectPage(offset, limit);
+        query = query.in('legacy_id', ids);
+      }
+    } else if (params.entity === 'TURMA') {
+      query = supabase.from('turmas').select('id, id_anac, id_interno_escola, cidade, uf', { count: 'exact' });
+      idColumn = 'id';
+      labelColumn = 'id_anac';
+      hintColumn = 'id_interno_escola';
+      if (term) {
+        if (digitsOnly) {
+          const numericTerm = Number(term);
+          query = Number.isSafeInteger(numericTerm)
+            ? query.or(`id_anac.ilike.%${term}%,id_interno_escola.eq.${numericTerm}`)
+            : query.ilike('id_anac', `%${term}%`);
+        } else {
+          query = query.or(`id_anac.ilike.%${term}%,cidade.ilike.%${term}%`);
+        }
+      }
+    } else {
+      query = supabase.from('empresas').select('id, nome_fantasia, cnpj', { count: 'exact' });
+      labelColumn = 'nome_fantasia';
+      hintColumn = 'cnpj';
+      if (term) {
+        if (digitsOnly) {
+          const cnpjTerm = term.length === 14
+            ? `${term.slice(0, 2)}.${term.slice(2, 5)}.${term.slice(5, 8)}/${term.slice(8, 12)}-${term.slice(12)}`
+            : term;
+          query = query.or(`cnpj.ilike.%${cnpjTerm}%,nome_fantasia.ilike.%${term}%`);
+        } else {
+          query = query.ilike('nome_fantasia', `%${term}%`);
+        }
+      }
+    }
+
+    const orderColumn = params.entity === 'TURMA' ? 'id_anac' : params.entity === 'EMPRESA' ? 'nome_fantasia' : labelColumn;
+    const { data, error, count } = await query.order(orderColumn, { ascending: true }).range(offset, offset + limit - 1);
+    if (error) throw error;
+    const rows = (data as Row[] | null) ?? [];
+    const items = rows.map((row) => {
+      if (params.entity === 'TURMA') {
+        return { id: text(row.id), label: `${text(row.id_anac)} — ${text(row.cidade)}/${text(row.uf)}`.trim(), hint: `Turma interna ${text(row.id_interno_escola)}` };
+      }
+      return option(row[idColumn], row[labelColumn], row[hintColumn]);
+    });
+    const total = count ?? 0;
+    return { items, total, offset, limit, hasMore: offset + items.length < total };
+  } catch (error) {
+    throw serviceError('Não foi possível carregar os registros', error);
   }
-
-  const { data, error } = await supabase
-    .from('empresas')
-    .select('id, nome_fantasia')
-    .order('nome_fantasia', { ascending: true });
-  if (error) throw serviceError('Não foi possível carregar a lista de empresas', error);
-  return (data ?? []).map((row) => ({ id: text(row.id), label: text(row.nome_fantasia) }));
 }
 
 async function peopleOptionsFromIds(ids: string[]): Promise<DocumentSubjectOption[]> {
@@ -256,26 +355,37 @@ async function peopleOptionsFromIds(ids: string[]): Promise<DocumentSubjectOptio
   return unique.map((id) => ({ id, label: names.get(id) || id }));
 }
 
-/**
- * Lista os registros para geração em massa.
- * Para ALUNO/INSTRUTOR/COORDENADOR, usa a turma informada; para TURMA/EMPRESA, lista todos.
- */
+async function allEntityOptions(table: 'turmas' | 'empresas'): Promise<DocumentSubjectOption[]> {
+  const options: DocumentSubjectOption[] = [];
+  for (let offset = 0; ; offset += 1000) {
+    const { data, error } = table === 'turmas'
+      ? await supabase.from('turmas').select('id, id_anac, cidade, uf, id_interno_escola').order('id_anac', { ascending: true }).range(offset, offset + 999)
+      : await supabase.from('empresas').select('id, nome_fantasia').order('nome_fantasia', { ascending: true }).range(offset, offset + 999);
+    if (error) throw serviceError('Não foi possível carregar a lista de registros', error);
+    const rows = (data ?? []) as Row[];
+    options.push(...rows.map((row) => table === 'turmas'
+      ? { id: text(row.id), label: `${text(row.id_anac)} — ${text(row.cidade)}/${text(row.uf)}`.trim() }
+      : { id: text(row.id), label: text(row.nome_fantasia) }));
+    if (rows.length < 1000) return options;
+  }
+}
+
+/** Lista os registros para geração em massa. */
 export async function listBulkTargets(entity: DocumentTemplateEntity, turmaId?: string | null): Promise<DocumentSubjectOption[]> {
-  if (entity === 'TURMA') return listDocumentSubjects('TURMA');
-  if (entity === 'EMPRESA') return listDocumentSubjects('EMPRESA');
+  if (entity === 'TURMA') return allEntityOptions('turmas');
+  if (entity === 'EMPRESA') return allEntityOptions('empresas');
   if (!turmaId) return [];
 
   if (entity === 'ALUNO') {
-    const matriculas = await fetchManyBy('matriculas', 'turma_id', turmaId);
+    const matriculas = await fetchAllBy('matriculas', 'turma_id', turmaId);
     return peopleOptionsFromIds(matriculas.map((row) => text(row.aluno_id)));
   }
 
   if (entity === 'INSTRUTOR') {
-    const vinculos = await fetchManyBy('turma_instrutores', 'turma_id', turmaId);
+    const vinculos = await fetchAllBy('turma_instrutores', 'turma_id', turmaId);
     return peopleOptionsFromIds(vinculos.map((row) => text(row.instrutor_id)));
   }
 
-  // COORDENADOR: coordenadores vinculados à turma.
   const turma = await fetchBy('turmas', 'id', turmaId);
   if (!turma) return [];
   return peopleOptionsFromIds([
@@ -285,4 +395,4 @@ export async function listBulkTargets(entity: DocumentTemplateEntity, turmaId?: 
   ]);
 }
 
-export default { buildDocumentData, listDocumentSubjects, listBulkTargets };
+export default { buildDocumentData, listBulkTargets, searchDocumentSubjects };

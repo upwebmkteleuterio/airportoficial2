@@ -4,16 +4,13 @@
  */
 
 import { useEffect, useState } from 'react';
-import { ArrowLeft } from 'lucide-react';
 import { useDocumentTemplates } from '../hooks/useDocumentTemplates';
 import { useDocumentTemplateList } from '../hooks/useDocumentTemplateList';
-import type { DocumentTemplate } from '../types/documentTemplates';
+import type { DocumentTemplate, DocumentTemplateEntity } from '../types/documentTemplates';
 import { normalizePageConfig } from '../utils/documentPage';
 import { DocumentTemplateList } from '../components/documents/DocumentTemplateList';
 import { DocumentTemplateEditor } from '../components/documents/DocumentTemplateEditor';
-import { DocumentGenerator } from '../components/documents/DocumentGenerator';
-
-type View = 'list' | 'generate';
+import { DocumentGeneratorModal } from '../components/documents/DocumentGeneratorModal';
 
 export default function Documentos() {
   const {
@@ -27,15 +24,17 @@ export default function Documentos() {
     isSaving,
     isDeleting,
   } = useDocumentTemplates();
-  const [view, setView] = useState<View>('list');
   const [editingTemplate, setEditingTemplate] = useState<DocumentTemplate | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [generatorOpen, setGeneratorOpen] = useState(false);
+  const [generatorTemplateId, setGeneratorTemplateId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
+  const [entityFilter, setEntityFilter] = useState<DocumentTemplateEntity | ''>('');
   const [page, setPage] = useState(1);
   const pageSize = 20;
-  const templateList = useDocumentTemplateList({ page, pageSize, search });
+  const templateList = useDocumentTemplateList({ page, pageSize, search, entity: entityFilter });
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -44,6 +43,10 @@ export default function Documentos() {
     }, 300);
     return () => window.clearTimeout(timeout);
   }, [searchInput]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [entityFilter]);
 
   useEffect(() => {
     if (!templateList.isLoading && page > 1 && templateList.templates.length === 0) {
@@ -61,6 +64,12 @@ export default function Documentos() {
     setEditingTemplate(null);
     setIsCreating(false);
     setToast(null);
+  };
+
+  const openGenerator = (templateId: string | null) => {
+    setToast(null);
+    setGeneratorTemplateId(templateId);
+    setGeneratorOpen(true);
   };
 
   const saveTemplate = async (input: Parameters<typeof createTemplate>[0]) => {
@@ -125,22 +134,6 @@ export default function Documentos() {
           onSave={saveTemplate}
           onCancel={closeEditor}
         />
-      ) : view === 'generate' ? (
-        <>
-          <button
-            type="button"
-            onClick={() => { setToast(null); setView('list'); }}
-            className="inline-flex cursor-pointer items-center gap-2 self-start rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-          >
-            <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Voltar para a listagem
-          </button>
-          <DocumentGenerator
-            templates={templates}
-            isLoadingTemplates={isLoading}
-            isErrorTemplates={isError}
-            onRetryTemplates={() => void refetch()}
-          />
-        </>
       ) : (
         <DocumentTemplateList
           templates={templateList.templates}
@@ -148,21 +141,35 @@ export default function Documentos() {
           page={page}
           pageSize={pageSize}
           search={searchInput}
+          entityFilter={entityFilter}
           isLoading={templateList.isLoading}
           isFetching={templateList.isFetching}
           isError={templateList.isError}
           isSaving={isSaving}
           isDeleting={isDeleting}
           onSearchChange={setSearchInput}
+          onEntityFilterChange={setEntityFilter}
           onPageChange={setPage}
           onRetry={() => void templateList.refetch()}
           onCreate={() => { setToast(null); setIsCreating(true); }}
-          onGenerate={() => { setToast(null); setView('generate'); }}
+          onGenerate={() => openGenerator(null)}
+          onGenerateFor={(template) => openGenerator(template.id)}
           onEdit={(template) => { setToast(null); setEditingTemplate(template); }}
           onDuplicate={duplicateTemplate}
           onDelete={removeTemplate}
         />
       )}
+
+      <DocumentGeneratorModal
+        isOpen={generatorOpen}
+        onClose={() => { setGeneratorOpen(false); setGeneratorTemplateId(null); }}
+        templates={templates}
+        isLoadingTemplates={isLoading}
+        isErrorTemplates={isError}
+        onRetryTemplates={() => void refetch()}
+        initialTemplateId={generatorTemplateId}
+      />
+
       {toast && <div role="alert" className={`fixed bottom-4 right-4 z-[100] max-w-md rounded-xl border p-4 shadow-2xl ${toast.type === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-rose-200 bg-rose-50 text-rose-900'}`}>{toast.message}</div>}
     </div>
   );
