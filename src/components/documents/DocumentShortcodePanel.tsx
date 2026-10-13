@@ -34,7 +34,7 @@ export function DocumentShortcodePanel({ entity, onInsert }: DocumentShortcodePa
       />
       {!hasResults ? (
         <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">
-          {search.trim() ? 'Nenhum campo encontrado.' : 'Esta entidade não possui campos disponíveis.'}
+          {search.trim() ? 'Nenhum campo encontrado.' : 'Este tipo de registro não possui campos disponíveis.'}
         </p>
       ) : (
         <div className="mt-4 max-h-[70vh] space-y-4 overflow-y-auto pr-1">

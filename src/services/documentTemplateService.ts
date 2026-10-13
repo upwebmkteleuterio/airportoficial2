@@ -23,6 +23,23 @@ export const documentTemplateService = {
     return (data ?? []) as DocumentTemplate[];
   },
 
+  list: async (options: { page: number; pageSize: number; search?: string; signal?: AbortSignal }): Promise<{ items: DocumentTemplate[]; total: number }> => {
+    const page = Number.isFinite(options.page) ? Math.max(1, Math.floor(options.page)) : 1;
+    const pageSize = Number.isFinite(options.pageSize)
+      ? Math.min(1000, Math.max(1, Math.floor(options.pageSize)))
+      : 1000;
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+    let query = supabase.from(TABLE).select('*', { count: 'exact' });
+    const term = options.search?.replace(/[%_\\(),.]/g, ' ').replace(/[^0-9A-Za-zÀ-ÿ -]/g, ' ').slice(0, 100).trim();
+    if (term) query = query.ilike('nome', `%${term}%`);
+    query = query.order('updated_at', { ascending: false }).range(from, to);
+    if (options.signal) query = query.abortSignal(options.signal);
+    const { data, count, error } = await query;
+    if (error) throw serviceError('Não foi possível carregar os modelos de documento', error);
+    return { items: (data ?? []) as DocumentTemplate[], total: count ?? 0 };
+  },
+
   create: async (input: DocumentTemplateInput): Promise<DocumentTemplate> => {
     const { data, error } = await supabase
       .from(TABLE)

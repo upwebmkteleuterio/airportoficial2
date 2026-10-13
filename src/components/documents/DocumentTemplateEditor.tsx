@@ -4,7 +4,7 @@ import TextAlign from '@tiptap/extension-text-align';
 import Image from '@tiptap/extension-image';
 import { TableKit } from '@tiptap/extension-table';
 import { useState } from 'react';
-import { Eye, Save, Settings2, X } from 'lucide-react';
+import { ArrowLeft, Eye, Save, Settings2, X } from 'lucide-react';
 import type { DocumentPageConfig, DocumentTemplate, DocumentTemplateEntity, DocumentTemplateInput } from '../../types/documentTemplates';
 import { DOCUMENT_TEMPLATE_ENTITIES, buildSampleData, getEntityLabel, shortcodeToken } from '../../utils/documentShortcodes';
 import { DEFAULT_PAGE_CONFIG, normalizePageConfig } from '../../utils/documentPage';
@@ -72,17 +72,26 @@ export function DocumentTemplateEditor({ template, isSaving, onSave, onCancel }:
 
   return (
     <form onSubmit={(event) => void submit(event)} className="flex flex-col gap-5">
+      <button
+        type="button"
+        onClick={onCancel}
+        disabled={isSaving}
+        aria-label="Voltar para a listagem de modelos"
+        className="inline-flex cursor-pointer items-center gap-2 self-start rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+      >
+        <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Voltar para a listagem
+      </button>
       <div className="grid gap-4 rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900 md:grid-cols-2">
         <label className="text-sm font-medium text-slate-700 dark:text-slate-200">
           Nome <span className="text-red-600" aria-hidden="true">*</span>
           <input required value={nome} onChange={(event) => setNome(event.target.value)} aria-label="Nome do modelo" className={fieldClass} />
         </label>
         <label className="text-sm font-medium text-slate-700 dark:text-slate-200">
-          Entidade principal
+          Tipo de registro
           {template ? (
-            <div className={`${fieldClass} bg-slate-50 dark:bg-slate-950`} aria-label="Entidade principal somente leitura">{getEntityLabel(template.entidade_principal)}</div>
+            <div className={`${fieldClass} bg-slate-50 dark:bg-slate-950`} aria-label="Tipo de registro somente leitura">{getEntityLabel(template.entidade_principal)}</div>
           ) : (
-            <select value={entity} onChange={(event) => setEntity(event.target.value as DocumentTemplateEntity)} aria-label="Entidade principal" className={`${fieldClass} cursor-pointer`}>
+            <select value={entity} onChange={(event) => setEntity(event.target.value as DocumentTemplateEntity)} aria-label="Tipo de registro" className={`${fieldClass} cursor-pointer`}>
               {DOCUMENT_TEMPLATE_ENTITIES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
             </select>
           )}

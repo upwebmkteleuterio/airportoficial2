@@ -20,7 +20,9 @@ export function RowActionMenu({
   title = 'Ações',
 }: RowActionMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [openUpward, setOpenUpward] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -30,33 +32,49 @@ export function RowActionMenu({
         setIsOpen(false);
       }
     };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsOpen(false);
+        triggerRef.current?.focus();
+      }
+    };
 
     document.addEventListener('mousedown', handleOutsideClick);
-    return () => document.removeEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
   }, [isOpen]);
 
   return (
     <div ref={menuRef} className="relative" onClick={(event) => event.stopPropagation()}>
       <button
+        ref={triggerRef}
         type="button"
         onClick={(event) => {
           event.stopPropagation();
-          setIsOpen((open) => !open);
+          if (isOpen) {
+            setIsOpen(false);
+          } else {
+            const rect = triggerRef.current?.getBoundingClientRect();
+            setOpenUpward(Boolean(rect && window.innerHeight - rect.bottom < 160));
+            setIsOpen(true);
+          }
         }}
         aria-label={ariaLabel}
         title={title}
         aria-haspopup="menu"
         aria-expanded={isOpen}
-        className="rounded-full p-1 text-gray-500 transition-colors hover:bg-gray-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+        className="cursor-pointer rounded-full p-1 text-gray-500 transition-colors hover:bg-gray-100 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
       >
-
         <MoreVertical className="h-4 w-4" aria-hidden="true" />
       </button>
 
       {isOpen && (
         <div
           role="menu"
-          className="absolute left-full top-0 z-50 ml-2 w-48 rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-850"
+          className={`absolute left-full z-50 ml-2 w-48 rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-850 ${openUpward ? 'bottom-0' : 'top-0'}`}
         >
           {items.map((item) => (
             <button
@@ -70,9 +88,8 @@ export function RowActionMenu({
                 setIsOpen(false);
                 item.onClick();
               }}
-              className={`flex w-full items-center gap-2 px-4 py-2 text-left text-xs font-semibold transition-colors ${
+              className={`flex w-full cursor-pointer items-center gap-2 px-4 py-2 text-left text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-teal-500 ${
                 item.tone === 'danger'
-
                   ? 'text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30'
                   : 'text-gray-700 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-700'
               }`}
