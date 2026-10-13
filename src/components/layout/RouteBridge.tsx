@@ -18,6 +18,7 @@ const routePaths: Record<string, string> = {
   enderecos: '/enderecos',
   instrutores: '/instrutores',
   coordenadores: '/coordenadores',
+  documentos: '/documentos',
   migracao: '/migracao',
   'meu-cadastro': '/meu-cadastro',
   'minha-conta': '/minha-conta',

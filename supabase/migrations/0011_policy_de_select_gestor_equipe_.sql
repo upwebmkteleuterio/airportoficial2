@@ -1,0 +1,1 @@
+CREATE POLICY "document_templates_select_policy" ON public.document_templates FOR SELECT TO authenticated USING (public.is_privileged_user());

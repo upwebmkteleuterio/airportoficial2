@@ -1,0 +1,1 @@
+CREATE POLICY "document_templates_update_policy" ON public.document_templates FOR UPDATE TO authenticated USING (public.is_privileged_user()) WITH CHECK (public.is_privileged_user());

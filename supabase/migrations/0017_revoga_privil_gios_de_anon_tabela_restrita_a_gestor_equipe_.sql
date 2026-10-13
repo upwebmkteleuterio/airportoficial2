@@ -1,0 +1,1 @@
+REVOKE ALL ON TABLE public.document_templates FROM anon;

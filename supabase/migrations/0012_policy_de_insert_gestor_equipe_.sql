@@ -1,0 +1,1 @@
+CREATE POLICY "document_templates_insert_policy" ON public.document_templates FOR INSERT TO authenticated WITH CHECK (public.is_privileged_user());

@@ -1,0 +1,1 @@
+ALTER TABLE public.document_templates ENABLE ROW LEVEL SECURITY;
