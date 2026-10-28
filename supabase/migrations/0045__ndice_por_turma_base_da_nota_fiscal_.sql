@@ -1,0 +1,1 @@
+CREATE INDEX lancamentos_financeiros_turma_idx ON public.lancamentos_financeiros (turma_id) WHERE turma_id IS NOT NULL

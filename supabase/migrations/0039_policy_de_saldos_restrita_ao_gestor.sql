@@ -1,0 +1,1 @@
+CREATE POLICY saldos_contas_gestor_policy ON public.saldos_contas FOR ALL TO authenticated USING (public.can_manage_financeiro()) WITH CHECK (public.can_manage_financeiro())

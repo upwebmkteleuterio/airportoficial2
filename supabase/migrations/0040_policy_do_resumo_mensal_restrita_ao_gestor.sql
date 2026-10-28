@@ -1,0 +1,1 @@
+CREATE POLICY resumo_financeiro_mensal_gestor_policy ON public.resumo_financeiro_mensal FOR ALL TO authenticated USING (public.can_manage_financeiro()) WITH CHECK (public.can_manage_financeiro())

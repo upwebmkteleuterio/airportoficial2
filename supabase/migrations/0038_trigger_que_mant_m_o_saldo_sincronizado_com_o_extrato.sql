@@ -1,0 +1,1 @@
+CREATE TRIGGER lancamentos_financeiros_saldo_sync AFTER INSERT OR UPDATE OR DELETE ON public.lancamentos_financeiros FOR EACH ROW EXECUTE FUNCTION public.fn_aplicar_saldo_lancamento()

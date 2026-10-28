@@ -1,0 +1,1 @@
+CREATE TRIGGER lancamentos_financeiros_categoria_check BEFORE INSERT OR UPDATE ON public.lancamentos_financeiros FOR EACH ROW EXECUTE FUNCTION public.fn_validar_categoria_lancamento()

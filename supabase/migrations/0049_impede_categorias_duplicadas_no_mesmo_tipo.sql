@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX categorias_financeiras_nome_tipo_key ON public.categorias_financeiras (lower(btrim(nome)), tipo)

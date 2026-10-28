@@ -1,0 +1,1 @@
+ALTER TABLE public.lancamentos_financeiros ENABLE ROW LEVEL SECURITY

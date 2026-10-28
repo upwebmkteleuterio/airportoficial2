@@ -1,0 +1,1 @@
+REVOKE ALL ON TABLE public.bancos, public.categorias_financeiras, public.fornecedores, public.lancamentos_financeiros, public.saldos_contas, public.resumo_financeiro_mensal FROM anon

@@ -1,0 +1,1 @@
+REVOKE ALL ON FUNCTION public.fn_movimentar_saldo(text, date, text, numeric), public.fn_aplicar_saldo_lancamento(), public.fn_validar_categoria_lancamento(), public.fn_proteger_tipo_categoria(), public.fn_criar_saldo_banco(), public.recalcular_saldo_conta(text) FROM PUBLIC

@@ -1,0 +1,1 @@
+ALTER TABLE public.saldos_contas ENABLE ROW LEVEL SECURITY

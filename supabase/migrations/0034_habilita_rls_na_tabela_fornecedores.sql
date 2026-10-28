@@ -1,0 +1,1 @@
+ALTER TABLE public.fornecedores ENABLE ROW LEVEL SECURITY

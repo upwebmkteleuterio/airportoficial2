@@ -1,0 +1,1 @@
+CREATE INDEX lancamentos_financeiros_matricula_idx ON public.lancamentos_financeiros (matricula_id) WHERE matricula_id IS NOT NULL

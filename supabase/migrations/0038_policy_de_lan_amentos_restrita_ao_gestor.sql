@@ -1,0 +1,1 @@
+CREATE POLICY lancamentos_financeiros_gestor_policy ON public.lancamentos_financeiros FOR ALL TO authenticated USING (public.can_manage_financeiro()) WITH CHECK (public.can_manage_financeiro())

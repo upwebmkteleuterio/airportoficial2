@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX fornecedores_cpf_cnpj_key ON public.fornecedores (cpf_cnpj)

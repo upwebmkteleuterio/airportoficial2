@@ -1,0 +1,1 @@
+GRANT EXECUTE ON FUNCTION public.can_manage_financeiro() TO authenticated

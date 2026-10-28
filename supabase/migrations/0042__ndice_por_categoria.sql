@@ -1,0 +1,1 @@
+CREATE INDEX lancamentos_financeiros_categoria_idx ON public.lancamentos_financeiros (categoria_id)

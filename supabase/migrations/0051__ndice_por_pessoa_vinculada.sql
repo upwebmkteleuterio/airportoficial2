@@ -1,0 +1,1 @@
+CREATE INDEX lancamentos_financeiros_pessoa_idx ON public.lancamentos_financeiros (pessoa_id) WHERE pessoa_id IS NOT NULL

@@ -1,0 +1,1 @@
+CREATE INDEX lancamentos_financeiros_tipo_data_idx ON public.lancamentos_financeiros (tipo, data_efetivacao DESC)

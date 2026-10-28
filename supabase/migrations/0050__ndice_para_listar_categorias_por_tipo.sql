@@ -1,0 +1,1 @@
+CREATE INDEX categorias_financeiras_tipo_ativo_idx ON public.categorias_financeiras (tipo, ativo)

@@ -1,0 +1,1 @@
+ALTER TABLE public.categorias_financeiras ENABLE ROW LEVEL SECURITY

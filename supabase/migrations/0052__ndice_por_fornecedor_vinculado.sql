@@ -1,0 +1,1 @@
+CREATE INDEX lancamentos_financeiros_fornecedor_idx ON public.lancamentos_financeiros (fornecedor_id) WHERE fornecedor_id IS NOT NULL

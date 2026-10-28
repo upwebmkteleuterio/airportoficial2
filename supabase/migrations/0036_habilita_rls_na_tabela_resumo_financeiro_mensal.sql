@@ -1,0 +1,1 @@
+ALTER TABLE public.resumo_financeiro_mensal ENABLE ROW LEVEL SECURITY

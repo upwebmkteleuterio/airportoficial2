@@ -1,0 +1,1 @@
+CREATE TRIGGER categorias_financeiras_tipo_protegido BEFORE UPDATE ON public.categorias_financeiras FOR EACH ROW EXECUTE FUNCTION public.fn_proteger_tipo_categoria()

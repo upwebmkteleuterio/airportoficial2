@@ -1,0 +1,1 @@
+CREATE TRIGGER bancos_saldo_init AFTER INSERT ON public.bancos FOR EACH ROW EXECUTE FUNCTION public.fn_criar_saldo_banco()

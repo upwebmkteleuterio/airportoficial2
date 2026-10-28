@@ -1,0 +1,1 @@
+CREATE POLICY categorias_financeiras_gestor_policy ON public.categorias_financeiras FOR ALL TO authenticated USING (public.can_manage_financeiro()) WITH CHECK (public.can_manage_financeiro())

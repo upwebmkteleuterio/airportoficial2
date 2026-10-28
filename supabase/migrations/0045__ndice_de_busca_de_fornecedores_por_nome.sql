@@ -1,0 +1,1 @@
+CREATE INDEX fornecedores_nome_idx ON public.fornecedores (lower(btrim(nome)))

@@ -1,0 +1,1 @@
+REVOKE ALL ON FUNCTION public.fn_movimentar_saldo(text, date, text, numeric) FROM PUBLIC

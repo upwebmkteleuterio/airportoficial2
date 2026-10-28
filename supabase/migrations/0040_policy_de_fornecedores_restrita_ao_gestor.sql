@@ -1,0 +1,1 @@
+CREATE POLICY fornecedores_gestor_policy ON public.fornecedores FOR ALL TO authenticated USING (public.can_manage_financeiro()) WITH CHECK (public.can_manage_financeiro())

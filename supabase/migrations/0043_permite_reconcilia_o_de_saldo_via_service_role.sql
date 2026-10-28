@@ -1,0 +1,1 @@
+GRANT EXECUTE ON FUNCTION public.recalcular_saldo_conta(text) TO service_role
