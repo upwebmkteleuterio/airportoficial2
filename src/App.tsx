@@ -19,19 +19,20 @@ const queryClient = new QueryClient({
   },
 });
 
-export default function App() {
-  const [showSplash, setShowSplash] = React.useState(true);
-  const splashVideoUrl = 'https://www.image2url.com/r2/default/videos/1784253706043-4630ea5e-a4c5-44e2-8b0a-6574ad8bfe44.mp4';
+// Abertura com vídeo. Fica desativada enquanto o arquivo não estiver hospedado
+// no próprio projeto: para reativar, coloque o vídeo em `public/` e aponte esta
+// constante para ele (por exemplo '/abertura.mp4').
+const splashVideoUrl = '';
 
-  if (showSplash) {
-    return <SplashVideo onFinish={() => setShowSplash(false)} videoUrl={splashVideoUrl} />;
-  }
+export default function App() {
+  const [showSplash, setShowSplash] = React.useState(splashVideoUrl !== '');
 
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <SessionContextProvider>
           <AppRoutes />
+          {showSplash && <SplashVideo videoUrl={splashVideoUrl} onFinish={() => setShowSplash(false)} />}
         </SessionContextProvider>
       </BrowserRouter>
     </QueryClientProvider>
