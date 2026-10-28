@@ -234,7 +234,7 @@ export default function FinanceiroLancamentos() {
         <div className="flex items-center gap-2"><Button variant="secondary" type="button" onClick={() => setHelpOpen(true)} icon={<HelpCircle className="w-4 h-4" aria-hidden="true" />} aria-label="Ajuda" className={focusClass}>Ajuda</Button><button type="button" data-testid="novo-lancamento-button" onClick={() => openForm()} className={`flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-slate-850 dark:bg-teal-600 dark:hover:bg-teal-500 ${focusClass}`}><Plus className="h-4 w-4" aria-hidden="true"/>Novo Lançamento</button></div>
       </div>
       {errorMessage && !modalOpen && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700 dark:bg-rose-950/30 dark:text-rose-300">{errorMessage}</p>}
-      <section aria-label="Saldos por conta" className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <section aria-label="Saldos por conta" data-testid="saldos-por-conta" className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-slate-800 dark:text-slate-200"><Banknote className="h-4 w-4 text-teal-600" aria-hidden="true"/>Visão bancária</h3>
         <div className="flex gap-3 overflow-x-auto pb-1">
           {[{ id: '', nome: 'Todas as contas', saldo: null as number | null, tipo: null as string | null }, ...contas.map((conta) => ({ id: conta.id, nome: conta.nome, saldo: conta.saldo_atual, tipo: conta.tipo }))].map((chip) => {
