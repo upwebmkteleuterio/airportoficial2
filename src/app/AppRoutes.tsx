@@ -25,6 +25,7 @@ import Documentos from '../pages/Documentos';
 import FinanceiroBancos from '../pages/FinanceiroBancos';
 import FinanceiroCategorias from '../pages/FinanceiroCategorias';
 import FinanceiroFornecedores from '../pages/FinanceiroFornecedores';
+import FinanceiroLancamentos from '../pages/FinanceiroLancamentos';
 import NotFound from '../pages/NotFound';
 
 function SessionLoading() {
@@ -166,6 +167,7 @@ export function AppRoutes() {
             <Route path="documentos" element={<AdminPage><DocumentosAccessRoute /></AdminPage>} />
             <Route path="migracao" element={<AdminPage><MigrationAccessRoute /></AdminPage>} />
             <Route path="financeiro/bancos" element={<FinanceiroAccessRoute><FinanceiroBancos /></FinanceiroAccessRoute>} />
+            <Route path="financeiro/lancamentos" element={<FinanceiroAccessRoute><FinanceiroLancamentos /></FinanceiroAccessRoute>} />
             <Route path="financeiro/categorias" element={<FinanceiroAccessRoute><FinanceiroCategorias /></FinanceiroAccessRoute>} />
             <Route path="financeiro/fornecedores" element={<FinanceiroAccessRoute><FinanceiroFornecedores /></FinanceiroAccessRoute>} />
             <Route path="meu-cadastro" element={<AdminPage><Dashboard /></AdminPage>} />
