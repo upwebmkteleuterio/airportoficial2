@@ -38,6 +38,24 @@ export const bancoService = {
     return (data ?? []) as Banco[];
   },
 
+  uploadLogo: async (file: File): Promise<string> => {
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      throw new Error('Formato inválido. Envie uma imagem JPEG, PNG ou WebP.');
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      throw new Error('O arquivo deve ter no máximo 5 MB.');
+    }
+    const nomeDoArquivoSanitizado = file.name.replace(/[^a-zA-Z0-9._-]/g, '_') || 'logo';
+    const path = `financeiro/bancos/${crypto.randomUUID()}-${nomeDoArquivoSanitizado}`;
+    const { error } = await supabase.storage.from('document-assets').upload(path, file, {
+      cacheControl: '3600',
+      contentType: file.type,
+      upsert: false,
+    });
+    if (error) throw serviceError('Não foi possível enviar o logo do banco', error);
+    return supabase.storage.from('document-assets').getPublicUrl(path).data.publicUrl;
+  },
+
   getSaldos: async (): Promise<SaldoConta[]> => {
     const { data, error } = await supabase.from('saldos_contas').select('*');
     if (error) throw serviceError('Não foi possível carregar os saldos das contas', error);

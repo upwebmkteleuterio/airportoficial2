@@ -22,6 +22,9 @@ import PublicEnrollment from '../pages/PublicEnrollment';
 import Shifts from '../pages/Shifts';
 import Migration from '../pages/Migration';
 import Documentos from '../pages/Documentos';
+import FinanceiroBancos from '../pages/FinanceiroBancos';
+import FinanceiroCategorias from '../pages/FinanceiroCategorias';
+import FinanceiroFornecedores from '../pages/FinanceiroFornecedores';
 import NotFound from '../pages/NotFound';
 
 function SessionLoading() {
@@ -117,6 +120,12 @@ function DocumentosAccessRoute() {
   return <Documentos />;
 }
 
+function FinanceiroAccessRoute({ children }: { children: ReactNode }) {
+  const userLogged = useUIStore((state) => state.userLogged);
+  if (userLogged?.role !== 'GESTOR') return <Navigate to="/dashboard" replace />;
+  return <>{children}</>;
+}
+
 function AccountRoute() {
   const userLogged = useUIStore((state) => state.userLogged);
   if (userLogged?.role === 'ALUNO') return <MyAccount />;
@@ -156,6 +165,9 @@ export function AppRoutes() {
             <Route path="coordenadores" element={<AdminPage><Coordinators /></AdminPage>} />
             <Route path="documentos" element={<AdminPage><DocumentosAccessRoute /></AdminPage>} />
             <Route path="migracao" element={<AdminPage><MigrationAccessRoute /></AdminPage>} />
+            <Route path="financeiro/bancos" element={<FinanceiroAccessRoute><FinanceiroBancos /></FinanceiroAccessRoute>} />
+            <Route path="financeiro/categorias" element={<FinanceiroAccessRoute><FinanceiroCategorias /></FinanceiroAccessRoute>} />
+            <Route path="financeiro/fornecedores" element={<FinanceiroAccessRoute><FinanceiroFornecedores /></FinanceiroAccessRoute>} />
             <Route path="meu-cadastro" element={<AdminPage><Dashboard /></AdminPage>} />
             <Route path="*" element={<NotFound />} />
           </Route>
