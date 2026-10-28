@@ -30,8 +30,13 @@ const routePaths: Record<string, string> = {
 };
 
 function isPublicEnrollmentPath(pathname: string) {
+  if (pathname === '/enroll' || pathname.startsWith('/enroll/')) return true;
+  // Rotas internas do app (ex.: /financeiro/bancos) também têm dois segmentos,
+  // mas não são links públicos de inscrição. Sem esta checagem o RouteBridge as
+  // ignora e a navegação entre as telas do financeiro deixa de funcionar.
+  if (routeFromPath(pathname)) return false;
   const parts = pathname.split('/').filter(Boolean);
-  return pathname === '/enroll' || pathname.startsWith('/enroll/') || (parts.length === 2 && parts[0] !== 'turmas');
+  return parts.length === 2 && parts[0] !== 'turmas';
 }
 
 function routeFromPath(pathname: string): RouteState | null {

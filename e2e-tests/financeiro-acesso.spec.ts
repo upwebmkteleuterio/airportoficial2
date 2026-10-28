@@ -17,18 +17,20 @@ test.afterEach(async () => {
 test('gestor abre as telas financeiras pelo menu lateral', async ({ page }) => {
   await signInAs(page, gestor);
 
-  await expect(page.locator('#sidebar-nav-financeiro-lancamentos')).toBeVisible();
-  await page.locator('#sidebar-nav-financeiro-lancamentos').click();
-  await expect(page.getByRole('heading', { name: 'Lançamentos Financeiros' })).toBeVisible();
+  // Se a sessão do gestor não se mantiver, a barra lateral desaparece e o teste
+  // falha aqui, com mensagem clara, em vez de estourar o tempo total.
+  await expect(page.locator('#sidebar-nav-financeiro-lancamentos')).toBeVisible({ timeout: 15000 });
 
-  await page.locator('#sidebar-nav-financeiro-bancos').click();
-  await expect(page.getByRole('heading', { name: 'Bancos e Contas' })).toBeVisible();
+  const abrir = async (item: string, caminho: string, titulo: string) => {
+    await page.locator(`#sidebar-nav-${item}`).click({ timeout: 15000 });
+    await expect(page).toHaveURL(new RegExp(caminho), { timeout: 15000 });
+    await expect(page.getByRole('heading', { name: titulo })).toBeVisible({ timeout: 15000 });
+  };
 
-  await page.locator('#sidebar-nav-financeiro-categorias').click();
-  await expect(page.getByRole('heading', { name: 'Categorias Financeiras' })).toBeVisible();
-
-  await page.locator('#sidebar-nav-financeiro-fornecedores').click();
-  await expect(page.getByRole('heading', { name: 'Fornecedores' })).toBeVisible();
+  await abrir('financeiro-lancamentos', '/financeiro/lancamentos', 'Lançamentos Financeiros');
+  await abrir('financeiro-bancos', '/financeiro/bancos', 'Bancos e Contas');
+  await abrir('financeiro-categorias', '/financeiro/categorias', 'Categorias Financeiras');
+  await abrir('financeiro-fornecedores', '/financeiro/fornecedores', 'Fornecedores');
 });
 
 test('aluno não tem acesso ao financeiro', async ({ page }) => {

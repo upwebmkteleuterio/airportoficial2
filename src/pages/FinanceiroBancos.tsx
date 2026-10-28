@@ -28,7 +28,12 @@ function novoForm(): BancoForm {
 export default function FinanceiroBancos() {
   const { contas, createBanco, updateBanco, deleteBanco, isLoading, isCreating, isUpdating, isDeleting, isError } = useBancos();
   const queryClient = useQueryClient();
-  const isRetrying = useIsFetching({ queryKey: ['bancos'] }) > 0 || useIsFetching({ queryKey: ['saldos-contas'] }) > 0;
+  // Os dois hooks precisam ser chamados em todo render: combinar as chamadas com
+  // `||` ignora a segunda enquanto a primeira for verdadeira, o que muda a
+  // quantidade de hooks entre renders e derruba a tela inteira.
+  const isFetchingBancos = useIsFetching({ queryKey: ['bancos'] }) > 0;
+  const isFetchingSaldos = useIsFetching({ queryKey: ['saldos-contas'] }) > 0;
+  const isRetrying = isFetchingBancos || isFetchingSaldos;
   const [editing, setEditing] = useState<ContaComSaldo | null>(null);
   const [form, setForm] = useState<BancoForm>(novoForm);
   const [logoFile, setLogoFile] = useState<File | null>(null);

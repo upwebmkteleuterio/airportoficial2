@@ -97,10 +97,10 @@ export async function createTestUser(role: 'GESTOR' | 'ALUNO' = 'GESTOR'): Promi
 /** Entra pela tela de login real, como um usuário faria. */
 export async function signInAs(page: Page, user: TestUser): Promise<void> {
   await page.goto('/login');
-  await page.getByLabel('E-mail', { exact: true }).fill(user.email);
-  await page.getByLabel('Senha', { exact: true }).fill(user.password);
-  await page.getByRole('button', { name: 'Entrar' }).click();
-  await expect(page).not.toHaveURL(/\/login/);
+  await page.getByLabel('E-mail', { exact: true }).fill(user.email, { timeout: 15000 });
+  await page.getByLabel('Senha', { exact: true }).fill(user.password, { timeout: 15000 });
+  await page.getByRole('button', { name: 'Entrar' }).click({ timeout: 15000 });
+  await expect(page).not.toHaveURL(/\/login/, { timeout: 15000 });
 }
 
 /** Cria uma conta descartável. O trigger de `bancos` já cria a linha de saldo. */
