@@ -1,0 +1,90 @@
+import { supabase } from '../integrations/supabase/client';
+import type { Banco, SaldoConta, TipoBanco } from '../types/financeiro';
+import { newServiceId, serviceError } from './supabaseErrors';
+
+function toSaldoConta(row: SaldoConta): SaldoConta {
+  return {
+    ...row,
+    saldo_inicial: Number(row.saldo_inicial),
+    total_entradas: Number(row.total_entradas),
+    total_saidas: Number(row.total_saidas),
+    saldo_atual: Number(row.saldo_atual),
+  };
+}
+
+function hoje(): string {
+  const data = new Date();
+  const mes = String(data.getMonth() + 1).padStart(2, '0');
+  const dia = String(data.getDate()).padStart(2, '0');
+  return `${data.getFullYear()}-${mes}-${dia}`;
+}
+
+function erroExclusao(error: unknown): never {
+  const mensagem = error instanceof Error
+    ? error.message
+    : typeof error === 'object' && error !== null && 'message' in error
+      ? String((error as { message: unknown }).message)
+      : String(error);
+  if (mensagem.includes('lancamentos_financeiros_banco_id_fkey')) {
+    throw new Error('Não é possível excluir: existem lançamentos vinculados.');
+  }
+  throw serviceError('Não foi possível excluir o banco', error);
+}
+
+export const bancoService = {
+  getAll: async (): Promise<Banco[]> => {
+    const { data, error } = await supabase.from('bancos').select('*').order('nome', { ascending: true });
+    if (error) throw serviceError('Não foi possível carregar os bancos', error);
+    return (data ?? []) as Banco[];
+  },
+
+  getSaldos: async (): Promise<SaldoConta[]> => {
+    const { data, error } = await supabase.from('saldos_contas').select('*');
+    if (error) throw serviceError('Não foi possível carregar os saldos das contas', error);
+    return ((data ?? []) as SaldoConta[]).map(toSaldoConta);
+  },
+
+  create: async (input: {
+    nome: string;
+    tipo: TipoBanco;
+    logo_url?: string | null;
+    ativo?: boolean;
+    saldo_inicial?: number;
+    data_saldo_inicial?: string;
+  }): Promise<Banco> => {
+    const { saldo_inicial, data_saldo_inicial, ...bancoInput } = input;
+    const { data, error } = await supabase.from('bancos').insert({
+      id: newServiceId('banco'),
+      ...bancoInput,
+    }).select('*').single();
+    if (error) throw serviceError('Não foi possível cadastrar o banco', error);
+
+    const banco = data as Banco;
+    const { error: saldoError } = await supabase.from('saldos_contas').upsert({
+      banco_id: banco.id,
+      saldo_inicial: saldo_inicial ?? 0,
+      data_saldo_inicial: data_saldo_inicial ?? hoje(),
+    }, { onConflict: 'banco_id' });
+    if (saldoError) throw serviceError('Não foi possível registrar o saldo inicial da conta', saldoError);
+    return banco;
+  },
+
+  update: async (
+    id: string,
+    updates: Partial<Pick<Banco, 'nome' | 'tipo' | 'logo_url' | 'ativo'>>,
+    saldo?: { saldo_inicial?: number; data_saldo_inicial?: string },
+  ): Promise<Banco> => {
+    const { data, error } = await supabase.from('bancos').update(updates).eq('id', id).select('*').single();
+    if (error) throw serviceError('Não foi possível atualizar o banco', error);
+    if (saldo) {
+      const { error: saldoError } = await supabase.from('saldos_contas').update(saldo).eq('banco_id', id);
+      if (saldoError) throw serviceError('Não foi possível atualizar o saldo inicial da conta', saldoError);
+    }
+    return data as Banco;
+  },
+
+  delete: async (id: string): Promise<void> => {
+    const { error } = await supabase.from('bancos').delete().eq('id', id);
+    if (error) erroExclusao(error);
+  },
+};
