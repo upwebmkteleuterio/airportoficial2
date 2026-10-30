@@ -12,7 +12,7 @@ import { useCategoriasFinanceiras } from '../hooks/useCategoriasFinanceiras';
 import { useLancamentosFinanceiros } from '../hooks/useLancamentosFinanceiros';
 import { useAlunosPorCpf, useParticipantesFinanceiros } from '../hooks/useParticipantesFinanceiros';
 import { useUIStore } from '../store/uiStore';
-import type { FormaPagamento, LancamentoComRelacoes, LancamentoFinanceiro, ParticipanteOpcao, TipoLancamento, TipoParticipante } from '../types/financeiro';
+import type { FormaPagamento, LancamentoComRelacoes, LancamentoFinanceiro, ParticipanteOpcao, TipoLancamento, TipoParticipante, TipoSituacaoLancamento } from '../types/financeiro';
 
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const pageSize = 20;
@@ -23,6 +23,7 @@ const labelClass = 'mb-1 block text-xs font-bold uppercase text-gray-700 dark:te
  type TipoPicker = '' | 'ALUNO' | 'INSTRUTOR' | 'EMPRESA' | 'FORNECEDOR' | 'COORDENADOR';
 type LancamentoForm = {
   tipo: TipoLancamento;
+  status: TipoSituacaoLancamento;
   valor: string;
   data_competencia: string;
   data_efetivacao: string;
@@ -43,7 +44,7 @@ function hojeLocal(): string {
 }
 
 function novoFormulario(): LancamentoForm {
-  return { tipo: 'ENTRADA', valor: '', data_competencia: hojeLocal(), data_efetivacao: hojeLocal(), banco_id: '', categoria_id: '', descricao: '', forma_pagamento: '', numero_documento: '', observacoes: '', participante_tipo: '', participante_id: '', participante: null };
+  return { tipo: 'ENTRADA', status: 'EFETIVADO', valor: '', data_competencia: hojeLocal(), data_efetivacao: hojeLocal(), banco_id: '', categoria_id: '', descricao: '', forma_pagamento: '', numero_documento: '', observacoes: '', participante_tipo: '', participante_id: '', participante: null };
 }
 
 function formatarData(data: string): string {
@@ -141,7 +142,7 @@ export default function FinanceiroLancamentos() {
     setEditing(record ?? null);
     const participant = record ? optionForRecord(record) : null;
     setForm(record ? {
-      tipo: record.tipo, valor: String(record.valor), data_competencia: record.data_competencia, data_efetivacao: record.data_efetivacao,
+      tipo: record.tipo, status: 'EFETIVADO', valor: String(record.valor), data_competencia: record.data_competencia, data_efetivacao: record.data_efetivacao,
       banco_id: record.banco_id, categoria_id: record.categoria_id, descricao: record.descricao, forma_pagamento: record.forma_pagamento ?? '',
       numero_documento: record.numero_documento ?? '', observacoes: record.observacoes ?? '', participante_tipo: record.participante_tipo ?? '',
       participante_id: participant?.id ?? '', participante: participant,
@@ -187,7 +188,7 @@ export default function FinanceiroLancamentos() {
       return;
     }
     const common = {
-      tipo: form.tipo, valor, data_competencia: form.data_competencia, data_efetivacao: form.data_efetivacao,
+      tipo: form.tipo, status: form.status, valor, data_competencia: form.data_competencia, data_efetivacao: form.data_efetivacao,
       categoria_id: form.categoria_id, banco_id: form.banco_id, descricao: form.descricao.trim(),
       forma_pagamento: form.forma_pagamento || null, numero_documento: form.numero_documento.trim() || null,
       observacoes: form.observacoes, participante_tipo: participantType as TipoParticipante | null,

@@ -1,4 +1,5 @@
 export type TipoLancamento = 'ENTRADA' | 'SAIDA';
+export type TipoSituacaoLancamento = 'PREVISTO' | 'EFETIVADO';
 export type TipoBanco = 'BANCO' | 'COFRE_LOCAL';
 export type FormaPagamento = 'PIX' | 'DINHEIRO' | 'BOLETO' | 'TRANSFERENCIA' | 'CARTAO' | 'CHEQUE' | 'OUTRO';
 export type TipoParticipante = 'ALUNO' | 'INSTRUTOR' | 'COORDENADOR' | 'EMPRESA' | 'FORNECEDOR';
@@ -57,6 +58,7 @@ export interface Fornecedor {
 export interface LancamentoFinanceiro {
   id: string;
   tipo: TipoLancamento;
+  status: TipoSituacaoLancamento;
   valor: number;
   data_competencia: string;
   data_efetivacao: string;

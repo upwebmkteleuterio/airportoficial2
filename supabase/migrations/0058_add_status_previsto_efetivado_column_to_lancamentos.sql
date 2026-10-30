@@ -1,0 +1,1 @@
+ALTER TABLE public.lancamentos_financeiros ADD COLUMN status text NOT NULL DEFAULT 'EFETIVADO' CONSTRAINT lancamentos_financeiros_status_check CHECK (status IN ('PREVISTO','EFETIVADO'));

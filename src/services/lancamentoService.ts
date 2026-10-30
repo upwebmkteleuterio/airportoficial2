@@ -4,6 +4,7 @@ import type {
   LancamentoFinanceiro,
   ResumoFinanceiroMensal,
   TipoLancamento,
+  TipoSituacaoLancamento,
 } from '../types/financeiro';
 import { newServiceId, serviceError } from './supabaseErrors';
 
@@ -11,6 +12,7 @@ export interface LancamentoFiltros {
   page: number;
   pageSize: number;
   tipo?: TipoLancamento;
+  status?: TipoSituacaoLancamento;
   bancoId?: string;
   categoriaId?: string;
   dateFrom?: string;
@@ -69,6 +71,7 @@ export const lancamentoService = {
     const inicio = (page - 1) * pageSize;
     let query = supabase.from('lancamentos_financeiros')
       .select('*, categoria:categorias_financeiras(id,nome,tipo), banco:bancos(id,nome,tipo)', { count: 'exact' })
+      .eq('status', filtros.status ?? 'EFETIVADO')
       .order('data_efetivacao', { ascending: false })
       .order('created_at', { ascending: false })
       .range(inicio, inicio + pageSize - 1);
@@ -95,6 +98,7 @@ export const lancamentoService = {
     validarParticipante(input);
     const { data, error } = await supabase.from('lancamentos_financeiros').insert({
       ...input,
+      status: 'EFETIVADO',
       id: newServiceId('lancamento'),
     }).select('*').single();
     if (error) throw serviceError('Não foi possível cadastrar o lançamento financeiro', error);
@@ -108,6 +112,8 @@ export const lancamentoService = {
     const merged = { ...(atual as LancamentoFinanceiro), ...updates };
     validarParticipante(merged);
 
+    // A situação não é forçada aqui: o formulário manual já envia 'EFETIVADO' e os
+    // fluxos de previsão precisam poder editar um lançamento sem efetivá-lo.
     const payload = { ...updates };
     delete payload.id;
     delete payload.created_at;

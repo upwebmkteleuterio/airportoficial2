@@ -1,0 +1,1 @@
+CREATE INDEX lancamentos_financeiros_status_data_idx ON public.lancamentos_financeiros USING btree (status, data_efetivacao DESC);
