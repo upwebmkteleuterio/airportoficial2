@@ -1,0 +1,1 @@
+ALTER TABLE public.lancamentos_financeiros ADD COLUMN venda_id text REFERENCES public.vendas(id) ON DELETE CASCADE, ADD COLUMN programacao_id text REFERENCES public.programacoes_saidas(id) ON DELETE CASCADE

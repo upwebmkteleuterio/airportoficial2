@@ -130,18 +130,40 @@ export async function createDisposableCategoria(marker: string, tipo: 'ENTRADA' 
   return nome;
 }
 
+/** Cria uma empresa descartável, usada nas vendas para pessoa jurídica. */
+export async function createDisposableEmpresa(marker: string): Promise<{ id: string; nome: string }> {
+  const client = admin();
+  const id = `empresa-${marker}`;
+  const nome = `Empresa ${marker}`;
+  const documento = String(Date.now()).slice(-14).padStart(14, '0');
+  const { error } = await client.from('empresas').insert({
+    id,
+    nome_fantasia: nome,
+    cnpj: documento,
+    hash_link_inscricao: `${marker}-${documento}`,
+    token_registro_b2b: `${marker}-${documento}`,
+  });
+  if (error) throw new Error(`Não foi possível criar a empresa de teste: ${error.message}`);
+  return { id, nome };
+}
+
 /**
  * Rede de segurança: remove os registros financeiros descartáveis do caso,
  * respeitando a ordem das chaves estrangeiras. Excluir os lançamentos também
  * desfaz o efeito deles nos saldos, porque o trigger do banco é simétrico.
+ * Vendas e programações vêm primeiro: as parcelas previstas saem em cascata.
  */
 export async function removeDisposableFinanceiro(marker: string): Promise<void> {
   const client = admin();
   const alvos: { tabela: string; coluna: string }[] = [
+    { tabela: 'vendas', coluna: 'participante_nome' },
+    { tabela: 'programacoes_saidas', coluna: 'descricao' },
     { tabela: 'lancamentos_financeiros', coluna: 'descricao' },
+    { tabela: 'lancamentos_financeiros', coluna: 'participante_nome' },
     { tabela: 'bancos', coluna: 'nome' },
     { tabela: 'categorias_financeiras', coluna: 'nome' },
     { tabela: 'fornecedores', coluna: 'nome' },
+    { tabela: 'empresas', coluna: 'nome_fantasia' },
   ];
 
   const falhas: string[] = [];

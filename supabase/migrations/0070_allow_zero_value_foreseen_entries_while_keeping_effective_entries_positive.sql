@@ -1,0 +1,1 @@
+ALTER TABLE public.lancamentos_financeiros DROP CONSTRAINT lancamentos_financeiros_valor_check, ADD CONSTRAINT lancamentos_financeiros_valor_check CHECK ((status = 'EFETIVADO' AND valor > (0)::numeric) OR (status = 'PREVISTO' AND valor >= (0)::numeric))

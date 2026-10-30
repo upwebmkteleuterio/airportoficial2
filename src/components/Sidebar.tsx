@@ -6,7 +6,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { LayoutDashboard, FileArchive, FileText, Building2, ShieldAlert, LogOut, LoaderCircle, Users, PanelLeftClose, PanelLeftOpen, User, BookOpen, GraduationCap, UserCog, MapPin, Clock, ArrowLeftRight, Landmark, Tags, Truck, Receipt, type LucideIcon } from 'lucide-react';
+import { LayoutDashboard, FileArchive, FileText, Building2, ShieldAlert, LogOut, LoaderCircle, Users, PanelLeftClose, PanelLeftOpen, User, BookOpen, GraduationCap, UserCog, MapPin, Clock, ArrowLeftRight, Landmark, Tags, Truck, Receipt, ShoppingCart, HandCoins, CalendarClock, ReceiptText, type LucideIcon } from 'lucide-react';
 import { supabase } from '../integrations/supabase/client';
 import { useSessionContext } from '../contexts/SessionContext';
 import { Tooltip } from './ui/Tooltip';
@@ -104,7 +104,11 @@ export function Sidebar() {
     ...(userLogged?.role === 'GESTOR' ? [{
       title: 'Financeiro',
       items: [
+        { id: 'financeiro-vendas', icon: ShoppingCart, label: 'Vendas' },
         { id: 'financeiro-lancamentos', icon: Receipt, label: 'Lançamentos' },
+        { id: 'financeiro-recebimentos', icon: HandCoins, label: 'Recebimentos' },
+        { id: 'financeiro-despesas', icon: CalendarClock, label: 'Despesas' },
+        { id: 'financeiro-contas-a-pagar', icon: ReceiptText, label: 'Contas a pagar' },
         { id: 'financeiro-bancos', icon: Landmark, label: 'Bancos' },
         { id: 'financeiro-categorias', icon: Tags, label: 'Categorias' },
         { id: 'financeiro-fornecedores', icon: Truck, label: 'Fornecedores' },

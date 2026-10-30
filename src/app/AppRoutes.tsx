@@ -26,6 +26,10 @@ import FinanceiroBancos from '../pages/FinanceiroBancos';
 import FinanceiroCategorias from '../pages/FinanceiroCategorias';
 import FinanceiroFornecedores from '../pages/FinanceiroFornecedores';
 import FinanceiroLancamentos from '../pages/FinanceiroLancamentos';
+import FinanceiroVendas from '../pages/FinanceiroVendas';
+import FinanceiroRecebimentos from '../pages/FinanceiroRecebimentos';
+import FinanceiroDespesas from '../pages/FinanceiroDespesas';
+import FinanceiroContasAPagar from '../pages/FinanceiroContasAPagar';
 import NotFound from '../pages/NotFound';
 
 function SessionLoading() {
@@ -168,6 +172,10 @@ export function AppRoutes() {
             <Route path="migracao" element={<AdminPage><MigrationAccessRoute /></AdminPage>} />
             <Route path="financeiro/bancos" element={<FinanceiroAccessRoute><FinanceiroBancos /></FinanceiroAccessRoute>} />
             <Route path="financeiro/lancamentos" element={<FinanceiroAccessRoute><FinanceiroLancamentos /></FinanceiroAccessRoute>} />
+            <Route path="financeiro/vendas" element={<FinanceiroAccessRoute><FinanceiroVendas /></FinanceiroAccessRoute>} />
+            <Route path="financeiro/recebimentos" element={<FinanceiroAccessRoute><FinanceiroRecebimentos /></FinanceiroAccessRoute>} />
+            <Route path="financeiro/despesas" element={<FinanceiroAccessRoute><FinanceiroDespesas /></FinanceiroAccessRoute>} />
+            <Route path="financeiro/contas-a-pagar" element={<FinanceiroAccessRoute><FinanceiroContasAPagar /></FinanceiroAccessRoute>} />
             <Route path="financeiro/categorias" element={<FinanceiroAccessRoute><FinanceiroCategorias /></FinanceiroAccessRoute>} />
             <Route path="financeiro/fornecedores" element={<FinanceiroAccessRoute><FinanceiroFornecedores /></FinanceiroAccessRoute>} />
             <Route path="meu-cadastro" element={<AdminPage><Dashboard /></AdminPage>} />

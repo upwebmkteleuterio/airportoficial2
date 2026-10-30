@@ -1,0 +1,1 @@
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.vendas, public.programacoes_saidas TO authenticated, service_role

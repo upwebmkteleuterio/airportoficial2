@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX lancamentos_financeiros_programacao_mes_idx ON public.lancamentos_financeiros (programacao_id, date_trunc('month', data_competencia::timestamp)) WHERE programacao_id IS NOT NULL

@@ -1,0 +1,1 @@
+CREATE POLICY "programacoes_saidas_gestor_policy" ON public.programacoes_saidas AS PERMISSIVE FOR ALL TO authenticated USING (public.can_manage_financeiro()) WITH CHECK (public.can_manage_financeiro())

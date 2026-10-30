@@ -1,0 +1,1 @@
+GRANT EXECUTE ON FUNCTION public.fn_salvar_venda(text, jsonb, jsonb), public.fn_gerar_previsoes_mes(date), public.fn_criar_transferencia(text, text, numeric, date, text), public.fn_atualizar_transferencia(text, numeric, date, text), public.fn_excluir_transferencia(text) TO authenticated, service_role

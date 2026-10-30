@@ -1,0 +1,1 @@
+ALTER TABLE public.programacoes_saidas ENABLE ROW LEVEL SECURITY

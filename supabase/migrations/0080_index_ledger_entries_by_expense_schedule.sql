@@ -1,0 +1,1 @@
+CREATE INDEX lancamentos_financeiros_programacao_idx ON public.lancamentos_financeiros (programacao_id) WHERE programacao_id IS NOT NULL

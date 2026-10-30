@@ -113,3 +113,82 @@ export interface ParticipanteOpcao {
   nome: string;
   documento: string | null;
 }
+
+export type TipoCondicaoVenda = 'A_VISTA' | 'PARCELADO';
+export type TipoParticipanteVenda = 'ALUNO' | 'EMPRESA';
+
+export interface Venda {
+  id: string;
+  participante_tipo: TipoParticipanteVenda;
+  pessoa_id: string | null;
+  empresa_id: string | null;
+  participante_nome: string;
+  participante_documento: string | null;
+  curso_id: string | null;
+  turma_id: string | null;
+  condicao: TipoCondicaoVenda;
+  parcelas_quantidade: number;
+  categoria_id: string;
+  banco_id: string;
+  forma_pagamento: FormaPagamento | null;
+  referencia_transacao: string | null;
+  cartao_ultimos_digitos: string | null;
+  observacoes: string;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ParcelaVenda {
+  id: string;
+  valor: number;
+  data_competencia: string;
+  data_efetivacao: string;
+  status: TipoSituacaoLancamento;
+}
+
+export interface VendaComRelacoes extends Venda {
+  curso: { id: string; nome_curso: string } | null;
+  turma: { id: string; id_interno_escola: number } | null;
+  categoria: { id: string; nome: string } | null;
+  conta: { id: string; nome: string } | null;
+  parcelas: ParcelaVenda[];
+}
+
+export interface ParcelaRecebimento extends LancamentoFinanceiro {
+  venda: Venda | null;
+}
+
+export type TipoFrequenciaProgramacao = 'MENSAL_CONTINUA' | 'AVULSA' | 'REPETICAO_FINITA';
+
+export interface ProgramacaoSaida {
+  id: string;
+  descricao: string;
+  frequencia: TipoFrequenciaProgramacao;
+  dia_vencimento: number;
+  data_inicio: string;
+  repeticoes: number | null;
+  valor_previsto: number | null;
+  categoria_id: string;
+  banco_id: string;
+  participante_tipo: TipoParticipante | null;
+  pessoa_id: string | null;
+  empresa_id: string | null;
+  fornecedor_id: string | null;
+  participante_nome: string | null;
+  participante_documento: string | null;
+  observacoes: string;
+  ativa: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProgramacaoSaidaComRelacoes extends ProgramacaoSaida {
+  categoria: { id: string; nome: string } | null;
+  conta: { id: string; nome: string } | null;
+}
+
+export interface ParcelaDespesa extends LancamentoFinanceiro {
+  programacao: ProgramacaoSaida | null;
+}

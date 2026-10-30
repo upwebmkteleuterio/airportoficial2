@@ -1,0 +1,1 @@
+CREATE POLICY "vendas_gestor_policy" ON public.vendas AS PERMISSIVE FOR ALL TO authenticated USING (public.can_manage_financeiro()) WITH CHECK (public.can_manage_financeiro())
