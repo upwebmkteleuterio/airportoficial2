@@ -16,7 +16,7 @@ function erroExclusao(error: unknown): never {
 
 export const categoriaFinanceiraService = {
   getAll: async (): Promise<CategoriaFinanceira[]> => {
-    const { data, error } = await supabase.from('categorias_financeiras').select('*')
+    const { data, error } = await supabase.from('categorias_financeiras').select('*').eq('sistema', false)
       .order('tipo', { ascending: true }).order('nome', { ascending: true });
     if (error) throw serviceError('Não foi possível carregar as categorias financeiras', error);
     return (data ?? []) as CategoriaFinanceira[];
@@ -34,13 +34,16 @@ export const categoriaFinanceiraService = {
 
   update: async (id: string, updates: { nome?: string; ativo?: boolean }): Promise<CategoriaFinanceira> => {
     const { data, error } = await supabase.from('categorias_financeiras').update(updates)
-      .eq('id', id).select('*').single();
+      .eq('id', id).eq('sistema', false).select('*').maybeSingle();
     if (error) throw serviceError('Não foi possível atualizar a categoria financeira', error);
+    if (!data) throw new Error('Não foi possível atualizar a categoria financeira.');
     return data as CategoriaFinanceira;
   },
 
   delete: async (id: string): Promise<void> => {
-    const { error } = await supabase.from('categorias_financeiras').delete().eq('id', id);
+    const { data, error } = await supabase.from('categorias_financeiras').delete()
+      .eq('id', id).eq('sistema', false).select('id');
     if (error) erroExclusao(error);
+    if (!data?.length) throw new Error('Não foi possível excluir a categoria financeira.');
   },
 };

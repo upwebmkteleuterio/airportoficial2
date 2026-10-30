@@ -1,0 +1,1 @@
+ALTER TABLE public.cursos ADD COLUMN valor_pessoa_fisica numeric(14,2) CONSTRAINT cursos_valor_pf_check CHECK (valor_pessoa_fisica IS NULL OR valor_pessoa_fisica >= 0), ADD COLUMN valor_pessoa_juridica numeric(14,2) CONSTRAINT cursos_valor_pj_check CHECK (valor_pessoa_juridica IS NULL OR valor_pessoa_juridica >= 0);

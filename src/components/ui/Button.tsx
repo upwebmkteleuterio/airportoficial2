@@ -12,9 +12,10 @@ interface ButtonProps {
   onClick?: MouseEventHandler<HTMLButtonElement>;
   title?: string;
   'aria-label'?: string;
+  'data-testid'?: string;
 }
 
-export function Button({ variant = 'primary', icon, children, className = '', disabled, type, onClick, title, 'aria-label': ariaLabel }: ButtonProps) {
+export function Button({ variant = 'primary', icon, children, className = '', disabled, type, onClick, title, 'aria-label': ariaLabel, 'data-testid': dataTestId }: ButtonProps) {
   const baseStyles = 'px-4 py-2.5 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 shadow-sm transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed';
   
   const variants = {
@@ -28,6 +29,7 @@ export function Button({ variant = 'primary', icon, children, className = '', di
       onClick={onClick}
       title={title}
       aria-label={ariaLabel}
+      data-testid={dataTestId}
       disabled={disabled}
       className={`${baseStyles} ${variants[variant]} ${className}`}
     >

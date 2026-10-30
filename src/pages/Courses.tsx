@@ -8,6 +8,8 @@ import { HelpModal } from '../components/ui/HelpModal';
 import { RowActionMenu } from '../components/ui/RowActionMenu';
 import { QueryErrorState } from '../components/ui/QueryErrorState';
 
+const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+
 export default function Courses() {
   const {
     courses,
@@ -35,7 +37,7 @@ export default function Courses() {
       setFormData(course);
     } else {
       setEditingId(null);
-      setFormData({ nome_curso: '', carga_horaria_total: 0 });
+      setFormData({ nome_curso: '', carga_horaria_total: 0, valor_pessoa_fisica: null, valor_pessoa_juridica: null });
     }
     setIsModalOpen(true);
   };
@@ -108,12 +110,14 @@ export default function Courses() {
                 <th className="px-4 py-3 w-10 text-center border-r border-gray-200/50 dark:border-slate-800/50" aria-label="Ações"></th>
                 <th className="px-4 py-3 border-r border-gray-200/50 dark:border-slate-800/50">Nome do Curso</th>
                 <th className="px-4 py-3 border-r border-gray-200/50 dark:border-slate-800/50 text-center">Carga Horária (h)</th>
+                <th className="px-4 py-3 border-r border-gray-200/50 dark:border-slate-800/50 text-right">Valor pessoa física</th>
+                <th className="px-4 py-3 border-r border-gray-200/50 dark:border-slate-800/50 text-right">Valor pessoa jurídica</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-150 dark:divide-slate-800 text-gray-700 dark:text-slate-200">
               {isLoading ? (
                 <tr>
-                  <td colSpan={3} className="px-4 py-8 text-center">
+                  <td colSpan={5} className="px-4 py-8 text-center">
                     <div className="flex flex-col items-center justify-center gap-2 text-gray-500">
                       <div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin" aria-label="Carregando" />
                       <p className="font-sans text-sm">Carregando cursos...</p>
@@ -122,13 +126,13 @@ export default function Courses() {
                 </tr>
               ) : isError && courses.length === 0 ? (
                 <tr>
-                  <td colSpan={3} className="px-4 py-12 text-center text-gray-500 font-sans">
+                  <td colSpan={5} className="px-4 py-12 text-center text-gray-500 font-sans">
                     <QueryErrorState onRetry={() => void refetch()} isRetrying={isFetching} message="Verifique sua conexão e tente novamente." />
                   </td>
                 </tr>
               ) : courses.length === 0 ? (
                 <tr>
-                  <td colSpan={3} className="px-4 py-12 text-center text-gray-500 font-sans">
+                  <td colSpan={5} className="px-4 py-12 text-center text-gray-500 font-sans">
                     <div className="flex flex-col items-center justify-center gap-2.5 max-w-sm mx-auto">
                       <div className="p-3 bg-teal-500/10 rounded-full text-teal-500">
                         <BookOpen className="w-6 h-6" aria-hidden="true" />
@@ -166,6 +170,8 @@ export default function Courses() {
 
                     <td className="px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 font-sans font-semibold text-slate-800 dark:text-slate-200">{course.nome_curso}</td>
                     <td className="px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 text-center">{course.carga_horaria_total}</td>
+                    <td className="px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 text-right">{course.valor_pessoa_fisica === null ? '—' : money.format(course.valor_pessoa_fisica)}</td>
+                    <td className="px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 text-right">{course.valor_pessoa_juridica === null ? '—' : money.format(course.valor_pessoa_juridica)}</td>
                   </tr>
                 ))
               )}
@@ -178,16 +184,16 @@ export default function Courses() {
         isOpen={isHelpOpen}
         onClose={() => setIsHelpOpen(false)}
         title="Ajuda sobre Cursos"
-        description="Use esta tela para manter os cursos base da instituição e suas cargas horárias organizados."
+        description="Use esta tela para manter os cursos, cargas horárias e valores para pessoas físicas e jurídicas organizados."
         items={[
           {
             title: 'Objetivo da tela',
-            description: 'Cadastre e gerencie os cursos oferecidos pela instituição e consulte a carga horária de cada um.',
+            description: 'Cadastre e gerencie os cursos oferecidos pela instituição, suas cargas horárias e os valores para pessoas físicas e jurídicas.',
             icon: <Info className="h-4 w-4" aria-hidden="true" />,
           },
           {
             title: 'Novo Curso',
-            description: 'Abre o formulário para cadastrar o nome do curso e sua carga horária total.',
+            description: 'Abre o formulário para cadastrar o nome, a carga horária total e os valores para pessoas físicas e jurídicas.',
             icon: <Plus className="h-4 w-4" aria-hidden="true" />,
           },
           {
@@ -197,7 +203,7 @@ export default function Courses() {
           },
           {
             title: 'Editar',
-            description: 'Permite alterar o nome do curso e a carga horária total cadastrada.',
+            description: 'Permite alterar o nome, a carga horária total e os valores para pessoas físicas e jurídicas cadastrados.',
             icon: <Edit2 className="h-4 w-4" aria-hidden="true" />,
           },
           {
@@ -244,6 +250,32 @@ export default function Courses() {
                   required
                   value={formData.carga_horaria_total || ''}
                   onChange={e => setFormData({ ...formData, carga_horaria_total: Number(e.target.value) })}
+                  className="w-full border border-gray-300 dark:border-slate-700 rounded px-3 py-2 bg-transparent dark:text-white focus:outline-none focus:border-teal-500"
+                />
+              </div>
+              <div>
+                <label htmlFor="course-valor-pf" className="block text-xs font-bold text-gray-700 dark:text-slate-300 uppercase mb-1">Valor pessoa física</label>
+                <input
+                  id="course-valor-pf"
+                  data-testid="course-valor-pf"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={formData.valor_pessoa_fisica ?? ''}
+                  onChange={e => setFormData({ ...formData, valor_pessoa_fisica: e.target.value === '' ? null : Number(e.target.value) })}
+                  className="w-full border border-gray-300 dark:border-slate-700 rounded px-3 py-2 bg-transparent dark:text-white focus:outline-none focus:border-teal-500"
+                />
+              </div>
+              <div>
+                <label htmlFor="course-valor-pj" className="block text-xs font-bold text-gray-700 dark:text-slate-300 uppercase mb-1">Valor pessoa jurídica</label>
+                <input
+                  id="course-valor-pj"
+                  data-testid="course-valor-pj"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={formData.valor_pessoa_juridica ?? ''}
+                  onChange={e => setFormData({ ...formData, valor_pessoa_juridica: e.target.value === '' ? null : Number(e.target.value) })}
                   className="w-full border border-gray-300 dark:border-slate-700 rounded px-3 py-2 bg-transparent dark:text-white focus:outline-none focus:border-teal-500"
                 />
               </div>

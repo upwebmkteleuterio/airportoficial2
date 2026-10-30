@@ -1,0 +1,1 @@
+CREATE TRIGGER categorias_financeiras_sistema_protegido BEFORE UPDATE OR DELETE ON public.categorias_financeiras FOR EACH ROW EXECUTE FUNCTION fn_proteger_categoria_sistema();

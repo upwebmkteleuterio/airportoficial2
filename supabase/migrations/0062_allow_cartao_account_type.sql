@@ -1,0 +1,1 @@
+ALTER TABLE public.bancos DROP CONSTRAINT bancos_tipo_check, ADD CONSTRAINT bancos_tipo_check CHECK (tipo = ANY (ARRAY['BANCO'::text, 'COFRE_LOCAL'::text, 'CARTAO'::text]));

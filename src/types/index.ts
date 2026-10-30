@@ -137,6 +137,8 @@ export interface Curso {
   id: string;
   nome_curso: string;
   carga_horaria_total: number;
+  valor_pessoa_fisica: number | null;
+  valor_pessoa_juridica: number | null;
 }
 
 export interface Turma {

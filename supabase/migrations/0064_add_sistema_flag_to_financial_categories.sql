@@ -1,0 +1,1 @@
+ALTER TABLE public.categorias_financeiras ADD COLUMN sistema boolean NOT NULL DEFAULT false;

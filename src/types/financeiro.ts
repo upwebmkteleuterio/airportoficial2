@@ -1,6 +1,6 @@
 export type TipoLancamento = 'ENTRADA' | 'SAIDA';
 export type TipoSituacaoLancamento = 'PREVISTO' | 'EFETIVADO';
-export type TipoBanco = 'BANCO' | 'COFRE_LOCAL';
+export type TipoBanco = 'BANCO' | 'COFRE_LOCAL' | 'CARTAO';
 export type FormaPagamento = 'PIX' | 'DINHEIRO' | 'BOLETO' | 'TRANSFERENCIA' | 'CARTAO' | 'CHEQUE' | 'OUTRO';
 export type TipoParticipante = 'ALUNO' | 'INSTRUTOR' | 'COORDENADOR' | 'EMPRESA' | 'FORNECEDOR';
 export type TipoDocumentoFornecedor = 'CPF' | 'CNPJ';
@@ -27,10 +27,22 @@ export interface SaldoConta {
 
 export type ContaComSaldo = Banco & SaldoConta;
 
+export interface TransferenciaEntreContas {
+  id: string;
+  conta_origem_id: string;
+  conta_origem_nome: string;
+  conta_destino_id: string;
+  conta_destino_nome: string;
+  valor: number;
+  data: string;
+  observacoes: string;
+}
+
 export interface CategoriaFinanceira {
   id: string;
   nome: string;
   tipo: TipoLancamento;
+  sistema: boolean;
   ativo: boolean;
   created_at: string;
   updated_at: string;
