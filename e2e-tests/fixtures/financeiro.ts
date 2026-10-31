@@ -153,9 +153,27 @@ export async function createDisposableEmpresa(marker: string): Promise<{ id: str
  * desfaz o efeito deles nos saldos, porque o trigger do banco é simétrico.
  * Vendas e programações vêm primeiro: as parcelas previstas saem em cascata.
  */
+/**
+ * Repete uma chamada ao Supabase enquanto ela voltar com erro. A conexão oscila
+ * entre execuções, e uma falha de rede na limpeza não pode reprovar um teste
+ * que passou. Se todas as tentativas falharem, o último erro é devolvido.
+ */
+async function comRetentativaSupabase<T extends { error: { message: string } | null }>(
+  acao: () => PromiseLike<T>,
+  tentativas = 3,
+): Promise<T> {
+  let resultado = await acao();
+  for (let tentativa = 2; tentativa <= tentativas && resultado.error; tentativa += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 500 * tentativa));
+    resultado = await acao();
+  }
+  return resultado;
+}
+
 export async function removeDisposableFinanceiro(marker: string): Promise<void> {
   const client = admin();
   const alvos: { tabela: string; coluna: string }[] = [
+    { tabela: 'document_templates', coluna: 'nome' },
     { tabela: 'vendas', coluna: 'participante_nome' },
     { tabela: 'programacoes_saidas', coluna: 'descricao' },
     { tabela: 'lancamentos_financeiros', coluna: 'descricao' },
@@ -168,7 +186,9 @@ export async function removeDisposableFinanceiro(marker: string): Promise<void> 
 
   const falhas: string[] = [];
   for (const alvo of alvos) {
-    const { error } = await client.from(alvo.tabela).delete().ilike(alvo.coluna, `%${marker}%`);
+    const { error } = await comRetentativaSupabase(
+      () => client.from(alvo.tabela).delete().ilike(alvo.coluna, `%${marker}%`),
+    );
     if (error) falhas.push(`${alvo.tabela}: ${error.message}`);
   }
   if (falhas.length > 0) throw new Error(`Falha ao limpar os registros de teste -> ${falhas.join(' | ')}`);
@@ -176,6 +196,19 @@ export async function removeDisposableFinanceiro(marker: string): Promise<void> 
 
 export async function deleteTestUser(user: TestUser): Promise<void> {
   const client = admin();
-  const { error } = await client.auth.admin.deleteUser(user.userId);
+  const { error } = await comRetentativaSupabase(() => client.auth.admin.deleteUser(user.userId));
   if (error) throw new Error(`Não foi possível remover o usuário de teste: ${error.message}`);
+}
+
+/** Cria um modelo VENDA descartável pela interface real de Documentos. */
+export async function createVendaDocumentTemplate(page: Page, marker: string): Promise<string> {
+  const nome = `Recibo E2E ${marker}`;
+  await page.goto('/documentos');
+  await page.getByRole('button', { name: 'Novo modelo' }).click();
+  await page.getByLabel('Nome do modelo').fill(nome);
+  await page.getByLabel('Tipo de registro', { exact: true }).selectOption('VENDA');
+  await page.getByLabel('Conteúdo do modelo de documento').fill('Recibo de venda {{participante.nome}}');
+  await page.getByRole('button', { name: 'Salvar modelo' }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Modelo salvo com sucesso.' })).toBeVisible();
+  return nome;
 }

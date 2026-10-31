@@ -1,9 +1,10 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import {
   createDisposableCategoria,
   createDisposableConta,
   createDisposableEmpresa,
   createTestUser,
+  createVendaDocumentTemplate,
   deleteTestUser,
   removeDisposableFinanceiro,
   signInAs,
@@ -12,8 +13,31 @@ import {
 
 let user: TestUser;
 
-test.beforeEach(async () => {
+async function criarVenda(
+  page: Page,
+  conta: { id: string; nome: string },
+  categoria: string,
+  empresa: { id: string; nome: string },
+  referencia: string,
+): Promise<void> {
+  await page.goto('/financeiro/vendas');
+  await page.getByTestId('nova-venda-button').click();
+  const dialog = page.getByRole('dialog');
+  await dialog.locator('#venda-participante-tipo').selectOption('EMPRESA');
+  await dialog.locator('#venda-empresa').selectOption(empresa.id);
+  await dialog.locator('#venda-curso').selectOption({ index: 1 });
+  await dialog.locator('#venda-valor').fill('1000');
+  await dialog.locator('#venda-categoria').selectOption({ label: categoria });
+  await dialog.locator('#venda-conta').selectOption({ label: conta.nome });
+  await dialog.locator('#venda-forma-pagamento').selectOption('PIX');
+  await dialog.locator('#venda-referencia').fill(referencia);
+  await dialog.getByRole('button', { name: 'Salvar' }).click();
+  await expect(page.getByRole('row').filter({ hasText: empresa.nome })).toContainText(/R\$\s*1\.000,00/);
+}
+
+test.beforeEach(async ({ page }) => {
   user = await createTestUser('GESTOR');
+  await page.setViewportSize({ width: 1280, height: 900 });
 });
 
 test.afterEach(async () => {
@@ -84,4 +108,64 @@ test('gestor registra uma venda, efetiva o recebimento e o saldo acompanha', asy
   await page.goto('/financeiro/lancamentos', { timeout: T });
   const chip = page.getByTestId('saldos-por-conta').getByRole('button').filter({ hasText: conta.nome });
   await expect(chip).toContainText(/R\$\s*1\.000,00/, { timeout: T });
+});
+
+test('gestor edita uma venda e atualiza o total exibido', async ({ page }) => {
+  test.setTimeout(90000);
+  const conta = await createDisposableConta(user.marker);
+  const categoria = await createDisposableCategoria(user.marker, 'ENTRADA');
+  const empresa = await createDisposableEmpresa(user.marker);
+  const referencia = `REF-${user.marker}`;
+
+  await signInAs(page, user);
+  await criarVenda(page, conta, categoria, empresa, referencia);
+
+  const linha = page.getByRole('row').filter({ hasText: empresa.nome });
+  await linha.getByRole('button', { name: `Ações para ${empresa.nome}` }).click();
+  await page.getByRole('menuitem', { name: 'Editar' }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.locator('#venda-valor').fill('1250');
+  await dialog.getByRole('button', { name: 'Atualizar' }).click();
+
+  await expect(linha).toContainText(/R\$\s*1\.250,00/);
+});
+
+test('gestor exclui uma venda após confirmar a exclusão', async ({ page }) => {
+  test.setTimeout(90000);
+  const conta = await createDisposableConta(user.marker);
+  const categoria = await createDisposableCategoria(user.marker, 'ENTRADA');
+  const empresa = await createDisposableEmpresa(user.marker);
+
+  await signInAs(page, user);
+  await criarVenda(page, conta, categoria, empresa, `REF-${user.marker}`);
+
+  const linha = page.getByRole('row').filter({ hasText: empresa.nome });
+  await linha.getByRole('button', { name: `Ações para ${empresa.nome}` }).click();
+  await page.getByRole('menuitem', { name: 'Excluir' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Confirmar exclusão' });
+  await expect(dialog).toContainText(empresa.nome);
+  await dialog.getByRole('button', { name: 'Confirmar exclusão' }).click();
+
+  await expect(linha).toHaveCount(0);
+});
+
+test('gestor abre o recibo com a venda já selecionada', async ({ page }) => {
+  test.setTimeout(90000);
+  const conta = await createDisposableConta(user.marker);
+  const categoria = await createDisposableCategoria(user.marker, 'ENTRADA');
+  const empresa = await createDisposableEmpresa(user.marker);
+  const referencia = `REF-${user.marker}`;
+
+  await signInAs(page, user);
+  await createVendaDocumentTemplate(page, user.marker);
+  await criarVenda(page, conta, categoria, empresa, referencia);
+
+  const linha = page.getByRole('row').filter({ hasText: empresa.nome });
+  await linha.getByRole('button', { name: `Ações para ${empresa.nome}` }).click();
+  await page.getByRole('menuitem', { name: 'Recibo' }).click();
+
+  const dialog = page.getByRole('dialog', { name: 'Gerar documento em PDF' });
+  await expect(dialog.getByLabel('Selecione o modelo de documento')).toHaveValue(/.+/);
+  await expect(dialog.getByText(empresa.nome, { exact: false })).toBeVisible();
+  await expect(dialog.getByText(referencia, { exact: false })).toBeVisible();
 });

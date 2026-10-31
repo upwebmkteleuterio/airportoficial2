@@ -7,7 +7,7 @@
  * Entidades que podem servir de "sujeito" principal de um modelo de documento.
  * Cada entidade determina quais grupos de shortcodes ficam disponíveis no editor.
  */
-export type DocumentTemplateEntity = 'ALUNO' | 'INSTRUTOR' | 'COORDENADOR' | 'TURMA' | 'EMPRESA';
+export type DocumentTemplateEntity = 'ALUNO' | 'INSTRUTOR' | 'COORDENADOR' | 'TURMA' | 'EMPRESA' | 'VENDA';
 
 export type DocumentPageFormat = 'A4';
 

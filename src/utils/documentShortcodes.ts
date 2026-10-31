@@ -159,6 +159,41 @@ export const SHORTCODE_ENTITIES: Record<DocumentTemplateEntity, ShortcodeEntityD
     label: 'Empresa',
     groups: [{ id: 'empresa', label: 'Empresa', fields: empresaFields }],
   },
+  VENDA: {
+    entity: 'VENDA',
+    label: 'Venda',
+    groups: [
+      {
+        id: 'venda',
+        label: 'Venda / Recibo',
+        fields: [
+          field('venda.data_venda', 'Data da venda', '15/03/2026'),
+          field('venda.condicao', 'Condição', 'Parcelado'),
+          field('venda.parcelas_quantidade', 'Quantidade de parcelas', '3'),
+          field('venda.valor_total', 'Valor total da venda', 'R$ 1.000,00'),
+          field('venda.valor_recebido', 'Valor já recebido', 'R$ 350,00'),
+          field('venda.valor_a_receber', 'Valor ainda a receber', 'R$ 650,00'),
+          field('venda.forma_pagamento', 'Forma de pagamento', 'Pix'),
+          field('venda.referencia_transacao', 'Referência da transação', 'PIX-2026-0315-001'),
+          field('venda.primeiro_vencimento', 'Primeiro vencimento', '15/03/2026'),
+          field('venda.ultimo_vencimento', 'Último vencimento', '15/05/2026'),
+          field('venda.observacoes', 'Observações', 'Pagamento referente à matrícula no curso.'),
+        ],
+      },
+      {
+        id: 'participante',
+        label: 'Participante',
+        fields: [
+          field('participante.nome', 'Nome / razão social', 'João da Silva'),
+          field('participante.documento', 'CPF / CNPJ', '123.456.789-00'),
+          field('participante.tipo', 'Tipo', 'Pessoa física'),
+          field('participante.email', 'E-mail', 'joao@email.com'),
+        ],
+      },
+      { id: 'curso', label: 'Curso', fields: cursoFields },
+      { id: 'turma', label: 'Turma', fields: turmaFields },
+    ],
+  },
 };
 
 export const DOCUMENT_TEMPLATE_ENTITIES: { value: DocumentTemplateEntity; label: string }[] = [
@@ -167,6 +202,7 @@ export const DOCUMENT_TEMPLATE_ENTITIES: { value: DocumentTemplateEntity; label:
   { value: 'COORDENADOR', label: 'Coordenador' },
   { value: 'TURMA', label: 'Turma' },
   { value: 'EMPRESA', label: 'Empresa' },
+  { value: 'VENDA', label: 'Venda' },
 ];
 
 export function getShortcodeGroups(entity: DocumentTemplateEntity): ShortcodeGroup[] {

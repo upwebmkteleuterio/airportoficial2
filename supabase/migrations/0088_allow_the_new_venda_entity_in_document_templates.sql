@@ -1,0 +1,1 @@
+ALTER TABLE public.document_templates DROP CONSTRAINT document_templates_entidade_check

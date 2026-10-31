@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Edit2, HelpCircle, Plus, Search, ShoppingCart, Trash2, X } from 'lucide-react';
+import { Edit2, FileText, HelpCircle, Plus, Search, ShoppingCart, Trash2, X } from 'lucide-react';
 import { useIsFetching, useQueryClient } from '@tanstack/react-query';
 import { Button } from '../components/ui/Button';
 import { ConfirmDeleteModal } from '../components/ui/ConfirmDeleteModal';
@@ -7,6 +7,8 @@ import { HelpModal } from '../components/ui/HelpModal';
 import { Modal } from '../components/ui/Modal';
 import { QueryErrorState } from '../components/ui/QueryErrorState';
 import { RowActionMenu } from '../components/ui/RowActionMenu';
+import { DocumentGeneratorModal } from '../components/documents/DocumentGeneratorModal';
+import { useDocumentTemplates } from '../hooks/useDocumentTemplates';
 import { useBancos } from '../hooks/useBancos';
 import { useCategoriasFinanceiras } from '../hooks/useCategoriasFinanceiras';
 import { useClasses } from '../hooks/useClasses';
@@ -84,7 +86,10 @@ export default function FinanceiroVendas() {
   const [cpfSearch, setCpfSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [receiptOpen, setReceiptOpen] = useState(false);
+  const [receiptVendaId, setReceiptVendaId] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+  const documentTemplates = useDocumentTemplates();
   const filtros = useMemo(() => ({ page, pageSize, search: search || undefined, participanteTipo: filtroParticipante }), [page, search, filtroParticipante]);
   const { vendas, total, isLoading, isFetching, isError, saveVenda, isSaving, deleteVenda, isDeleting } = useVendas(filtros);
   const { alunos, isLoading: alunosLoading } = useAlunosPorCpf(cpfSearch);
@@ -187,6 +192,7 @@ export default function FinanceiroVendas() {
     try { await deleteVenda(deleting.id); setDeleting(null); }
     catch (error) { setDeleting(null); setErrorMessage(error instanceof Error ? error.message : 'Não foi possível excluir a venda.'); }
   };
+  const openReceipt = (vendaId: string) => { setReceiptVendaId(vendaId); setReceiptOpen(true); };
 
   return (
     <div className="flex-1 flex flex-col p-6 gap-6 overflow-y-auto">
@@ -195,7 +201,7 @@ export default function FinanceiroVendas() {
       <section aria-label="Filtros de vendas" className="grid grid-cols-1 gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:grid-cols-3 dark:border-slate-800 dark:bg-slate-900"><div><label htmlFor="vendas-search" className={labelClass}>Busca</label><div className="relative"><Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" aria-hidden="true"/><input id="vendas-search" className={`${inputClass} pl-9`} placeholder="Participante, documento ou referência" value={searchInput} onChange={(event) => setSearchInput(event.target.value)}/></div></div><div><label htmlFor="vendas-participante-filter" className={labelClass}>Participante</label><select id="vendas-participante-filter" className={inputClass} value={filtroParticipante ?? ''} onChange={(event) => { setFiltroParticipante((event.target.value || undefined) as VendaFiltros['participanteTipo']); setPage(1); }}><option value="">Todos</option><option value="ALUNO">Aluno</option><option value="EMPRESA">Empresa</option></select></div></section>
       {isError && !isLoading && <QueryErrorState onRetry={() => void queryClient.invalidateQueries({ queryKey: ['vendas'] })} isRetrying={isRetrying} message="Verifique sua conexão e tente novamente."/>}
       <div className="flex min-h-[350px] flex-1 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900"><div className="flex-1 overflow-x-auto overflow-y-auto custom-scrollbar"><table data-testid="vendas-table" className="w-full min-w-[1250px] table-fixed border-collapse text-left text-xs"><thead className="sticky top-0 z-10 border-b border-gray-200 bg-slate-50 font-bold uppercase tracking-wider text-gray-500 dark:border-slate-800 dark:bg-slate-850 dark:text-slate-400"><tr><th className="w-12 px-2 py-3 text-center" aria-label="Ações"></th><th className="w-[17%] px-3 py-3">Participante</th><th className="w-[12%] px-3 py-3">Curso</th><th className="w-[8%] px-3 py-3">Turma</th><th className="w-[9%] px-3 py-3">Condição</th><th className="w-[9%] px-3 py-3">Parcelas</th><th className="w-[11%] px-3 py-3 text-right">Total</th><th className="w-[13%] px-3 py-3">Referência</th><th className="w-[12%] px-3 py-3">Conta</th></tr></thead><tbody className="divide-y divide-gray-150 font-mono text-gray-700 dark:text-slate-200">
-        {isLoading ? <tr><td colSpan={9} className="px-4 py-10 text-center font-sans text-gray-500">Carregando vendas...</td></tr> : isError ? <tr><td colSpan={9} className="px-4 py-10 text-center font-sans text-gray-500">Não foi possível carregar as vendas.</td></tr> : vendas.length === 0 ? <tr><td colSpan={9} className="px-4 py-12 text-center font-sans text-gray-500"><div className="flex flex-col items-center gap-2"><ShoppingCart className="h-7 w-7 text-teal-600" aria-hidden="true"/><p className="font-bold text-slate-800 dark:text-slate-200">Nenhuma venda encontrada</p><p className="text-xs">Ajuste a busca ou registre uma nova venda.</p></div></td></tr> : vendas.map((record) => { const totalVenda = record.parcelas.reduce((sum, parcela) => sum + Number(parcela.valor), 0); const settled = record.parcelas.filter((parcela) => parcela.status === 'EFETIVADO').length; return <tr key={record.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50"><td className="px-2 py-2 text-center"><RowActionMenu ariaLabel={`Ações para ${record.participante_nome}`} items={[{ label: 'Editar', icon: <Edit2 className="h-4 w-4" aria-hidden="true"/>, onClick: () => openForm(record) }, { label: 'Excluir', icon: <Trash2 className="h-4 w-4" aria-hidden="true"/>, tone: 'danger', onClick: () => { setErrorMessage(''); setDeleting(record); } }]}/></td><td className="px-3 py-2 font-sans"><span className="block truncate font-semibold">{record.participante_nome}</span><span className="block truncate text-[10px] text-gray-500">{record.participante_documento ?? '—'}</span></td><td className="px-3 py-2 font-sans">{record.curso?.nome_curso ?? '—'}</td><td className="px-3 py-2">{record.turma?.id_interno_escola ?? '—'}</td><td className="px-3 py-2 font-sans">{record.condicao === 'A_VISTA' ? 'À vista' : 'Parcelado'}</td><td className="px-3 py-2">{settled}/{record.parcelas.length}</td><td className="px-3 py-2 text-right font-bold">{money.format(totalVenda)}</td><td className="px-3 py-2 font-sans">{record.referencia_transacao ?? '—'}{record.cartao_ultimos_digitos && <span className="block text-[10px] text-gray-500">•••• {record.cartao_ultimos_digitos}</span>}</td><td className="px-3 py-2 font-sans">{record.conta?.nome ?? '—'}</td></tr>; })}
+        {isLoading ? <tr><td colSpan={9} className="px-4 py-10 text-center font-sans text-gray-500">Carregando vendas...</td></tr> : isError ? <tr><td colSpan={9} className="px-4 py-10 text-center font-sans text-gray-500">Não foi possível carregar as vendas.</td></tr> : vendas.length === 0 ? <tr><td colSpan={9} className="px-4 py-12 text-center font-sans text-gray-500"><div className="flex flex-col items-center gap-2"><ShoppingCart className="h-7 w-7 text-teal-600" aria-hidden="true"/><p className="font-bold text-slate-800 dark:text-slate-200">Nenhuma venda encontrada</p><p className="text-xs">Ajuste a busca ou registre uma nova venda.</p></div></td></tr> : vendas.map((record) => { const totalVenda = record.parcelas.reduce((sum, parcela) => sum + Number(parcela.valor), 0); const settled = record.parcelas.filter((parcela) => parcela.status === 'EFETIVADO').length; return <tr key={record.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50"><td className="px-2 py-2 text-center"><RowActionMenu ariaLabel={`Ações para ${record.participante_nome}`} items={[{ label: 'Editar', icon: <Edit2 className="h-4 w-4" aria-hidden="true"/>, onClick: () => openForm(record) }, { label: 'Recibo', icon: <FileText className="h-4 w-4" aria-hidden="true"/>, onClick: () => openReceipt(record.id) }, { label: 'Excluir', icon: <Trash2 className="h-4 w-4" aria-hidden="true"/>, tone: 'danger', onClick: () => { setErrorMessage(''); setDeleting(record); } }]}/></td><td className="px-3 py-2 font-sans"><span className="block truncate font-semibold">{record.participante_nome}</span><span className="block truncate text-[10px] text-gray-500">{record.participante_documento ?? '—'}</span></td><td className="px-3 py-2 font-sans">{record.curso?.nome_curso ?? '—'}</td><td className="px-3 py-2">{record.turma?.id_interno_escola ?? '—'}</td><td className="px-3 py-2 font-sans">{record.condicao === 'A_VISTA' ? 'À vista' : 'Parcelado'}</td><td className="px-3 py-2">{settled}/{record.parcelas.length}</td><td className="px-3 py-2 text-right font-bold">{money.format(totalVenda)}</td><td className="px-3 py-2 font-sans">{record.referencia_transacao ?? '—'}{record.cartao_ultimos_digitos && <span className="block text-[10px] text-gray-500">•••• {record.cartao_ultimos_digitos}</span>}</td><td className="px-3 py-2 font-sans">{record.conta?.nome ?? '—'}</td></tr>; })}
         </tbody></table></div>{isFetching && !isLoading && <p role="status" className="px-4 py-2 text-xs text-gray-500">Atualizando...</p>}</div>
       <div className="flex flex-col items-center justify-between gap-3 text-sm text-gray-600 sm:flex-row"><p>Mostrando {total === 0 ? 0 : (page - 1) * pageSize + 1} a {Math.min(page * pageSize, total)} de {total} vendas</p><div className="flex items-center gap-2"><Button type="button" variant="secondary" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>Anterior</Button><span aria-live="polite">Página {page} de {pageCount}</span><Button type="button" variant="secondary" disabled={page >= pageCount} onClick={() => setPage((current) => Math.min(pageCount, current + 1))}>Próxima</Button></div></div>
       <HelpModal isOpen={helpOpen} onClose={() => setHelpOpen(false)} title="Ajuda sobre Vendas" description="Cada venda cria parcelas previstas para acompanhamento e recebimento." items={[{ title: 'Parcelas', description: 'Defina valores e vencimentos; o total da venda é calculado pela soma delas.' }, { title: 'Recebimentos', description: 'Use a tela Recebimentos para efetivar cada parcela paga.' }]}/>
@@ -222,6 +228,16 @@ export default function FinanceiroVendas() {
           <div className="flex justify-end gap-3 pt-2"><Button variant="secondary" type="button" onClick={closeForm} disabled={saving}>Cancelar</Button><Button type="submit" disabled={saving}>{saving ? 'Salvando...' : editing ? 'Atualizar' : 'Salvar'}</Button></div>
         </form></div></Modal>
       <ConfirmDeleteModal isOpen={deleting !== null} onClose={() => !isDeleting && setDeleting(null)} onConfirm={confirmDelete} itemName={deleting?.participante_nome} isPending={isDeleting}/>
+      <DocumentGeneratorModal
+        isOpen={receiptOpen}
+        onClose={() => { setReceiptOpen(false); setReceiptVendaId(''); }}
+        templates={documentTemplates.templates}
+        isLoadingTemplates={documentTemplates.isLoading}
+        isErrorTemplates={documentTemplates.isError}
+        onRetryTemplates={() => void documentTemplates.refetch()}
+        initialEntity="VENDA"
+        initialSubjectId={receiptVendaId}
+      />
     </div>
   );
 }

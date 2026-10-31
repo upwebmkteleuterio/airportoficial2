@@ -40,6 +40,9 @@ const formatDecimal = (value: unknown): string => {
   return Number.isFinite(numeric) ? numeric.toLocaleString('pt-BR') : String(value);
 };
 
+const formatCurrency = (value: number): string =>
+  value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
 const normalizeSearchTerm = (search?: string): string =>
   (search ?? '').replace(/[^0-9A-Za-zÀ-ÿ .@/-]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 100);
 
@@ -269,6 +272,58 @@ export async function buildDocumentData({ entity, subjectId, turmaId }: BuildDoc
     return data;
   }
 
+  if (entity === 'VENDA') {
+    const venda = await fetchBy('vendas', 'id', subjectId);
+    for (const key of [
+      'venda.data_venda', 'venda.condicao', 'venda.parcelas_quantidade', 'venda.valor_total',
+      'venda.valor_recebido', 'venda.valor_a_receber', 'venda.forma_pagamento',
+      'venda.referencia_transacao', 'venda.primeiro_vencimento', 'venda.ultimo_vencimento',
+      'venda.observacoes', 'participante.nome', 'participante.documento', 'participante.tipo',
+      'participante.email',
+    ]) data[key] = '';
+    if (!venda) return data;
+
+    data['venda.data_venda'] = formatDate(venda.created_at);
+    data['venda.condicao'] = venda.condicao === 'A_VISTA' ? 'À vista' : 'Parcelado';
+    data['venda.parcelas_quantidade'] = formatDecimal(venda.parcelas_quantidade);
+    data['venda.forma_pagamento'] = ({
+      PIX: 'Pix', DINHEIRO: 'Dinheiro', BOLETO: 'Boleto', TRANSFERENCIA: 'Transferência',
+      CARTAO: 'Cartão', CHEQUE: 'Cheque', OUTRO: 'Outro',
+    } as Record<string, string>)[text(venda.forma_pagamento)] ?? '';
+    data['venda.referencia_transacao'] = text(venda.referencia_transacao);
+    data['venda.observacoes'] = text(venda.observacoes);
+    data['participante.nome'] = text(venda.participante_nome);
+    data['participante.documento'] = text(venda.participante_documento);
+    data['participante.tipo'] = venda.participante_tipo === 'EMPRESA' ? 'Pessoa jurídica' : 'Pessoa física';
+
+    const installments = await fetchAllBy('lancamentos_financeiros', 'venda_id', subjectId);
+    const sum = (rows: Row[]) => rows.reduce((total, row) => total + (Number(row.valor) || 0), 0);
+    data['venda.valor_total'] = formatCurrency(sum(installments));
+    data['venda.valor_recebido'] = formatCurrency(sum(installments.filter((row) => row.status === 'EFETIVADO')));
+    data['venda.valor_a_receber'] = formatCurrency(sum(installments.filter((row) => row.status === 'PREVISTO')));
+    const dueDates = installments.map((row) => text(row.data_competencia)).filter(Boolean).sort();
+    data['venda.primeiro_vencimento'] = formatDate(dueDates[0]);
+    data['venda.ultimo_vencimento'] = formatDate(dueDates[dueDates.length - 1]);
+
+    if (venda.participante_tipo === 'EMPRESA' && venda.empresa_id) {
+      const empresa = await fetchBy('empresas', 'id', String(venda.empresa_id));
+      data['participante.email'] = text(empresa?.email_corporativo);
+    } else if (venda.pessoa_id) {
+      const pessoa = await fetchBy('pessoas', 'id', String(venda.pessoa_id));
+      const profile = pessoa?.profile_legacy_id
+        ? await fetchBy('profiles', 'legacy_id', String(pessoa.profile_legacy_id))
+        : null;
+      data['participante.email'] = text(profile?.email);
+    }
+
+    if (venda.curso_id) fillCurso(data, await fetchBy('cursos', 'id', String(venda.curso_id)));
+    if (venda.turma_id) {
+      await loadTurmaContext(data, String(venda.turma_id));
+      if (venda.curso_id) fillCurso(data, await fetchBy('cursos', 'id', String(venda.curso_id)));
+    }
+    return data;
+  }
+
   fillEmpresa(data, await fetchBy('empresas', 'id', subjectId));
   return data;
 }
@@ -342,6 +397,17 @@ async function turmasPage(term: string, offset: number, limit: number): Promise<
   return { items, total, offset, limit, hasMore: offset + items.length < total };
 }
 
+export async function getVendaDocumentSubject(subjectId: string): Promise<DocumentSubjectOption | null> {
+  const venda = await fetchBy('vendas', 'id', subjectId);
+  if (!venda) return null;
+  const reference = text(venda.referencia_transacao);
+  const label = `${text(venda.participante_nome)} — ${reference || formatDate(venda.created_at)}`;
+  const result: DocumentSubjectOption = { id: text(venda.id), label };
+  if (reference) result.code = reference;
+  if (venda.participante_documento) result.hint = text(venda.participante_documento);
+  return result;
+}
+
 export async function searchDocumentSubjects(params: {
   entity: DocumentTemplateEntity;
   search?: string;
@@ -353,6 +419,41 @@ export async function searchDocumentSubjects(params: {
   const limit = Math.min(1000, Math.max(1, Math.floor(params.limit ?? 1000)));
   const term = normalizeSearchTerm(params.search);
   if (params.entity === 'TURMA') return turmasPage(term, offset, limit);
+  if (params.entity === 'VENDA') {
+    if (term.length < 3) return emptySubjectPage(offset, limit);
+    try {
+      let query = supabase.from('vendas').select(
+        'id, participante_nome, participante_documento, referencia_transacao, created_at',
+        { count: 'exact' },
+      );
+      if (/^\d+$/.test(term)) {
+        const formattedDocument = term.length === 11 ? formatCpf(term) : term.length === 14 ? formatCnpj(term) : term;
+        query = formattedDocument === term
+          ? query.ilike('participante_documento', `%${term}%`)
+          : query.or(`participante_documento.ilike.%${term}%,participante_documento.ilike.%${formattedDocument}%`);
+      } else {
+        query = query.or(`participante_nome.ilike.%${term}%,referencia_transacao.ilike.%${term}%`);
+      }
+      const { data, error, count } = await query.order('created_at', { ascending: false })
+        .range(offset, offset + limit - 1);
+      if (error) throw error;
+      const rows = (data as Row[] | null) ?? [];
+      const items = rows.map((row) => {
+        const reference = text(row.referencia_transacao);
+        const result: DocumentSubjectOption = {
+          id: text(row.id),
+          label: `${text(row.participante_nome)} — ${reference || formatDate(row.created_at)}`,
+        };
+        if (reference) result.code = reference;
+        if (row.participante_documento) result.hint = text(row.participante_documento);
+        return result;
+      });
+      const total = count ?? 0;
+      return { items, total, offset, limit, hasMore: offset + items.length < total };
+    } catch (error) {
+      throw serviceError('Não foi possível carregar as vendas', error);
+    }
+  }
 
   const turmaApplies = Boolean(params.turmaId) && ['ALUNO', 'INSTRUTOR', 'COORDENADOR'].includes(params.entity);
   const digitsOnly = /^\d+$/.test(term);
@@ -456,7 +557,7 @@ async function allEntityOptions(table: 'turmas' | 'empresas'): Promise<DocumentS
 export async function listBulkTargets(entity: DocumentTemplateEntity, turmaId?: string | null): Promise<DocumentSubjectOption[]> {
   if (entity === 'TURMA') return allEntityOptions('turmas');
   if (entity === 'EMPRESA') return allEntityOptions('empresas');
-  if (!turmaId) return [];
+  if (entity === 'VENDA' || !turmaId) return [];
 
   if (entity === 'ALUNO') {
     const matriculas = await fetchAllBy('matriculas', 'turma_id', turmaId);

@@ -1,11 +1,13 @@
 import { useEffect, useId, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import { Download, Eye, Loader2, X } from 'lucide-react';
 import type { DocumentTemplate, DocumentTemplateEntity } from '../../types/documentTemplates';
 import { getEntityLabel, resolveShortcodes } from '../../utils/documentShortcodes';
 import { normalizePageConfig } from '../../utils/documentPage';
 import {
   buildDocumentData,
+  getVendaDocumentSubject,
   listBulkTargets,
   type DocumentSubjectOption,
 } from '../../services/documentDataService';
@@ -22,6 +24,8 @@ interface DocumentGeneratorModalProps {
   isErrorTemplates: boolean;
   onRetryTemplates: () => void;
   initialTemplateId?: string | null;
+  initialEntity?: DocumentTemplateEntity;
+  initialSubjectId?: string;
 }
 
 type Mode = 'single' | 'bulk';
@@ -42,12 +46,14 @@ const modeButtonClass = (active: boolean) =>
 function subjectSearchPlaceholder(entity: DocumentTemplateEntity) {
   if (entity === 'TURMA') return 'Digite o ID interno da turma...';
   if (entity === 'EMPRESA') return 'Buscar por nome fantasia ou CNPJ...';
+  if (entity === 'VENDA') return 'Buscar por nome, CPF/CNPJ ou referência...';
   return 'Buscar por nome ou CPF...';
 }
 
 function subjectSearchHint(entity: DocumentTemplateEntity, needsTurma: boolean) {
   if (entity === 'TURMA') return 'Digite ao menos 2 caracteres do ID interno da turma para buscar.';
   if (entity === 'EMPRESA') return 'Digite ao menos 3 caracteres (nome fantasia ou CNPJ) para buscar.';
+  if (entity === 'VENDA') return 'Digite ao menos 3 caracteres (nome, CPF/CNPJ ou referência) para buscar.';
   return needsTurma
     ? 'Digite ao menos 3 caracteres (nome ou CPF) ou selecione uma turma acima para listar os registros.'
     : 'Digite ao menos 3 caracteres (nome ou CPF) para buscar.';
@@ -65,6 +71,8 @@ export function DocumentGeneratorModal({
   isErrorTemplates,
   onRetryTemplates,
   initialTemplateId,
+  initialEntity,
+  initialSubjectId,
 }: DocumentGeneratorModalProps) {
   const titleId = useId();
   const [templateId, setTemplateId] = useState('');
@@ -80,7 +88,10 @@ export function DocumentGeneratorModal({
 
   useEffect(() => {
     if (!isOpen) return;
-    setTemplateId(initialTemplateId ?? '');
+    const entityTemplate = initialEntity
+      ? templates.find((item) => item.entidade_principal === initialEntity)
+      : undefined;
+    setTemplateId(initialTemplateId ?? entityTemplate?.id ?? '');
     setMode('single');
     setSubjects([]);
     setContextTurma(null);
@@ -90,11 +101,27 @@ export function DocumentGeneratorModal({
     setError('');
     setFailedLabels([]);
     setPreview(null);
-  }, [isOpen, initialTemplateId]);
+  }, [isOpen, initialTemplateId, initialEntity]);
 
   const template = templates.find((item) => item.id === templateId) ?? null;
   const entity: DocumentTemplateEntity | null = template?.entidade_principal ?? null;
   const needsTurma = entity === 'ALUNO' || entity === 'INSTRUTOR' || entity === 'COORDENADOR';
+
+  useEffect(() => {
+    if (!isOpen || !initialEntity || initialTemplateId || templateId || isLoadingTemplates) return;
+    const entityTemplate = templates.find((item) => item.entidade_principal === initialEntity);
+    if (entityTemplate) setTemplateId(entityTemplate.id);
+  }, [isOpen, initialEntity, initialTemplateId, templateId, isLoadingTemplates, templates]);
+
+  const initialSaleSubjectQuery = useQuery({
+    queryKey: ['document-sale-subject', initialSubjectId],
+    queryFn: () => getVendaDocumentSubject(initialSubjectId as string),
+    enabled: isOpen && initialEntity === 'VENDA' && entity === 'VENDA' && Boolean(initialSubjectId),
+  });
+
+  useEffect(() => {
+    if (initialSaleSubjectQuery.data) setSubjects([initialSaleSubjectQuery.data]);
+  }, [initialSaleSubjectQuery.data]);
 
   const bulkTargetsQuery = useQuery({
     queryKey: ['document-bulk-targets', entity, needsTurma ? bulkTurma?.id ?? null : null],
@@ -116,6 +143,7 @@ export function DocumentGeneratorModal({
 
   const handleTemplateChange = (value: string) => {
     setTemplateId(value);
+    if (templates.find((item) => item.id === value)?.entidade_principal === 'VENDA') setMode('single');
     setSubjects([]);
     setContextTurma(null);
     setBulkTurma(null);
@@ -267,6 +295,13 @@ export function DocumentGeneratorModal({
               </div>
             )}
 
+            {initialEntity && !isLoadingTemplates && !isErrorTemplates && !templates.some((item) => item.entidade_principal === initialEntity) && (
+              <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+                Ainda não há modelo de recibo para venda. Crie um modelo em{' '}
+                <Link to="/documentos" className="font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500">Documentos</Link>.
+              </p>
+            )}
+
             {entity && (
               <p className="text-sm text-slate-600 dark:text-slate-400">
                 Tipo de registro:{' '}
@@ -286,15 +321,17 @@ export function DocumentGeneratorModal({
                   >
                     Registro específico
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => { setMode('bulk'); setError(''); setFailedLabels([]); }}
-                    aria-pressed={mode === 'bulk'}
-                    disabled={isGenerating}
-                    className={modeButtonClass(mode === 'bulk')}
-                  >
-                    Por turma
-                  </button>
+                  {entity !== 'VENDA' && (
+                    <button
+                      type="button"
+                      onClick={() => { setMode('bulk'); setError(''); setFailedLabels([]); }}
+                      aria-pressed={mode === 'bulk'}
+                      disabled={isGenerating}
+                      className={modeButtonClass(mode === 'bulk')}
+                    >
+                      Por turma
+                    </button>
+                  )}
                 </div>
 
                 {mode === 'single' ? (
@@ -312,7 +349,7 @@ export function DocumentGeneratorModal({
                       turmaId={needsTurma ? contextTurma?.id ?? null : null}
                       selected={subjects}
                       onChange={setSubjects}
-                      multiple
+                      multiple={entity !== 'VENDA'}
                       disabled={isGenerating}
                       label={`Buscar ${getEntityLabel(entity).toLowerCase()}`}
                       placeholder={subjectSearchPlaceholder(entity)}
@@ -323,6 +360,15 @@ export function DocumentGeneratorModal({
                       <p className="text-sm text-slate-600 dark:text-slate-400">
                         {subjects.length} registro(s) selecionado(s).
                       </p>
+                    )}
+                    {initialEntity === 'VENDA' && entity === 'VENDA' && initialSubjectId && initialSaleSubjectQuery.isLoading && (
+                      <p role="status" className="text-sm text-slate-500 dark:text-slate-400">Carregando a venda selecionada...</p>
+                    )}
+                    {initialEntity === 'VENDA' && entity === 'VENDA' && initialSubjectId && initialSaleSubjectQuery.isError && (
+                      <p role="alert" className="text-sm text-red-700 dark:text-red-300">Não foi possível carregar a venda selecionada. Busque-a pelo nome, documento ou referência.</p>
+                    )}
+                    {initialEntity === 'VENDA' && entity === 'VENDA' && initialSubjectId && !initialSaleSubjectQuery.isLoading && !initialSaleSubjectQuery.isError && !initialSaleSubjectQuery.data && (
+                      <p role="alert" className="text-sm text-red-700 dark:text-red-300">A venda selecionada não está disponível. Busque outra venda para continuar.</p>
                     )}
                   </div>
                 ) : (
