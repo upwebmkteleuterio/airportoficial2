@@ -147,6 +147,40 @@ export async function createDisposableEmpresa(marker: string): Promise<{ id: str
   return { id, nome };
 }
 
+/** Cria um curso descartável com os valores de pessoa física e jurídica. */
+export async function createDisposableCurso(
+  marker: string,
+  valores: { pessoaFisica: number; pessoaJuridica: number },
+): Promise<{ id: string; nome: string }> {
+  const client = admin();
+  const id = `curso-${marker}`;
+  const nome = `Curso ${marker}`;
+  const { error } = await client.from('cursos').insert({
+    id,
+    nome_curso: nome,
+    carga_horaria_total: 40,
+    valor_pessoa_fisica: valores.pessoaFisica,
+    valor_pessoa_juridica: valores.pessoaJuridica,
+  });
+  if (error) throw new Error(`Não foi possível criar o curso de teste: ${error.message}`);
+  return { id, nome };
+}
+
+/** Cria um aluno descartável (pessoa física) localizável pela busca por CPF. */
+export async function createDisposableAluno(marker: string): Promise<{ id: string; nome: string; cpf: string }> {
+  const client = admin();
+  const id = `aluno-${marker}`;
+  const nome = `Aluno ${marker}`;
+  // O CPF fica gravado só com dígitos, como faz o cadastro do app: a busca por
+  // CPF usa ilike sobre o valor armazenado e não encontraria um CPF pontuado.
+  const cpf = String(Date.now()).slice(-11).padStart(11, '0');
+  const { error } = await client
+    .from('pessoas')
+    .insert({ id, nome, cpf, ativo: true, visivel_diretorio: true });
+  if (error) throw new Error(`Não foi possível criar o aluno de teste: ${error.message}`);
+  return { id, nome, cpf };
+}
+
 /**
  * Rede de segurança: remove os registros financeiros descartáveis do caso,
  * respeitando a ordem das chaves estrangeiras. Excluir os lançamentos também
@@ -181,7 +215,9 @@ export async function removeDisposableFinanceiro(marker: string): Promise<void> 
     { tabela: 'bancos', coluna: 'nome' },
     { tabela: 'categorias_financeiras', coluna: 'nome' },
     { tabela: 'fornecedores', coluna: 'nome' },
+    { tabela: 'cursos', coluna: 'nome_curso' },
     { tabela: 'empresas', coluna: 'nome_fantasia' },
+    { tabela: 'pessoas', coluna: 'nome' },
   ];
 
   const falhas: string[] = [];

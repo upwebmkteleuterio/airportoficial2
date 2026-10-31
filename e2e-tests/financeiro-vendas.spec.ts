@@ -1,7 +1,9 @@
 import { test, expect, type Page } from '@playwright/test';
 import {
+  createDisposableAluno,
   createDisposableCategoria,
   createDisposableConta,
+  createDisposableCurso,
   createDisposableEmpresa,
   createTestUser,
   createVendaDocumentTemplate,
@@ -168,4 +170,87 @@ test('gestor abre o recibo com a venda já selecionada', async ({ page }) => {
   await expect(dialog.getByLabel('Selecione o modelo de documento')).toHaveValue(/.+/);
   await expect(dialog.getByText(empresa.nome, { exact: false })).toBeVisible();
   await expect(dialog.getByText(referencia, { exact: false })).toBeVisible();
+});
+
+test('gestor registra uma venda para aluno com o valor de pessoa física do curso', async ({ page }) => {
+  test.setTimeout(120000);
+  const T = 20000;
+  const conta = await createDisposableConta(user.marker);
+  const categoria = await createDisposableCategoria(user.marker, 'ENTRADA');
+  const curso = await createDisposableCurso(user.marker, { pessoaFisica: 1200, pessoaJuridica: 1500 });
+  const aluno = await createDisposableAluno(user.marker);
+
+  await signInAs(page, user);
+  await page.goto('/financeiro/vendas', { timeout: T });
+  await page.getByTestId('nova-venda-button').click({ timeout: T });
+  const dialog = page.getByRole('dialog');
+
+  // A entidade vem primeiro: o aluno (pessoa física) é escolhido pela busca por CPF.
+  await dialog.locator('#venda-participante-tipo').selectOption('ALUNO', { timeout: T });
+  await dialog.locator('#venda-aluno-cpf').fill(aluno.cpf.replace(/\D/g, ''), { timeout: T });
+  await dialog.getByRole('button', { name: aluno.nome }).click({ timeout: T });
+  await expect(dialog.getByText(`Selecionado: ${aluno.nome}`)).toBeVisible({ timeout: T });
+
+  // Escolhido o curso, o valor de pessoa física é puxado automaticamente.
+  await dialog.locator('#venda-curso').selectOption({ label: curso.nome }, { timeout: T });
+  await expect(dialog.locator('#venda-valor')).toHaveValue(/1200/, { timeout: T });
+
+  await dialog.locator('#venda-categoria').selectOption({ label: categoria }, { timeout: T });
+  await dialog.locator('#venda-conta').selectOption({ label: conta.nome }, { timeout: T });
+  await dialog.getByRole('button', { name: 'Salvar' }).click({ timeout: T });
+
+  const linha = page.getByRole('row').filter({ hasText: aluno.nome });
+  await expect(linha).toBeVisible({ timeout: T });
+  await expect(linha).toContainText(/R\$\s*1\.200,00/, { timeout: T });
+});
+
+test('gestor registra uma venda parcelada e cada mês recebe a sua parcela', async ({ page }) => {
+  test.setTimeout(120000);
+  const T = 20000;
+  const conta = await createDisposableConta(user.marker);
+  const categoria = await createDisposableCategoria(user.marker, 'ENTRADA');
+  const empresa = await createDisposableEmpresa(user.marker);
+  const referencia = `REF-${user.marker}`;
+
+  // O primeiro vencimento é hoje, então a primeira parcela cai no mês corrente
+  // e a segunda no mês seguinte, independentemente do dia em que o teste roda.
+  const hoje = new Date();
+  const mesAtual = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
+  const seguinte = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 1);
+  const mesSeguinte = `${seguinte.getFullYear()}-${String(seguinte.getMonth() + 1).padStart(2, '0')}`;
+  const primeiroVencimento = `${mesAtual}-${String(hoje.getDate()).padStart(2, '0')}`;
+
+  await signInAs(page, user);
+  await page.goto('/financeiro/vendas', { timeout: T });
+  await page.getByTestId('nova-venda-button').click({ timeout: T });
+  const dialog = page.getByRole('dialog');
+  await dialog.locator('#venda-participante-tipo').selectOption('EMPRESA', { timeout: T });
+  await dialog.locator('#venda-empresa').selectOption(empresa.id, { timeout: T });
+  await dialog.locator('#venda-curso').selectOption({ index: 1 }, { timeout: T });
+  await dialog.locator('#venda-valor').fill('900', { timeout: T });
+  await dialog.locator('#venda-condicao').selectOption('PARCELADO', { timeout: T });
+  await dialog.locator('#venda-parcelas-quantidade').fill('3', { timeout: T });
+  await dialog.locator('#venda-primeiro-vencimento').fill(primeiroVencimento, { timeout: T });
+  // Valores diferentes por parcela provam que cada mês recebe a parcela certa.
+  await dialog.getByTestId('venda-parcela-valor-0').fill('400', { timeout: T });
+  await dialog.getByTestId('venda-parcela-valor-1').fill('300', { timeout: T });
+  await dialog.getByTestId('venda-parcela-valor-2').fill('200', { timeout: T });
+  await dialog.locator('#venda-categoria').selectOption({ label: categoria }, { timeout: T });
+  await dialog.locator('#venda-conta').selectOption({ label: conta.nome }, { timeout: T });
+  await dialog.locator('#venda-referencia').fill(referencia, { timeout: T });
+  await dialog.getByRole('button', { name: 'Salvar' }).click({ timeout: T });
+
+  const linhaVenda = page.getByRole('row').filter({ hasText: empresa.nome });
+  await expect(linhaVenda).toContainText(/R\$\s*900,00/, { timeout: T });
+
+  await page.goto('/financeiro/recebimentos', { timeout: T });
+  await page.locator('#recebimento-mes').fill(mesAtual, { timeout: T });
+  await expect(page.getByRole('row').filter({ hasText: empresa.nome })).toContainText(/R\$\s*400,00/, {
+    timeout: T,
+  });
+
+  await page.locator('#recebimento-mes').fill(mesSeguinte, { timeout: T });
+  await expect(page.getByRole('row').filter({ hasText: empresa.nome })).toContainText(/R\$\s*300,00/, {
+    timeout: T,
+  });
 });

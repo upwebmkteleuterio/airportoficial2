@@ -1,0 +1,1 @@
+ALTER TABLE public.document_templates ADD CONSTRAINT document_templates_entidade_check CHECK (entidade_principal IN ('ALUNO', 'INSTRUTOR', 'COORDENADOR', 'TURMA', 'EMPRESA', 'VENDA'))

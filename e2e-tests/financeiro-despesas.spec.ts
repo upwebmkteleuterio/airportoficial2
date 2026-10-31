@@ -62,3 +62,50 @@ test('gestor cria, edita e exclui uma programação mensal de despesa', async ({
   await dialog.getByRole('button', { name: 'Confirmar exclusão' }).click();
   await expect(linha).toHaveCount(0);
 });
+
+test('gestor cadastra despesas avulsa e com repetição finita', async ({ page }) => {
+  test.setTimeout(90000);
+  const conta = await createDisposableConta(user.marker);
+  const categoria = await createDisposableCategoria(user.marker, 'SAIDA');
+  const avulsa = `Despesa avulsa ${user.marker}`;
+  const finita = `Despesa finita ${user.marker}`;
+
+  await signInAs(page, user);
+  await page.goto('/financeiro/despesas');
+  await expect(page.getByRole('heading', { name: 'Despesas' })).toBeVisible();
+
+  // Avulsa: o campo de repetições não existe nessa frequência.
+  await page.getByTestId('nova-despesa-button').click();
+  let dialog = page.getByRole('dialog');
+  await dialog.locator('#despesa-descricao').fill(avulsa);
+  await dialog.locator('#despesa-frequencia').selectOption('AVULSA');
+  await expect(dialog.locator('#despesa-repeticoes')).toHaveCount(0);
+  await dialog.locator('#despesa-dia-vencimento').fill('10');
+  await dialog.locator('#despesa-valor').fill('120');
+  await dialog.locator('#despesa-categoria').selectOption({ label: categoria });
+  await dialog.locator('#despesa-conta').selectOption({ label: conta.nome });
+  await dialog.getByRole('button', { name: 'Salvar' }).click();
+
+  const linhaAvulsa = page.getByRole('row').filter({ hasText: avulsa });
+  await expect(linhaAvulsa).toBeVisible();
+  await expect(linhaAvulsa).toContainText('Avulsa');
+  await expect(linhaAvulsa).toContainText(/R\$\s*120,00/);
+
+  // Repetição finita: o número de repetições passa a ser exigido.
+  await page.getByTestId('nova-despesa-button').click();
+  dialog = page.getByRole('dialog');
+  await dialog.locator('#despesa-descricao').fill(finita);
+  await dialog.locator('#despesa-frequencia').selectOption('REPETICAO_FINITA');
+  await expect(dialog.locator('#despesa-repeticoes')).toBeVisible();
+  await dialog.locator('#despesa-repeticoes').fill('3');
+  await dialog.locator('#despesa-dia-vencimento').fill('20');
+  await dialog.locator('#despesa-valor').fill('80');
+  await dialog.locator('#despesa-categoria').selectOption({ label: categoria });
+  await dialog.locator('#despesa-conta').selectOption({ label: conta.nome });
+  await dialog.getByRole('button', { name: 'Salvar' }).click();
+
+  const linhaFinita = page.getByRole('row').filter({ hasText: finita });
+  await expect(linhaFinita).toBeVisible();
+  await expect(linhaFinita).toContainText('Repetição finita');
+  await expect(linhaFinita).toContainText(/R\$\s*80,00/);
+});
