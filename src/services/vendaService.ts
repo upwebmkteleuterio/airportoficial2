@@ -63,35 +63,35 @@ export const vendaService = {
     if (error) throw serviceError('Não foi possível excluir a venda', error);
   },
 
-  getParcelasPrevistas: async (filtros: { mes: string; search?: string; bancoId?: string }): Promise<ParcelaRecebimento[]> => {
+  getParcelasPrevistas: async (filtros: { mes: string; search?: string; bancoId?: string; page: number; pageSize: number }): Promise<{ data: ParcelaRecebimento[]; total: number }> => {
     const { start, end } = monthRange(filtros.mes);
+    const page = Math.max(1, Math.floor(filtros.page));
+    const pageSize = Math.min(1000, Math.max(1, Math.floor(filtros.pageSize)));
     let query = supabase.from('lancamentos_financeiros')
-      .select('*, venda:vendas(*)')
+      .select('*, venda:vendas(*)', { count: 'exact' })
       .eq('tipo', 'ENTRADA').eq('status', 'PREVISTO')
       .gte('data_competencia', start).lt('data_competencia', end)
-      .order('data_competencia', { ascending: true });
+      .order('data_competencia', { ascending: true })
+      .range((page - 1) * pageSize, page * pageSize - 1);
     if (filtros.bancoId) query = query.eq('banco_id', filtros.bancoId);
     const search = filtros.search ? sanitizeSearch(filtros.search) : '';
     if (search) query = query.or(`descricao.ilike.%${search}%,participante_nome.ilike.%${search}%,participante_documento.ilike.%${search}%,numero_documento.ilike.%${search}%`);
-    const { data, error } = await query;
+    const { data, count, error } = await query;
     if (error) throw serviceError('Não foi possível carregar os recebimentos previstos', error);
-    return ((data ?? []) as ParcelaRecebimento[]).map((row) => ({ ...row, valor: Number(row.valor) }));
+    return { data: ((data ?? []) as ParcelaRecebimento[]).map((row) => ({ ...row, valor: Number(row.valor) })), total: count ?? 0 };
   },
 
   getTotaisPrevistos: async (mes: string, bancoId?: string): Promise<{ totalPrevisto: number; totalRecebido: number; totalAReceber: number }> => {
     const { start, end } = monthRange(mes);
-    let query = supabase.from('lancamentos_financeiros').select('valor,status')
-      .eq('tipo', 'ENTRADA').gte('data_competencia', start).lt('data_competencia', end);
-    if (bancoId) query = query.eq('banco_id', bancoId);
-    const { data, error } = await query;
+    const { data, error } = await supabase.rpc('get_financeiro_month_totals', {
+      p_tipo: 'ENTRADA', p_start: start, p_end: end, p_banco_id: bancoId ?? null,
+    });
     if (error) throw serviceError('Não foi possível carregar os totais de recebimentos', error);
-    const totals = (data ?? []).reduce((sum, row) => {
-      const value = Number(row.valor);
-      if (row.status === 'PREVISTO') sum.totalAReceber += value;
-      if (row.status === 'EFETIVADO') sum.totalRecebido += value;
-      sum.totalPrevisto += value;
-      return sum;
-    }, { totalPrevisto: 0, totalRecebido: 0, totalAReceber: 0 });
-    return totals;
+    const totals = Array.isArray(data) ? data[0] : data;
+    return {
+      totalPrevisto: Number(totals?.total_previsto ?? 0),
+      totalRecebido: Number(totals?.total_efetivado ?? 0),
+      totalAReceber: Number(totals?.total_previsto_pendente ?? 0),
+    };
   },
 };

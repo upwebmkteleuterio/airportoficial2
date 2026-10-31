@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import {
   createDisposableCategoria,
   createDisposableConta,
+  fillMoneyInput,
   createTestUser,
   deleteTestUser,
   removeDisposableFinanceiro,
@@ -31,6 +32,7 @@ test('gestor cria, edita e exclui um lançamento e o saldo da conta acompanha', 
 
   await signInAs(page, user);
   await page.goto('/financeiro/lancamentos');
+  await expect(page.getByText(/Exibindo/)).toBeVisible();
 
   const saldos = page.getByTestId('saldos-por-conta');
   const chipConta = saldos.getByRole('button').filter({ hasText: conta.nome });
@@ -42,7 +44,7 @@ test('gestor cria, edita e exclui um lançamento e o saldo da conta acompanha', 
   // Criar entrada de R$ 250,00
   await page.getByTestId('novo-lancamento-button').click();
   const dialog = page.getByRole('dialog');
-  await dialog.locator('#form-valor').fill('250');
+  await fillMoneyInput(dialog.locator('#form-valor'), '250');
   await dialog.locator('#form-conta').selectOption({ label: conta.nome });
   await dialog.locator('#form-categoria').selectOption({ label: categoria });
   await dialog.locator('#form-descricao').fill(descricao);
@@ -54,7 +56,7 @@ test('gestor cria, edita e exclui um lançamento e o saldo da conta acompanha', 
   // Editar o valor para R$ 300,00
   await page.getByRole('button', { name: `Ações para ${descricao}` }).click();
   await page.getByRole('menuitem', { name: 'Editar' }).click();
-  await page.getByRole('dialog').locator('#form-valor').fill('300');
+  await fillMoneyInput(page.getByRole('dialog').locator('#form-valor'), '300');
   await page.getByRole('dialog').locator('#form-descricao').fill(descricaoEditada);
   await page.getByRole('dialog').getByRole('button', { name: 'Atualizar' }).click();
 

@@ -1,9 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { lancamentoService } from '../services/lancamentoService';
-import { programacaoSaidaService, type DespesasPrevistasFiltros, type ProgramacaoInput } from '../services/programacaoSaidaService';
+import { programacaoSaidaService, type DespesasPrevistasFiltros, type ProgramacaoInput, type ProgramacoesSaidaFiltros } from '../services/programacaoSaidaService';
 import type { ProgramacaoSaida } from '../types/financeiro';
 
-export function useProgramacoesSaida() {
+export function useProgramacoesSaida(filtros: ProgramacoesSaidaFiltros) {
   const queryClient = useQueryClient();
   const invalidateFinanceiro = () => Promise.all([
     queryClient.invalidateQueries({ queryKey: ['programacoes-saida'] }),
@@ -14,7 +14,11 @@ export function useProgramacoesSaida() {
     queryClient.invalidateQueries({ queryKey: ['resumo-financeiro-mensal'] }),
   ]);
 
-  const schedulesQuery = useQuery({ queryKey: ['programacoes-saida'], queryFn: programacaoSaidaService.getAll });
+  const schedulesQuery = useQuery({
+    queryKey: ['programacoes-saida', filtros],
+    queryFn: () => programacaoSaidaService.getPage(filtros),
+    placeholderData: keepPreviousData,
+  });
   const createMutation = useMutation({ mutationFn: (input: ProgramacaoInput) => programacaoSaidaService.create(input), onSuccess: invalidateFinanceiro });
   const updateMutation = useMutation({ mutationFn: ({ id, updates }: { id: string; updates: Partial<ProgramacaoSaida> }) => programacaoSaidaService.update(id, updates), onSuccess: invalidateFinanceiro });
   const deleteMutation = useMutation({ mutationFn: programacaoSaidaService.delete, onSuccess: invalidateFinanceiro });
@@ -22,7 +26,8 @@ export function useProgramacoesSaida() {
   const settleMutation = useMutation({ mutationFn: ({ id, updates }: { id: string; updates: Parameters<typeof lancamentoService.update>[1] }) => lancamentoService.update(id, updates), onSuccess: invalidateFinanceiro });
 
   return {
-    programacoes: schedulesQuery.data ?? [],
+    programacoes: schedulesQuery.data?.data ?? [],
+    totalProgramacoes: schedulesQuery.data?.total ?? 0,
     isLoading: schedulesQuery.isLoading,
     isFetching: schedulesQuery.isFetching,
     isError: schedulesQuery.isError,
@@ -44,8 +49,9 @@ export function useDespesasPrevistas(filtros: DespesasPrevistasFiltros) {
     queryKey: ['despesas-previstas', filtros],
     queryFn: () => programacaoSaidaService.getParcelasPrevistas(filtros),
     enabled: Boolean(filtros.mes),
+    placeholderData: keepPreviousData,
   });
-  return { parcelas: query.data ?? [], isLoading: query.isLoading, isFetching: query.isFetching, isError: query.isError };
+  return { parcelas: query.data?.data ?? [], total: query.data?.total ?? 0, isLoading: query.isLoading, isFetching: query.isFetching, isError: query.isError };
 }
 
 export function useTotaisContasAPagar(filtros: { mes: string; bancoId?: string }) {

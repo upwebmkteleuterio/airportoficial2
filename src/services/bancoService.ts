@@ -1,5 +1,6 @@
 import { supabase } from '../integrations/supabase/client';
 import type { Banco, SaldoConta, TipoBanco } from '../types/financeiro';
+import { FINANCEIRO_OPTIONS_LIMIT, type FinanceiroOptionsResult } from './financeiroOptions';
 import { newServiceId, serviceError } from './supabaseErrors';
 
 function toSaldoConta(row: SaldoConta): SaldoConta {
@@ -32,10 +33,23 @@ function erroExclusao(error: unknown): never {
 }
 
 export const bancoService = {
-  getAll: async (): Promise<Banco[]> => {
-    const { data, error } = await supabase.from('bancos').select('*').order('nome', { ascending: true });
+  getOptions: async (): Promise<FinanceiroOptionsResult<Banco>> => {
+    const { data, count, error } = await supabase.from('bancos').select('*', { count: 'exact' })
+      .order('nome', { ascending: true }).range(0, FINANCEIRO_OPTIONS_LIMIT - 1);
     if (error) throw serviceError('Não foi possível carregar os bancos', error);
-    return (data ?? []) as Banco[];
+    return { data: (data ?? []) as Banco[], total: count ?? 0 };
+  },
+
+  getAll: async (): Promise<Banco[]> => (await bancoService.getOptions()).data,
+
+  getPage: async ({ page, pageSize }: { page: number; pageSize: number }): Promise<{ data: Banco[]; total: number }> => {
+    const safePage = Math.max(1, Math.floor(page));
+    const safePageSize = Math.max(1, Math.min(FINANCEIRO_OPTIONS_LIMIT, Math.floor(pageSize)));
+    const { data, count, error } = await supabase.from('bancos').select('*', { count: 'exact' })
+      .order('nome', { ascending: true })
+      .range((safePage - 1) * safePageSize, safePage * safePageSize - 1);
+    if (error) throw serviceError('Não foi possível carregar os bancos', error);
+    return { data: (data ?? []) as Banco[], total: count ?? 0 };
   },
 
   uploadLogo: async (file: File): Promise<string> => {
@@ -57,7 +71,15 @@ export const bancoService = {
   },
 
   getSaldos: async (): Promise<SaldoConta[]> => {
-    const { data, error } = await supabase.from('saldos_contas').select('*');
+    const { data, error } = await supabase.from('saldos_contas').select('*').range(0, FINANCEIRO_OPTIONS_LIMIT - 1);
+    if (error) throw serviceError('Não foi possível carregar os saldos das contas', error);
+    return ((data ?? []) as SaldoConta[]).map(toSaldoConta);
+  },
+
+  getSaldosByIds: async (bancoIds: string[]): Promise<SaldoConta[]> => {
+    if (bancoIds.length === 0) return [];
+    const { data, error } = await supabase.from('saldos_contas').select('*').in('banco_id', bancoIds)
+      .range(0, bancoIds.length - 1);
     if (error) throw serviceError('Não foi possível carregar os saldos das contas', error);
     return ((data ?? []) as SaldoConta[]).map(toSaldoConta);
   },

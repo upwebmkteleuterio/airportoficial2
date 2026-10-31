@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Button } from '../ui/Button';
+import { MoneyInput } from '../ui/MoneyInput';
 import { Modal } from '../ui/Modal';
 
 const inputClass = 'w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white';
@@ -55,7 +56,7 @@ export function EfetivarPrevistoModal({ isOpen, onClose, onConfirm, isPending, d
         <div className="border-b border-gray-200 p-4 dark:border-slate-800"><h2 id="efetivar-previsto-title" className="text-lg font-bold text-slate-800 dark:text-white">Efetivar recebimento</h2><p className="mt-1 text-sm text-gray-500">{descricao}</p></div>
         <form onSubmit={(event) => void submit(event)} className="space-y-4 p-6">
           <div><label htmlFor="efetivar-data" className={labelClass}>Data de recebimento</label><input id="efetivar-data" className={inputClass} type="date" required value={data} onChange={(event) => setData(event.target.value)}/></div>
-          <div><label htmlFor="efetivar-valor" className={labelClass}>Valor recebido</label><input id="efetivar-valor" className={inputClass} type="number" min="0.01" step="0.01" required value={valor} onChange={(event) => setValor(event.target.value)}/></div>
+          <div><label htmlFor="efetivar-valor" className={labelClass}>Valor recebido</label><MoneyInput id="efetivar-valor" className={inputClass} required value={valor} onChange={setValor}/></div>
           {error && <p role="alert" className="text-sm text-rose-600">{error}</p>}
           <div className="flex justify-end gap-3"><Button type="button" variant="secondary" onClick={onClose} disabled={isPending}>Cancelar</Button><Button type="submit" disabled={isPending}>{isPending ? 'Confirmando...' : confirmLabel}</Button></div>
         </form>

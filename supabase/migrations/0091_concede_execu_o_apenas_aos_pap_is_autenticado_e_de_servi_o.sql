@@ -1,0 +1,1 @@
+GRANT EXECUTE ON FUNCTION public.get_financeiro_month_totals(text, date, date, text) TO authenticated, service_role

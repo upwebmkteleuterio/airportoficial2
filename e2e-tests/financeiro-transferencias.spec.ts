@@ -3,6 +3,7 @@ import {
   createDisposableConta,
   createTestUser,
   deleteTestUser,
+  fillMoneyInput,
   removeDisposableFinanceiro,
   signInAs,
   type TestUser,
@@ -45,6 +46,7 @@ test('gestor cria, edita e exclui uma transferência entre contas', async ({ pag
       { timeout: T, message: 'A tela de contas não renderizou' },
     )
     .toContain('Bancos e Contas');
+  await expect(page.getByText(/Exibindo/).nth(1)).toBeVisible({ timeout: T });
 
   // A linha da transferência traz as duas contas na mesma linha, o que a
   // distingue das linhas da tabela de contas.
@@ -59,7 +61,7 @@ test('gestor cria, edita e exclui uma transferência entre contas', async ({ pag
     const dialog = page.getByRole('dialog');
     await dialog.getByTestId('transfer-origem').selectOption(origem.id, { timeout: T });
     await dialog.getByTestId('transfer-destino').selectOption(destino.id, { timeout: T });
-    await dialog.getByTestId('transfer-valor').fill('125.50', { timeout: T });
+    await fillMoneyInput(dialog.getByTestId('transfer-valor'), '125,50');
     await dialog.getByTestId('transfer-observacoes').fill(observacoes, { timeout: T });
     // Marcado antes do envio: se o clique for interrompido, a limpeza abaixo
     // ainda tenta remover a transferência que possa ter sido gravada.
@@ -72,7 +74,7 @@ test('gestor cria, edita e exclui uma transferência entre contas', async ({ pag
     // Editar
     await linha.getByRole('button', { name: 'Editar' }).click({ timeout: T });
     const dialogEdicao = page.getByRole('dialog');
-    await dialogEdicao.getByTestId('transfer-valor').fill('175.75', { timeout: T });
+    await fillMoneyInput(dialogEdicao.getByTestId('transfer-valor'), '175,75');
     await dialogEdicao.getByTestId('transfer-observacoes').fill(observacoesEditadas, { timeout: T });
     await dialogEdicao.getByRole('button', { name: 'Atualizar', exact: true }).click({ timeout: T });
 

@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import {
   createDisposableCategoria,
   createDisposableConta,
+  fillMoneyInput,
   createTestUser,
   deleteTestUser,
   removeDisposableFinanceiro,
@@ -32,13 +33,14 @@ test('gestor cria, edita e exclui uma programação mensal de despesa', async ({
   await signInAs(page, user);
   await page.goto('/financeiro/despesas');
   await expect(page.getByRole('heading', { name: 'Despesas' })).toBeVisible();
+  await expect(page.getByText(/Exibindo/)).toBeVisible();
 
   await page.getByTestId('nova-despesa-button').click();
   let dialog = page.getByRole('dialog');
   await dialog.locator('#despesa-descricao').fill(descricao);
   await dialog.locator('#despesa-frequencia').selectOption('MENSAL_CONTINUA');
   await dialog.locator('#despesa-dia-vencimento').fill('1');
-  await dialog.locator('#despesa-valor').fill('500');
+  await fillMoneyInput(dialog.locator('#despesa-valor'), '500');
   await dialog.locator('#despesa-categoria').selectOption({ label: categoria });
   await dialog.locator('#despesa-conta').selectOption({ label: conta.nome });
   await dialog.getByRole('button', { name: 'Salvar' }).click();
@@ -51,7 +53,7 @@ test('gestor cria, edita e exclui uma programação mensal de despesa', async ({
   await linha.getByRole('button', { name: `Ações para ${descricao}` }).click();
   await page.getByRole('menuitem', { name: 'Editar' }).click();
   dialog = page.getByRole('dialog');
-  await dialog.locator('#despesa-valor').fill('750');
+  await fillMoneyInput(dialog.locator('#despesa-valor'), '750');
   await dialog.getByRole('button', { name: 'Atualizar' }).click();
   await expect(linha).toContainText(/R\$\s*750,00/);
 
@@ -81,7 +83,7 @@ test('gestor cadastra despesas avulsa e com repetição finita', async ({ page }
   await dialog.locator('#despesa-frequencia').selectOption('AVULSA');
   await expect(dialog.locator('#despesa-repeticoes')).toHaveCount(0);
   await dialog.locator('#despesa-dia-vencimento').fill('10');
-  await dialog.locator('#despesa-valor').fill('120');
+  await fillMoneyInput(dialog.locator('#despesa-valor'), '120');
   await dialog.locator('#despesa-categoria').selectOption({ label: categoria });
   await dialog.locator('#despesa-conta').selectOption({ label: conta.nome });
   await dialog.getByRole('button', { name: 'Salvar' }).click();
@@ -99,7 +101,7 @@ test('gestor cadastra despesas avulsa e com repetição finita', async ({ page }
   await expect(dialog.locator('#despesa-repeticoes')).toBeVisible();
   await dialog.locator('#despesa-repeticoes').fill('3');
   await dialog.locator('#despesa-dia-vencimento').fill('20');
-  await dialog.locator('#despesa-valor').fill('80');
+  await fillMoneyInput(dialog.locator('#despesa-valor'), '80');
   await dialog.locator('#despesa-categoria').selectOption({ label: categoria });
   await dialog.locator('#despesa-conta').selectOption({ label: conta.nome });
   await dialog.getByRole('button', { name: 'Salvar' }).click();

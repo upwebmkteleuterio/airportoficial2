@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { expect, type Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 
 export type TestUser = {
   userId: string;
@@ -92,6 +92,13 @@ export async function createTestUser(role: 'GESTOR' | 'ALUNO' = 'GESTOR'): Promi
   }
 
   return { userId, email, password, marker };
+}
+
+export async function fillMoneyInput(input: Locator, value: string): Promise<void> {
+  await input.click();
+  await input.press('Control+A');
+  await input.press('Backspace');
+  await input.pressSequentially(value);
 }
 
 /** Entra pela tela de login real, como um usuário faria. */

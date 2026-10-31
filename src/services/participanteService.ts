@@ -1,4 +1,5 @@
 import { supabase } from '../integrations/supabase/client';
+import { FINANCEIRO_OPTIONS_LIMIT, type FinanceiroOptionsResult } from './financeiroOptions';
 import type { ParticipanteOpcao } from '../types/financeiro';
 import { serviceError } from './supabaseErrors';
 
@@ -26,24 +27,29 @@ function toPessoaOpcao(pessoa: PessoaParticipante, tipo: 'ALUNO' | 'INSTRUTOR'):
 }
 
 export const participanteService = {
-  getInstrutores: async (): Promise<ParticipanteOpcao[]> => {
-    const { data, error } = await supabase.from('pessoas').select('id, nome, cpf')
-      .eq('papel', 'INSTRUTOR').eq('ativo', true).order('nome', { ascending: true });
+  getInstrutorOptions: async (): Promise<FinanceiroOptionsResult<ParticipanteOpcao>> => {
+    const { data, count, error } = await supabase.from('pessoas').select('id, nome, cpf', { count: 'exact' })
+      .eq('papel', 'INSTRUTOR').eq('ativo', true).order('nome', { ascending: true })
+      .range(0, FINANCEIRO_OPTIONS_LIMIT - 1);
     if (error) throw serviceError('Não foi possível carregar os instrutores', error);
-    return ((data ?? []) as PessoaParticipante[]).map((pessoa) => toPessoaOpcao(pessoa, 'INSTRUTOR'));
+    return { data: ((data ?? []) as PessoaParticipante[]).map((pessoa) => toPessoaOpcao(pessoa, 'INSTRUTOR')), total: count ?? 0 };
   },
 
-  getEmpresas: async (): Promise<ParticipanteOpcao[]> => {
-    const { data, error } = await supabase.from('empresas').select('id, nome_fantasia, cnpj')
-      .order('nome_fantasia', { ascending: true });
+  getInstrutores: async (): Promise<ParticipanteOpcao[]> => (await participanteService.getInstrutorOptions()).data,
+
+  getEmpresaOptions: async (): Promise<FinanceiroOptionsResult<ParticipanteOpcao>> => {
+    const { data, count, error } = await supabase.from('empresas').select('id, nome_fantasia, cnpj', { count: 'exact' })
+      .order('nome_fantasia', { ascending: true }).range(0, FINANCEIRO_OPTIONS_LIMIT - 1);
     if (error) throw serviceError('Não foi possível carregar as empresas', error);
-    return ((data ?? []) as EmpresaParticipante[]).map((empresa) => ({
-      tipo: 'EMPRESA',
-      id: empresa.id,
-      nome: empresa.nome_fantasia,
-      documento: formatarDocumento(empresa.cnpj),
-    }));
+    return {
+      data: ((data ?? []) as EmpresaParticipante[]).map((empresa) => ({
+        tipo: 'EMPRESA', id: empresa.id, nome: empresa.nome_fantasia, documento: formatarDocumento(empresa.cnpj),
+      })),
+      total: count ?? 0,
+    };
   },
+
+  getEmpresas: async (): Promise<ParticipanteOpcao[]> => (await participanteService.getEmpresaOptions()).data,
 
   buscarAlunosPorCpf: async (termo: string): Promise<ParticipanteOpcao[]> => {
     const digitos = termo.replace(/\D/g, '').slice(0, 100);

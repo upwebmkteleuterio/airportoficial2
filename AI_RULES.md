@@ -41,6 +41,8 @@
 
 - Prefer small, focused components and straightforward data flow over new abstractions.
 - Preserve the existing Portuguese (Brazil) product language and use clear, consistent labels and feedback messages.
+- Campos de valor monetário usam `MoneyInput` e campos inteiros usam `NumberStepper` (ambos em `src/components/ui`). Não use `type="number"` (setinhas) nos formulários: o valor é digitado em reais, um campo vazio mostra `0,00`, os dígitos preenchem os reais da esquerda para a direita e a vírgula leva aos centavos.
+- Telas de listagem usam `PaginationFooter` mesmo quando há apenas uma página. Busca e filtros são resolvidos no banco, com paginação real (page/pageSize + contagem) e respeitando o teto de 1000 linhas por consulta.
 - Every interactive control must have an accessible name, visible keyboard focus, and an appropriate disabled/loading state.
 - Modals, drawers, dropdowns, and tooltips must use accessible primitives and support keyboard dismissal and focus management.
 - Validate user input at system boundaries, especially API requests, public enrollment forms, file uploads, and generated report parameters.

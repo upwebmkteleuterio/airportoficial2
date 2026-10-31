@@ -26,6 +26,7 @@ test('gestor cria, edita e exclui uma categoria', async ({ page }) => {
 
   await signInAs(page, user);
   await page.goto('/financeiro/categorias');
+  await expect(page.getByText(/Exibindo/)).toBeVisible();
 
   // Criar na aba Entradas
   await page.getByRole('button', { name: 'Nova Categoria' }).click();

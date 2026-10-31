@@ -6,6 +6,13 @@ export interface DespesasPrevistasFiltros {
   mes: string;
   search?: string;
   bancoId?: string;
+  page: number;
+  pageSize: number;
+}
+
+export interface ProgramacoesSaidaFiltros {
+  page: number;
+  pageSize: number;
 }
 
 type ProgramacaoInput = Omit<ProgramacaoSaida, 'id' | 'created_at' | 'updated_at'>;
@@ -32,16 +39,17 @@ function toParcela(row: ParcelaDespesa): ParcelaDespesa {
 }
 
 export const programacaoSaidaService = {
-  getAll: async (): Promise<ProgramacaoSaidaComRelacoes[]> => {
-    const { data, error } = await supabase.from('programacoes_saidas')
-      .select('*, categoria:categorias_financeiras(id,nome), conta:bancos(id,nome)')
-      .order('descricao', { ascending: true });
+  getPage: async ({ page, pageSize }: ProgramacoesSaidaFiltros): Promise<{ data: ProgramacaoSaidaComRelacoes[]; total: number }> => {
+    const safePage = Math.max(1, Math.floor(page));
+    const safePageSize = Math.min(1000, Math.max(1, Math.floor(pageSize)));
+    const { data, count, error } = await supabase.from('programacoes_saidas')
+      .select('*, categoria:categorias_financeiras(id,nome), conta:bancos(id,nome)', { count: 'exact' })
+      .order('descricao', { ascending: true })
+      .range((safePage - 1) * safePageSize, safePage * safePageSize - 1);
     if (error) throw serviceError('Não foi possível carregar as despesas', error);
-    return ((data ?? []) as ProgramacaoSaidaComRelacoes[]).map((row) => ({
-      ...toProgramacao(row),
-      categoria: row.categoria,
-      conta: row.conta,
-    }));
+    return { data: ((data ?? []) as ProgramacaoSaidaComRelacoes[]).map((row) => ({
+      ...toProgramacao(row), categoria: row.categoria, conta: row.conta,
+    })), total: count ?? 0 };
   },
 
   create: async (input: ProgramacaoInput): Promise<ProgramacaoSaida> => {
@@ -73,35 +81,37 @@ export const programacaoSaidaService = {
     return Number(data ?? 0);
   },
 
-  getParcelasPrevistas: async ({ mes, search, bancoId }: DespesasPrevistasFiltros): Promise<ParcelaDespesa[]> => {
-    let query = supabase.from('lancamentos_financeiros').select('*, programacao:programacoes_saidas(*)')
+  getParcelasPrevistas: async ({ mes, search, bancoId, page, pageSize }: DespesasPrevistasFiltros): Promise<{ data: ParcelaDespesa[]; total: number }> => {
+    const safePage = Math.max(1, Math.floor(page));
+    const safePageSize = Math.min(1000, Math.max(1, Math.floor(pageSize)));
+    let query = supabase.from('lancamentos_financeiros').select('*, programacao:programacoes_saidas(*)', { count: 'exact' })
       .eq('tipo', 'SAIDA').eq('status', 'PREVISTO')
       .gte('data_competencia', mesInicio(mes)).lte('data_competencia', mesFim(mes))
-      .order('data_competencia', { ascending: true });
+      .order('data_competencia', { ascending: true })
+      .range((safePage - 1) * safePageSize, safePage * safePageSize - 1);
     if (bancoId) query = query.eq('banco_id', bancoId);
     const safeSearch = search ? sanitizeSearch(search) : '';
     if (safeSearch) {
       query = query.or(`descricao.ilike.%${safeSearch}%,participante_nome.ilike.%${safeSearch}%,participante_documento.ilike.%${safeSearch}%,numero_documento.ilike.%${safeSearch}%`);
     }
-    const { data, error } = await query;
+    const { data, count, error } = await query;
     if (error) throw serviceError('Não foi possível carregar as contas a pagar', error);
-    return ((data ?? []) as ParcelaDespesa[]).map(toParcela);
+    return { data: ((data ?? []) as ParcelaDespesa[]).map(toParcela), total: count ?? 0 };
   },
 
   getTotaisPrevistos: async (mes: string, bancoId?: string): Promise<{ totalPrevisto: number; totalPago: number; totalAPagar: number }> => {
-    let query = supabase.from('lancamentos_financeiros').select('valor,status')
-      .eq('tipo', 'SAIDA').gte('data_competencia', mesInicio(mes)).lte('data_competencia', mesFim(mes));
-    if (bancoId) query = query.eq('banco_id', bancoId);
-    const { data, error } = await query;
+    const inicio = mesInicio(mes);
+    const fim = new Date(Date.UTC(Number(mes.slice(0, 4)), Number(mes.slice(5, 7)), 1)).toISOString().slice(0, 10);
+    const { data, error } = await supabase.rpc('get_financeiro_month_totals', {
+      p_tipo: 'SAIDA', p_start: inicio, p_end: fim, p_banco_id: bancoId ?? null,
+    });
     if (error) throw serviceError('Não foi possível carregar os totais do mês', error);
-    const totals = (data ?? []).reduce((result, row) => {
-      const valor = Number(row.valor);
-      result.totalPrevisto += valor;
-      if (row.status === 'PREVISTO') result.totalAPagar += valor;
-      if (row.status === 'EFETIVADO') result.totalPago += valor;
-      return result;
-    }, { totalPrevisto: 0, totalPago: 0, totalAPagar: 0 });
-    return totals;
+    const totals = Array.isArray(data) ? data[0] : data;
+    return {
+      totalPrevisto: Number(totals?.total_previsto ?? 0),
+      totalPago: Number(totals?.total_efetivado ?? 0),
+      totalAPagar: Number(totals?.total_previsto_pendente ?? 0),
+    };
   },
 };
 

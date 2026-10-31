@@ -1,0 +1,1 @@
+REVOKE EXECUTE ON FUNCTION public.get_financeiro_month_totals(text, date, date, text) FROM PUBLIC

@@ -7,6 +7,8 @@ import { ConfirmDeleteModal } from '../components/ui/ConfirmDeleteModal';
 import { HelpModal } from '../components/ui/HelpModal';
 import { RowActionMenu } from '../components/ui/RowActionMenu';
 import { QueryErrorState } from '../components/ui/QueryErrorState';
+import { MoneyInput } from '../components/ui/MoneyInput';
+import { NumberStepper } from '../components/ui/NumberStepper';
 
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -244,38 +246,31 @@ export default function Courses() {
               </div>
               <div>
                 <label htmlFor="course-hours" className="block text-xs font-bold text-gray-700 dark:text-slate-300 uppercase mb-1">Carga Horária (h)</label>
-                <input
+                <NumberStepper
                   id="course-hours"
-                  type="number"
                   required
-                  value={formData.carga_horaria_total || ''}
-                  onChange={e => setFormData({ ...formData, carga_horaria_total: Number(e.target.value) })}
-                  className="w-full border border-gray-300 dark:border-slate-700 rounded px-3 py-2 bg-transparent dark:text-white focus:outline-none focus:border-teal-500"
+                  value={String(formData.carga_horaria_total || '')}
+                  onChange={value => setFormData({ ...formData, carga_horaria_total: Number(value) })}
+                  ariaLabel="carga horária"
                 />
               </div>
               <div>
                 <label htmlFor="course-valor-pf" className="block text-xs font-bold text-gray-700 dark:text-slate-300 uppercase mb-1">Valor pessoa física</label>
-                <input
+                <MoneyInput
                   id="course-valor-pf"
-                  data-testid="course-valor-pf"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={formData.valor_pessoa_fisica ?? ''}
-                  onChange={e => setFormData({ ...formData, valor_pessoa_fisica: e.target.value === '' ? null : Number(e.target.value) })}
+                  dataTestId="course-valor-pf"
+                  value={String(formData.valor_pessoa_fisica ?? '')}
+                  onChange={value => setFormData({ ...formData, valor_pessoa_fisica: value === '' ? null : Number(value) })}
                   className="w-full border border-gray-300 dark:border-slate-700 rounded px-3 py-2 bg-transparent dark:text-white focus:outline-none focus:border-teal-500"
                 />
               </div>
               <div>
                 <label htmlFor="course-valor-pj" className="block text-xs font-bold text-gray-700 dark:text-slate-300 uppercase mb-1">Valor pessoa jurídica</label>
-                <input
+                <MoneyInput
                   id="course-valor-pj"
-                  data-testid="course-valor-pj"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={formData.valor_pessoa_juridica ?? ''}
-                  onChange={e => setFormData({ ...formData, valor_pessoa_juridica: e.target.value === '' ? null : Number(e.target.value) })}
+                  dataTestId="course-valor-pj"
+                  value={String(formData.valor_pessoa_juridica ?? '')}
+                  onChange={value => setFormData({ ...formData, valor_pessoa_juridica: value === '' ? null : Number(value) })}
                   className="w-full border border-gray-300 dark:border-slate-700 rounded px-3 py-2 bg-transparent dark:text-white focus:outline-none focus:border-teal-500"
                 />
               </div>

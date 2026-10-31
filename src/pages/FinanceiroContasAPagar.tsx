@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { HandCoins, Search } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { EfetivarPrevistoModal } from '../components/financeiro/EfetivarPrevistoModal';
+import { FinanceiroOptionsLimitWarning } from '../components/financeiro/FinanceiroOptionsLimitWarning';
 import { Button } from '../components/ui/Button';
 import { QueryErrorState } from '../components/ui/QueryErrorState';
+import { PaginationFooter } from '../components/ui/PaginationFooter';
 import { RowActionMenu } from '../components/ui/RowActionMenu';
 import { useBancos } from '../hooks/useBancos';
 import { useCategoriasFinanceiras } from '../hooks/useCategoriasFinanceiras';
@@ -13,6 +15,7 @@ import type { ParcelaDespesa } from '../types/financeiro';
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const inputClass = 'w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white';
 const labelClass = 'mb-1 block text-xs font-bold uppercase text-gray-700 dark:text-slate-300';
+const pageSize = 20;
 
 function currentMonth(): string {
   const date = new Date();
@@ -28,16 +31,17 @@ export default function FinanceiroContasAPagar() {
   const [mes, setMes] = useState(currentMonth);
   const [search, setSearch] = useState('');
   const [bancoId, setBancoId] = useState('');
+  const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<ParcelaDespesa | null>(null);
   const [generationStatus, setGenerationStatus] = useState('');
   const [generationError, setGenerationError] = useState('');
-  const { contas } = useBancos();
-  const { categorias } = useCategoriasFinanceiras();
-  const filtros = useMemo(() => ({ mes, search: search.trim() || undefined, bancoId: bancoId || undefined }), [mes, search, bancoId]);
-  const { parcelas, isLoading, isFetching, isError } = useDespesasPrevistas(filtros);
+  const { contas, optionsTruncated: contasOptionsTruncated } = useBancos();
+  const { categorias, optionsTruncated: categoriasOptionsTruncated } = useCategoriasFinanceiras();
+  const filtros = useMemo(() => ({ mes, search: search.trim() || undefined, bancoId: bancoId || undefined, page, pageSize }), [mes, search, bancoId, page]);
+  const { parcelas, total, isLoading, isFetching, isError } = useDespesasPrevistas(filtros);
   const { totais, isLoading: totalsLoading, isError: totalsError } = useTotaisContasAPagar({ mes, bancoId: bancoId || undefined });
   const { gerarPrevisoes, isGenerating } = useGerarPrevisoesDoMes();
-  const { efetivarPagamento, isSettling } = useProgramacoesSaida();
+  const { efetivarPagamento, isSettling } = useProgramacoesSaida({ page: 1, pageSize });
   const queryClient = useQueryClient();
 
   const runGeneration = async (month: string, report: boolean) => {
@@ -58,6 +62,8 @@ export default function FinanceiroContasAPagar() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mes]);
 
+  useEffect(() => setPage(1), [mes, search, bancoId]);
+
   const retry = () => {
     void queryClient.invalidateQueries({ queryKey: ['despesas-previstas'] });
     void queryClient.invalidateQueries({ queryKey: ['contas-a-pagar-totais'] });
@@ -74,6 +80,7 @@ export default function FinanceiroContasAPagar() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><h2 className="font-display text-2xl font-extrabold text-slate-900 dark:text-white md:text-3xl">Contas a pagar</h2><p className="mt-1 text-sm text-gray-500 dark:text-slate-400">Consulte os pagamentos previstos do mês e registre os valores pagos.</p></div><Button type="button" onClick={() => void runGeneration(mes, true)} disabled={isGenerating || !mes} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500">{isGenerating ? 'Gerando...' : 'Gerar previsões do mês'}</Button></div>
       {generationStatus && <p role="status" className="text-sm text-teal-700 dark:text-teal-300">{generationStatus}</p>}
       {generationError && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700 dark:bg-rose-950/30 dark:text-rose-300">{generationError}</p>}
+      <FinanceiroOptionsLimitWarning visible={contasOptionsTruncated || categoriasOptionsTruncated}/>
       <section aria-label="Filtros de contas a pagar" className="grid grid-cols-1 gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:grid-cols-3 dark:border-slate-800 dark:bg-slate-900">
         <div><label htmlFor="conta-mes" className={labelClass}>Mês</label><input id="conta-mes" type="month" className={inputClass} value={mes} onChange={(event) => { setGenerationStatus(''); setMes(event.target.value); }}/></div>
         <div><label htmlFor="conta-search" className={labelClass}>Busca</label><div className="relative"><Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" aria-hidden="true"/><input id="conta-search" className={`${inputClass} pl-9`} placeholder="Descrição, participante ou documento" value={search} onChange={(event) => setSearch(event.target.value)}/></div></div>
@@ -87,8 +94,8 @@ export default function FinanceiroContasAPagar() {
       {(isError || totalsError) && <QueryErrorState onRetry={retry} isRetrying={isFetching || totalsLoading} message="Verifique sua conexão e tente novamente."/>}
       <div className="flex min-h-[350px] flex-1 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900"><div className="flex-1 overflow-x-auto overflow-y-auto"><table data-testid="contas-a-pagar-table" className="w-full min-w-[1050px] border-collapse text-left text-xs"><thead className="sticky top-0 z-10 border-b border-gray-200 bg-slate-50 font-bold uppercase tracking-wider text-gray-500 dark:border-slate-800 dark:bg-slate-850 dark:text-slate-400"><tr><th className="w-12 px-2 py-3 text-center" aria-label="Ações"></th><th className="px-3 py-3">Vencimento</th><th className="px-3 py-3">Descrição</th><th className="px-3 py-3">Participante</th><th className="px-3 py-3">Categoria</th><th className="px-3 py-3">Conta</th><th className="px-3 py-3 text-right">Valor</th></tr></thead><tbody className="divide-y divide-gray-150 text-gray-700 dark:text-slate-200">
         {isLoading ? <tr><td colSpan={7} className="px-4 py-10 text-center">Carregando contas a pagar...</td></tr> : isError ? <tr><td colSpan={7} className="px-4 py-10 text-center">Não foi possível carregar as contas a pagar.</td></tr> : parcelas.length === 0 ? <tr><td colSpan={7} className="px-4 py-12 text-center"><div className="flex flex-col items-center gap-2"><HandCoins className="h-7 w-7 text-teal-600" aria-hidden="true"/><p className="font-bold text-slate-800 dark:text-slate-200">Nenhuma conta a pagar prevista para este mês.</p></div></td></tr> : parcelas.map((parcela) => <tr key={parcela.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50"><td className="px-2 py-2 text-center"><RowActionMenu ariaLabel={`Ações para ${parcela.descricao}`} items={[{ label: 'Efetivar', icon: <HandCoins className="h-4 w-4" aria-hidden="true"/>, onClick: () => setSelected(parcela) }]}/></td><td className="px-3 py-2">{formatDate(parcela.data_competencia)}</td><td className="px-3 py-2 font-semibold">{parcela.descricao}</td><td className="px-3 py-2"><span className="block truncate font-semibold">{parcela.participante_nome ?? '—'}</span><span className="block truncate text-[10px] text-gray-500">{parcela.participante_documento ?? '—'}</span></td><td className="px-3 py-2">{categorias.find((categoria) => categoria.id === parcela.categoria_id)?.nome ?? '—'}</td><td className="px-3 py-2">{contas.find((conta) => conta.id === parcela.banco_id)?.nome ?? '—'}</td><td className="px-3 py-2 text-right font-bold">{Number(parcela.valor) === 0 ? 'A definir' : money.format(Number(parcela.valor))}</td></tr>)}
-        </tbody></table></div>{isFetching && !isLoading && <p role="status" className="px-4 py-2 text-xs text-gray-500">Atualizando...</p>}</div>
-      <EfetivarPrevistoModal isOpen={selected !== null} onClose={() => setSelected(null)} onConfirm={confirmSettlement} isPending={isSettling} descricao={selected?.descricao ?? ''} valorSugerido={Number(selected?.valor ?? 0)} confirmLabel="Confirmar pagamento"/>
-    </div>
+        </tbody></table></div>{isFetching && !isLoading && <p role="status" className="px-4 py-2 text-xs text-gray-500">Atualizando...</p>}<PaginationFooter page={page} pageSize={pageSize} total={total} onPageChange={setPage} itemLabel="contas a pagar" /></div>
+    <EfetivarPrevistoModal isOpen={selected !== null} onClose={() => setSelected(null)} onConfirm={confirmSettlement} isPending={isSettling} descricao={selected?.descricao ?? ''} valorSugerido={Number(selected?.valor ?? 0)} confirmLabel="Confirmar pagamento"/>
+  </div>
   );
 }

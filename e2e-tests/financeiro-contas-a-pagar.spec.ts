@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import {
   createDisposableCategoria,
   createDisposableConta,
+  fillMoneyInput,
   createTestUser,
   deleteTestUser,
   removeDisposableFinanceiro,
@@ -43,7 +44,7 @@ test('gestor programa uma despesa, gera a previsão do mês e registra o pagamen
   await dialog.locator('#despesa-descricao').fill(descricao, { timeout: T });
   await dialog.locator('#despesa-dia-vencimento').fill('1', { timeout: T });
   await dialog.locator('#despesa-data-inicio').fill(primeiroDiaDoMes, { timeout: T });
-  await dialog.locator('#despesa-valor').fill('500', { timeout: T });
+  await fillMoneyInput(dialog.locator('#despesa-valor'), '500');
   await dialog.locator('#despesa-categoria').selectOption({ label: categoria }, { timeout: T });
   await dialog.locator('#despesa-conta').selectOption({ label: conta.nome }, { timeout: T });
   await dialog.getByRole('button', { name: 'Salvar' }).click({ timeout: T });
@@ -55,6 +56,7 @@ test('gestor programa uma despesa, gera a previsão do mês e registra o pagamen
 
   // A previsão do mês é criada ao consultar as contas a pagar.
   await page.goto('/financeiro/contas-a-pagar', { timeout: T });
+  await expect(page.getByText(/Exibindo/)).toBeVisible({ timeout: T });
   const linhaParcela = page.getByRole('row').filter({ hasText: descricao });
   await expect(linhaParcela).toBeVisible({ timeout: T });
   await expect(linhaParcela).toContainText(/R\$\s*500,00/, { timeout: T });

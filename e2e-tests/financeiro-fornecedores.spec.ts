@@ -26,6 +26,7 @@ test('gestor cria, edita e exclui um fornecedor', async ({ page }) => {
 
   await signInAs(page, user);
   await page.goto('/financeiro/fornecedores');
+  await expect(page.getByText(/Exibindo/)).toBeVisible();
 
   // Criar
   await page.getByRole('button', { name: 'Novo Fornecedor' }).click();

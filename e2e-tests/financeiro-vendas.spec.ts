@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import {
   createDisposableAluno,
+  fillMoneyInput,
   createDisposableCategoria,
   createDisposableConta,
   createDisposableCurso,
@@ -28,7 +29,7 @@ async function criarVenda(
   await dialog.locator('#venda-participante-tipo').selectOption('EMPRESA');
   await dialog.locator('#venda-empresa').selectOption(empresa.id);
   await dialog.locator('#venda-curso').selectOption({ index: 1 });
-  await dialog.locator('#venda-valor').fill('1000');
+  await fillMoneyInput(dialog.locator('#venda-valor'), '1000');
   await dialog.locator('#venda-categoria').selectOption({ label: categoria });
   await dialog.locator('#venda-conta').selectOption({ label: conta.nome });
   await dialog.locator('#venda-forma-pagamento').selectOption('PIX');
@@ -59,6 +60,7 @@ test('gestor registra uma venda, efetiva o recebimento e o saldo acompanha', asy
 
   await signInAs(page, user);
   await page.goto('/financeiro/vendas', { timeout: T });
+  await expect(page.getByText(/Exibindo/)).toBeVisible();
 
   // Se a tela não aparecer, a mensagem de falha mostra a rota atual e o
   // conteúdo real da página, em vez de apenas dizer que o botão não existe.
@@ -79,7 +81,7 @@ test('gestor registra uma venda, efetiva o recebimento e o saldo acompanha', asy
   await dialog.locator('#venda-participante-tipo').selectOption('EMPRESA', { timeout: T });
   await dialog.locator('#venda-empresa').selectOption(empresa.id, { timeout: T });
   await dialog.locator('#venda-curso').selectOption({ index: 1 }, { timeout: T });
-  await dialog.locator('#venda-valor').fill('1000', { timeout: T });
+  await fillMoneyInput(dialog.locator('#venda-valor'), '1000');
   await dialog.locator('#venda-categoria').selectOption({ label: categoria }, { timeout: T });
   await dialog.locator('#venda-conta').selectOption({ label: conta.nome }, { timeout: T });
   await dialog.locator('#venda-forma-pagamento').selectOption('PIX', { timeout: T });
@@ -101,7 +103,7 @@ test('gestor registra uma venda, efetiva o recebimento e o saldo acompanha', asy
   await linhaRecebimento.getByRole('button', { name: /Ações para/ }).click({ timeout: T });
   await page.getByRole('menuitem', { name: 'Efetivar' }).click({ timeout: T });
   const dialogEfetivar = page.getByRole('dialog');
-  await expect(dialogEfetivar.locator('#efetivar-valor')).toHaveValue(/1000/, { timeout: T });
+  await expect(dialogEfetivar.locator('#efetivar-valor')).toHaveValue(/1\.000,00/, { timeout: T });
   await dialogEfetivar.getByRole('button', { name: 'Confirmar recebimento' }).click({ timeout: T });
 
   await expect(linhaRecebimento).toHaveCount(0, { timeout: T });
@@ -126,7 +128,7 @@ test('gestor edita uma venda e atualiza o total exibido', async ({ page }) => {
   await linha.getByRole('button', { name: `Ações para ${empresa.nome}` }).click();
   await page.getByRole('menuitem', { name: 'Editar' }).click();
   const dialog = page.getByRole('dialog');
-  await dialog.locator('#venda-valor').fill('1250');
+  await fillMoneyInput(dialog.locator('#venda-valor'), '1250');
   await dialog.getByRole('button', { name: 'Atualizar' }).click();
 
   await expect(linha).toContainText(/R\$\s*1\.250,00/);
@@ -193,7 +195,7 @@ test('gestor registra uma venda para aluno com o valor de pessoa física do curs
 
   // Escolhido o curso, o valor de pessoa física é puxado automaticamente.
   await dialog.locator('#venda-curso').selectOption({ label: curso.nome }, { timeout: T });
-  await expect(dialog.locator('#venda-valor')).toHaveValue(/1200/, { timeout: T });
+  await expect(dialog.locator('#venda-valor')).toHaveValue(/1\.200,00/, { timeout: T });
 
   await dialog.locator('#venda-categoria').selectOption({ label: categoria }, { timeout: T });
   await dialog.locator('#venda-conta').selectOption({ label: conta.nome }, { timeout: T });
@@ -227,14 +229,14 @@ test('gestor registra uma venda parcelada e cada mês recebe a sua parcela', asy
   await dialog.locator('#venda-participante-tipo').selectOption('EMPRESA', { timeout: T });
   await dialog.locator('#venda-empresa').selectOption(empresa.id, { timeout: T });
   await dialog.locator('#venda-curso').selectOption({ index: 1 }, { timeout: T });
-  await dialog.locator('#venda-valor').fill('900', { timeout: T });
+  await fillMoneyInput(dialog.locator('#venda-valor'), '900');
   await dialog.locator('#venda-condicao').selectOption('PARCELADO', { timeout: T });
   await dialog.locator('#venda-parcelas-quantidade').fill('3', { timeout: T });
   await dialog.locator('#venda-primeiro-vencimento').fill(primeiroVencimento, { timeout: T });
   // Valores diferentes por parcela provam que cada mês recebe a parcela certa.
-  await dialog.getByTestId('venda-parcela-valor-0').fill('400', { timeout: T });
-  await dialog.getByTestId('venda-parcela-valor-1').fill('300', { timeout: T });
-  await dialog.getByTestId('venda-parcela-valor-2').fill('200', { timeout: T });
+  await fillMoneyInput(dialog.getByTestId('venda-parcela-valor-0'), '400');
+  await fillMoneyInput(dialog.getByTestId('venda-parcela-valor-1'), '300');
+  await fillMoneyInput(dialog.getByTestId('venda-parcela-valor-2'), '200');
   await dialog.locator('#venda-categoria').selectOption({ label: categoria }, { timeout: T });
   await dialog.locator('#venda-conta').selectOption({ label: conta.nome }, { timeout: T });
   await dialog.locator('#venda-referencia').fill(referencia, { timeout: T });

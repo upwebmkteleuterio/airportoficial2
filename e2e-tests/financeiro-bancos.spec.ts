@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import {
+  fillMoneyInput,
   createTestUser,
   deleteTestUser,
   removeDisposableFinanceiro,
@@ -41,12 +42,13 @@ test('gestor cria, edita e exclui uma conta', async ({ page }) => {
       { timeout: T, message: 'A tela de contas não renderizou' },
     )
     .toContain('Bancos e Contas');
+  await expect(page.getByText(/Exibindo/).first()).toBeVisible({ timeout: T });
 
   // Criar
   await page.getByRole('button', { name: 'Nova Conta' }).click({ timeout: T });
   const dialog = page.getByRole('dialog');
   await dialog.locator('#bank-name').fill(nome, { timeout: T });
-  await dialog.locator('#bank-opening-balance').fill('1500', { timeout: T });
+  await fillMoneyInput(dialog.locator('#bank-opening-balance'), '1500');
   await dialog.getByRole('button', { name: 'Salvar' }).click({ timeout: T });
 
   const linha = page.getByRole('row').filter({ hasText: nome });

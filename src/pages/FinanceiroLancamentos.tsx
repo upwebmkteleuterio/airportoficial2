@@ -6,12 +6,15 @@ import { ConfirmDeleteModal } from '../components/ui/ConfirmDeleteModal';
 import { HelpModal } from '../components/ui/HelpModal';
 import { Modal } from '../components/ui/Modal';
 import { QueryErrorState } from '../components/ui/QueryErrorState';
+import { PaginationFooter } from '../components/ui/PaginationFooter';
 import { RowActionMenu } from '../components/ui/RowActionMenu';
+import { MoneyInput } from '../components/ui/MoneyInput';
 import { useBancos } from '../hooks/useBancos';
 import { useCategoriasFinanceiras } from '../hooks/useCategoriasFinanceiras';
 import { useLancamentosFinanceiros } from '../hooks/useLancamentosFinanceiros';
 import { useAlunosPorCpf, useParticipantesFinanceiros } from '../hooks/useParticipantesFinanceiros';
 import { useUIStore } from '../store/uiStore';
+import { FinanceiroOptionsLimitWarning } from '../components/financeiro/FinanceiroOptionsLimitWarning';
 import type { FormaPagamento, LancamentoComRelacoes, LancamentoFinanceiro, ParticipanteOpcao, TipoLancamento, TipoParticipante, TipoSituacaoLancamento } from '../types/financeiro';
 
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -74,9 +77,9 @@ function labelParticipante(option: ParticipanteOpcao): string {
 
 export default function FinanceiroLancamentos() {
   const userLogged = useUIStore((state) => state.userLogged);
-  const { contas } = useBancos();
-  const { categorias } = useCategoriasFinanceiras();
-  const { fornecedores, instrutores, empresas } = useParticipantesFinanceiros();
+  const { contas, optionsTruncated: contasOptionsTruncated } = useBancos();
+  const { categorias, optionsTruncated: categoriasOptionsTruncated } = useCategoriasFinanceiras();
+  const { fornecedores, instrutores, empresas, optionsTruncated: participantesOptionsTruncated } = useParticipantesFinanceiros();
   const [page, setPage] = useState(1);
   const [tipoFiltro, setTipoFiltro] = useState<TipoLancamento | ''>('');
   const [bancoId, setBancoId] = useState('');
@@ -112,7 +115,6 @@ export default function FinanceiroLancamentos() {
     }
   }, [page, isLoading, lancamentos.length]);
   const saving = isCreating || isUpdating;
-  const pageCount = Math.max(1, Math.ceil(total / pageSize));
   const categoriasForm = categorias.filter((categoria) => categoria.tipo === form.tipo);
   const categoriasDisponiveisFiltro = categorias.filter((categoria) => !tipoFiltro || categoria.tipo === tipoFiltro);
   const fornecedoresOpcoes: ParticipanteOpcao[] = fornecedores.map((fornecedor) => ({ tipo: 'FORNECEDOR', id: fornecedor.id, nome: fornecedor.nome, documento: formatarDocumento(fornecedor.cpf_cnpj) }));
@@ -235,6 +237,7 @@ export default function FinanceiroLancamentos() {
         <div className="flex items-center gap-2"><Button variant="secondary" type="button" onClick={() => setHelpOpen(true)} icon={<HelpCircle className="w-4 h-4" aria-hidden="true" />} aria-label="Ajuda" className={focusClass}>Ajuda</Button><button type="button" data-testid="novo-lancamento-button" onClick={() => openForm()} className={`flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-slate-850 dark:bg-teal-600 dark:hover:bg-teal-500 ${focusClass}`}><Plus className="h-4 w-4" aria-hidden="true"/>Novo Lançamento</button></div>
       </div>
       {errorMessage && !modalOpen && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700 dark:bg-rose-950/30 dark:text-rose-300">{errorMessage}</p>}
+      <FinanceiroOptionsLimitWarning visible={contasOptionsTruncated || categoriasOptionsTruncated || participantesOptionsTruncated}/>
       <section aria-label="Saldos por conta" data-testid="saldos-por-conta" className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-slate-800 dark:text-slate-200"><Banknote className="h-4 w-4 text-teal-600" aria-hidden="true"/>Visão bancária</h3>
         <div className="flex gap-3 overflow-x-auto pb-1">
@@ -264,11 +267,11 @@ export default function FinanceiroLancamentos() {
             </tr>)}
           </tbody></table></div>
       </div>
-      <div className="flex flex-col items-center justify-between gap-3 text-sm text-gray-600 sm:flex-row dark:text-slate-300"><p>Mostrando {total === 0 ? 0 : (page - 1) * pageSize + 1} a {Math.min(page * pageSize, total)} de {total} lançamentos</p><div className="flex items-center gap-2"><Button type="button" variant="secondary" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))} className={focusClass}>Anterior</Button><span aria-live="polite">Página {page} de {pageCount}</span><Button type="button" variant="secondary" disabled={page >= pageCount} onClick={() => setPage((current) => Math.min(pageCount, current + 1))} className={focusClass}>Próxima</Button></div></div>
+      <PaginationFooter page={page} pageSize={pageSize} total={total} onPageChange={setPage} itemLabel="lançamentos"/>
       <HelpModal isOpen={helpOpen} onClose={() => setHelpOpen(false)} title="Ajuda sobre Lançamentos" description="Consulte e gerencie entradas e saídas efetivadas nas contas financeiras." items={[{ title: 'Visão bancária', description: 'Os saldos são fornecidos pelas contas financeiras.', icon: <Landmark className="h-4 w-4" aria-hidden="true"/> }, { title: 'Filtros', description: 'Busque lançamentos por texto, tipo, categoria, conta e período.', icon: <Search className="h-4 w-4" aria-hidden="true"/> }]}/>
       <Modal isOpen={modalOpen} onClose={closeForm} ariaLabelledBy="lancamento-form-title"><div className="max-h-[calc(100vh-2rem)] overflow-y-auto rounded-xl bg-white shadow-xl dark:bg-slate-900"><div className="flex items-center justify-between border-b border-gray-200 p-4 dark:border-slate-800"><h2 id="lancamento-form-title" className="flex items-center gap-2 text-lg font-bold text-slate-800 dark:text-white">{editing ? <Edit2 className="h-5 w-5 text-teal-600" aria-hidden="true"/> : <Plus className="h-5 w-5 text-teal-600" aria-hidden="true"/>}{editing ? 'Editar Lançamento' : 'Novo Lançamento'}</h2><button type="button" onClick={closeForm} disabled={saving} aria-label="Fechar formulário" className={`rounded p-1 text-gray-500 hover:text-gray-700 ${focusClass} disabled:opacity-50 dark:hover:text-white`}><X className="h-5 w-5" aria-hidden="true"/></button></div>
         <form onSubmit={(event) => void save(event)} className="space-y-4 p-6">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><div><label htmlFor="form-tipo" className={labelClass}>Tipo</label><select id="form-tipo" required className={inputClass} value={form.tipo} onChange={(event) => { const tipo = event.target.value as TipoLancamento; setForm((current) => { const categoria = categorias.find((item) => item.id === current.categoria_id); return { ...current, tipo, categoria_id: categoria?.tipo === tipo ? current.categoria_id : '' }; }); }}>{(['ENTRADA', 'SAIDA'] as TipoLancamento[]).map((tipo) => <option key={tipo} value={tipo}>{tipo === 'ENTRADA' ? 'Entrada' : 'Saída'}</option>)}</select></div><div><label htmlFor="form-valor" className={labelClass}>Valor</label><input id="form-valor" className={inputClass} type="number" step="0.01" min="0.01" required value={form.valor} onChange={(event) => setForm((current) => ({ ...current, valor: event.target.value }))}/></div></div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><div><label htmlFor="form-tipo" className={labelClass}>Tipo</label><select id="form-tipo" required className={inputClass} value={form.tipo} onChange={(event) => { const tipo = event.target.value as TipoLancamento; setForm((current) => { const categoria = categorias.find((item) => item.id === current.categoria_id); return { ...current, tipo, categoria_id: categoria?.tipo === tipo ? current.categoria_id : '' }; }); }}>{(['ENTRADA', 'SAIDA'] as TipoLancamento[]).map((tipo) => <option key={tipo} value={tipo}>{tipo === 'ENTRADA' ? 'Entrada' : 'Saída'}</option>)}</select></div><div><label htmlFor="form-valor" className={labelClass}>Valor</label><MoneyInput id="form-valor" className={inputClass} required value={form.valor} onChange={(valor) => setForm((current) => ({ ...current, valor }))}/></div></div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><div><label htmlFor="form-competencia" className={labelClass}>Data de competência</label><input id="form-competencia" className={inputClass} type="date" required value={form.data_competencia} onChange={(event) => setForm((current) => ({ ...current, data_competencia: event.target.value }))}/></div><div><label htmlFor="form-efetivacao" className={labelClass}>Data de efetivação</label><input id="form-efetivacao" className={inputClass} type="date" required value={form.data_efetivacao} onChange={(event) => setForm((current) => ({ ...current, data_efetivacao: event.target.value }))}/></div></div>
           <div><label htmlFor="form-conta" className={labelClass}>Conta</label><select id="form-conta" required className={inputClass} value={form.banco_id} onChange={(event) => setForm((current) => ({ ...current, banco_id: event.target.value }))}><option value="">Selecione uma conta</option>{contas.map((conta) => <option key={conta.id} value={conta.id}>{conta.nome}{conta.ativo ? '' : ' (inativa)'}</option>)}</select></div>
           <div><label htmlFor="form-categoria" className={labelClass}>Categoria</label><select id="form-categoria" required className={inputClass} value={form.categoria_id} onChange={(event) => setForm((current) => ({ ...current, categoria_id: event.target.value }))}><option value="">Selecione uma categoria</option>{categoriasForm.map((categoria) => <option key={categoria.id} value={categoria.id}>{categoria.nome}{categoria.ativo ? '' : ' (inativa)'}</option>)}</select></div>

@@ -2,6 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 import {
   createDisposableCategoria,
   createDisposableConta,
+  fillMoneyInput,
   createDisposableEmpresa,
   createTestUser,
   deleteTestUser,
@@ -67,6 +68,7 @@ test('gestor efetiva um recebimento alterando valor e data', async ({ page }) =>
 
   // O recebimento previsto é gerado pela própria venda.
   await page.goto('/financeiro/recebimentos', { timeout: T });
+  await expect(page.getByText(/Exibindo/)).toBeVisible({ timeout: T });
   const linha = page.getByRole('row').filter({ hasText: empresa.nome });
   await expect(linha).toContainText(/R\$\s*1\.000,00/, { timeout: T });
 
@@ -74,13 +76,15 @@ test('gestor efetiva um recebimento alterando valor e data', async ({ page }) =>
   await linha.getByRole('button', { name: /Ações para/ }).click({ timeout: T });
   await page.getByRole('menuitem', { name: 'Efetivar' }).click({ timeout: T });
   const dialog = page.getByRole('dialog');
-  await expect(dialog.locator('#efetivar-valor')).toHaveValue(/1000/, { timeout: T });
-  await dialog.locator('#efetivar-valor').fill('350', { timeout: T });
+  await expect(dialog.locator('#efetivar-valor')).toHaveValue(/1\.000,00/, { timeout: T });
+  await fillMoneyInput(dialog.locator('#efetivar-valor'), '350');
   await dialog.locator('#efetivar-data').fill(dataEfetivacao, { timeout: T });
   await dialog.getByRole('button', { name: 'Confirmar recebimento' }).click({ timeout: T });
 
   // O previsto sai da lista de recebimentos do mês.
   await expect(linha).toHaveCount(0, { timeout: T });
+  const totalRecebido = page.getByTestId('recebimentos-totais').getByText('Recebido no mês').locator('..');
+  await expect(totalRecebido).toContainText(/R\$\s*350,00/, { timeout: T });
 
   // O saldo da conta recebeu o valor ajustado, e o lançamento guardou a data.
   await page.goto('/financeiro/lancamentos', { timeout: T });

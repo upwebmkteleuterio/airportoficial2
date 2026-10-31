@@ -1,5 +1,6 @@
 import { supabase } from '../integrations/supabase/client';
 import type { CategoriaFinanceira, TipoLancamento } from '../types/financeiro';
+import { FINANCEIRO_OPTIONS_LIMIT, type FinanceiroOptionsResult } from './financeiroOptions';
 import { newServiceId, serviceError } from './supabaseErrors';
 
 function erroExclusao(error: unknown): never {
@@ -15,11 +16,24 @@ function erroExclusao(error: unknown): never {
 }
 
 export const categoriaFinanceiraService = {
-  getAll: async (): Promise<CategoriaFinanceira[]> => {
-    const { data, error } = await supabase.from('categorias_financeiras').select('*').eq('sistema', false)
-      .order('tipo', { ascending: true }).order('nome', { ascending: true });
+  getOptions: async (): Promise<FinanceiroOptionsResult<CategoriaFinanceira>> => {
+    const { data, count, error } = await supabase.from('categorias_financeiras').select('*', { count: 'exact' }).eq('sistema', false)
+      .order('tipo', { ascending: true }).order('nome', { ascending: true }).range(0, FINANCEIRO_OPTIONS_LIMIT - 1);
     if (error) throw serviceError('Não foi possível carregar as categorias financeiras', error);
-    return (data ?? []) as CategoriaFinanceira[];
+    return { data: (data ?? []) as CategoriaFinanceira[], total: count ?? 0 };
+  },
+
+  getAll: async (): Promise<CategoriaFinanceira[]> => (await categoriaFinanceiraService.getOptions()).data,
+
+  getPage: async ({ page, pageSize, tipo }: { page: number; pageSize: number; tipo?: TipoLancamento }): Promise<{ data: CategoriaFinanceira[]; total: number }> => {
+    const safePage = Math.max(1, Math.floor(page));
+    const safePageSize = Math.max(1, Math.min(FINANCEIRO_OPTIONS_LIMIT, Math.floor(pageSize)));
+    let query = supabase.from('categorias_financeiras').select('*', { count: 'exact' }).eq('sistema', false)
+      .order('tipo', { ascending: true }).order('nome', { ascending: true });
+    if (tipo) query = query.eq('tipo', tipo);
+    const { data, count, error } = await query.range((safePage - 1) * safePageSize, safePage * safePageSize - 1);
+    if (error) throw serviceError('Não foi possível carregar as categorias financeiras', error);
+    return { data: (data ?? []) as CategoriaFinanceira[], total: count ?? 0 };
   },
 
   create: async (input: { nome: string; tipo: TipoLancamento }): Promise<CategoriaFinanceira> => {

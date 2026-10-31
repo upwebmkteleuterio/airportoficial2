@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { createTestUser, deleteTestUser, signInAs, type TestUser } from './fixtures/financeiro';
+import { createTestUser, deleteTestUser, fillMoneyInput, signInAs, type TestUser } from './fixtures/financeiro';
 import { removeDisposableCursos } from './fixtures/cursos';
 
 let user: TestUser;
@@ -44,8 +44,8 @@ test('gestor cadastra um curso com valor de pessoa física e jurídica', async (
   const dialog = page.getByRole('dialog');
   await dialog.locator('#course-name').fill(nome, { timeout: T });
   await dialog.locator('#course-hours').fill('40', { timeout: T });
-  await dialog.getByTestId('course-valor-pf').fill('1200', { timeout: T });
-  await dialog.getByTestId('course-valor-pj').fill('1500.50', { timeout: T });
+  await fillMoneyInput(dialog.getByTestId('course-valor-pf'), '1200');
+  await fillMoneyInput(dialog.getByTestId('course-valor-pj'), '1500,50');
   await dialog.getByRole('button', { name: 'Salvar' }).click({ timeout: T });
 
   await expect(linha).toBeVisible({ timeout: T });
@@ -57,7 +57,7 @@ test('gestor cadastra um curso com valor de pessoa física e jurídica', async (
   await page.getByRole('menuitem', { name: 'Editar' }).click({ timeout: T });
   const dialogEdicao = page.getByRole('dialog');
   await dialogEdicao.locator('#course-name').fill(nomeEditado, { timeout: T });
-  await dialogEdicao.getByTestId('course-valor-pf').fill('1300', { timeout: T });
+  await fillMoneyInput(dialogEdicao.getByTestId('course-valor-pf'), '1300');
   await dialogEdicao.getByRole('button', { name: 'Atualizar' }).click({ timeout: T });
 
   const linhaEditada = page.getByRole('row').filter({ hasText: nomeEditado });
