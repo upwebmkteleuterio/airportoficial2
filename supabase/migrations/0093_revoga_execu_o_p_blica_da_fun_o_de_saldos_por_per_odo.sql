@@ -1,0 +1,1 @@
+REVOKE ALL ON FUNCTION public.get_financeiro_saldos_periodo(date, date) FROM PUBLIC

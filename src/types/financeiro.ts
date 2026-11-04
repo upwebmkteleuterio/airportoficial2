@@ -25,6 +25,14 @@ export interface SaldoConta {
   updated_at: string;
 }
 
+export interface SaldoPeriodoBanco {
+  banco_id: string;
+  entradas_periodo: number;
+  saidas_periodo: number;
+  entradas_acumuladas: number;
+  saidas_acumuladas: number;
+}
+
 export type ContaComSaldo = Banco & SaldoConta;
 
 export interface TransferenciaEntreContas {

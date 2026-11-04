@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { buscarEnderecoPorCep } from '../../services/cepService';
 
 const isRealDate = (year: number, month: number, day: number) => {
   const date = new Date(Date.UTC(year, month - 1, day));
@@ -82,23 +83,15 @@ export function useStudentFormValidation(formData: Record<string, string>, setFo
   };
 
   const handleCepBlur = async () => {
-    const cep = formData.cep.replace(/\D/g, '');
-    if (cep.length !== 8) return;
-    try {
-      const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
-      const data = await response.json();
-      if (!data.erro) {
-        setFormData(prev => ({
-          ...prev,
-          endereco: data.logradouro || prev.endereco,
-          bairro: data.bairro || prev.bairro,
-          cidade: data.localidade || prev.cidade,
-          estado: data.uf || prev.estado
-        }));
-      }
-    } catch {
-      // The address can still be entered manually when CEP lookup is unavailable.
-    }
+    const endereco = await buscarEnderecoPorCep(formData.cep);
+    if (!endereco) return;
+    setFormData(prev => ({
+      ...prev,
+      endereco: endereco.logradouro || prev.endereco,
+      bairro: endereco.bairro || prev.bairro,
+      cidade: endereco.cidade || prev.cidade,
+      estado: endereco.uf || prev.estado
+    }));
   };
 
   const handleBlur = (e: React.FocusEvent<HTMLInputElement | HTMLSelectElement>) => {

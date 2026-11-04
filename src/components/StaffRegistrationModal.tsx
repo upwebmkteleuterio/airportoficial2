@@ -9,6 +9,7 @@ import { DocumentStatus, Usuario, UserRole } from '../types';
 import { avatarService } from '../services/avatarService';
 import { documentService } from '../services/documentService';
 import { newServiceId } from '../services/supabaseErrors';
+import { buscarEnderecoPorCep } from '../services/cepService';
 
 interface StaffRegistrationModalProps {
   initialData?: any;
@@ -273,24 +274,15 @@ export function StaffRegistrationModal({ isOpen, onClose, onSuccess, onError, in
   const { errors, touched, handleBlur, setErrors, setTouched } = useStudentFormValidation(formData, setFormData);
 
   const handleCepBlur = async () => {
-    const cep = formData.cep.replace(/\D/g, '');
-    if (cep.length === 8) {
-      try {
-        const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
-        const data = await response.json();
-        if (!data.erro) {
-          setFormData(prev => ({
-            ...prev,
-            endereco: data.logradouro || prev.endereco,
-            bairro: data.bairro || prev.bairro,
-            cidade: data.localidade || prev.cidade,
-            estado: data.uf || prev.estado
-          }));
-        }
-      } catch (error) {
-        console.error("Failed to fetch CEP", error);
-      }
-    }
+    const endereco = await buscarEnderecoPorCep(formData.cep);
+    if (!endereco) return;
+    setFormData(prev => ({
+      ...prev,
+      endereco: endereco.logradouro || prev.endereco,
+      bairro: endereco.bairro || prev.bairro,
+      cidade: endereco.cidade || prev.cidade,
+      estado: endereco.uf || prev.estado
+    }));
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {

@@ -103,6 +103,9 @@ export async function fillMoneyInput(input: Locator, value: string): Promise<voi
 
 /** Entra pela tela de login real, como um usuário faria. */
 export async function signInAs(page: Page, user: TestUser): Promise<void> {
+  // A tela de login precisa caber na janela para o botão "Entrar" ficar
+  // alcançável: em janelas baixas ele fica fora da viewport e o clique falha.
+  await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/login');
   await page.getByLabel('E-mail', { exact: true }).fill(user.email, { timeout: 15000 });
   await page.getByLabel('Senha', { exact: true }).fill(user.password, { timeout: 15000 });

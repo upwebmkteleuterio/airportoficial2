@@ -1,5 +1,5 @@
 import { supabase } from '../integrations/supabase/client';
-import type { Banco, SaldoConta, TipoBanco } from '../types/financeiro';
+import type { Banco, SaldoConta, SaldoPeriodoBanco, TipoBanco } from '../types/financeiro';
 import { FINANCEIRO_OPTIONS_LIMIT, type FinanceiroOptionsResult } from './financeiroOptions';
 import { newServiceId, serviceError } from './supabaseErrors';
 
@@ -82,6 +82,21 @@ export const bancoService = {
       .range(0, bancoIds.length - 1);
     if (error) throw serviceError('Não foi possível carregar os saldos das contas', error);
     return ((data ?? []) as SaldoConta[]).map(toSaldoConta);
+  },
+
+  getSaldosPeriodo: async (pStart: string, pEnd: string): Promise<SaldoPeriodoBanco[]> => {
+    const { data, error } = await supabase.rpc('get_financeiro_saldos_periodo', {
+      p_start: pStart,
+      p_end: pEnd,
+    });
+    if (error) throw serviceError('Não foi possível carregar os saldos do período', error);
+    return ((data ?? []) as SaldoPeriodoBanco[]).map((saldo) => ({
+      ...saldo,
+      entradas_periodo: Number(saldo.entradas_periodo),
+      saidas_periodo: Number(saldo.saidas_periodo),
+      entradas_acumuladas: Number(saldo.entradas_acumuladas),
+      saidas_acumuladas: Number(saldo.saidas_acumuladas),
+    }));
   },
 
   create: async (input: {

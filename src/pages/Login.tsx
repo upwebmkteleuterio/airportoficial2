@@ -27,7 +27,7 @@ export function Login() {
   };
 
   return (
-    <div className="bg-slate-50 dark:bg-slate-950 min-h-screen w-full flex flex-col items-center justify-center relative overflow-hidden font-sans text-slate-900 dark:text-white transition-colors">
+    <div className="bg-slate-50 dark:bg-slate-950 min-h-screen w-full flex flex-col items-center justify-center relative overflow-y-auto py-8 font-sans text-slate-900 dark:text-white transition-colors">
       <div className="absolute inset-0 z-0 opacity-[0.04] dark:opacity-[0.06] pointer-events-none flex items-center justify-center overflow-hidden">
         <svg
           className="w-[140vw] h-[140vw] text-slate-900 dark:text-teal-400 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 animate-pulse-slow"

@@ -14,8 +14,8 @@ interface SlidePanelProps {
 
 function focusableElements(container: HTMLElement) {
   return Array.from(container.querySelectorAll<HTMLElement>(
-    'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-  ));
+    'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+  )).filter((element) => !element.hidden && element.getAttribute('aria-hidden') !== 'true' && element.getClientRects().length > 0);
 }
 
 export function SlidePanel({
@@ -44,10 +44,33 @@ export function SlidePanel({
     const focusTimer = window.setTimeout(() => {
       const panel = panelRef.current;
       if (!panel) return;
-      focusableElements(panel)[0]?.focus() ?? panel.focus();
+      const firstFocusable = focusableElements(panel)[0];
+      if (firstFocusable) firstFocusable.focus();
+      else panel.focus();
     }, 0);
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onCloseRef.current();
+      if (event.key === 'Escape') {
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const panel = panelRef.current;
+      if (!panel) return;
+      const elements = focusableElements(panel);
+      if (elements.length === 0) {
+        event.preventDefault();
+        panel.focus();
+        return;
+      }
+      const first = elements[0];
+      const last = elements[elements.length - 1];
+      if (event.shiftKey && (document.activeElement === first || !panel.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || !panel.contains(document.activeElement))) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => {
@@ -94,4 +117,8 @@ export function SlidePanel({
       )}
     </AnimatePresence>
   );
+}
+
+export function WideSlidePanel(props: Omit<SlidePanelProps, 'maxWidth'>) {
+  return <SlidePanel {...props} maxWidth="max-w-lg" />;
 }

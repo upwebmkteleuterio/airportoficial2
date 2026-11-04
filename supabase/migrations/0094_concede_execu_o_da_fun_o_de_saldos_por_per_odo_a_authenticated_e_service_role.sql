@@ -1,0 +1,1 @@
+GRANT EXECUTE ON FUNCTION public.get_financeiro_saldos_periodo(date, date) TO authenticated, service_role

@@ -46,6 +46,7 @@ export function MoneyInput({
 }: MoneyInputProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const posicaoRef = useRef<{ texto: string; posicao: number } | null>(null);
+  const primeiraEntradaReaisRef = useRef(false);
   const [focado, setFocado] = useState(false);
 
   const zerado = value === '' || Number(value) === 0;
@@ -63,10 +64,11 @@ export function MoneyInput({
   });
 
   const aoFocar = () => {
-    // Primeira digitação: o campo vazio mostra 0,00 e o cursor vai para o fim dos
-    // reais. Em uma edição o cursor fica onde o usuário clicou, sem interferência.
+    // O navegador aplica a posição do clique após o evento de foco, por isso a
+    // primeira digitação é tratada independentemente da posição do cursor.
     if (!zerado) return;
     setFocado(true);
+    primeiraEntradaReaisRef.current = true;
     posicaoRef.current = { texto: '0,00', posicao: posicaoFimDosReais('0,00') };
   };
 
@@ -79,16 +81,30 @@ export function MoneyInput({
     const input = event.target;
     const texto = input.value;
     const cursor = input.selectionStart ?? texto.length;
-    const proximo = valorDaMoedaDigitada(texto);
+    const inputEvent = event.nativeEvent as InputEvent;
+    const separadorDigitado = /[,.]$/.test(texto) || (texto.match(/,/g) ?? []).length > 1;
+    let textoParaInterpretar = texto;
+
+    // No campo zerado, o navegador pode inserir o primeiro dígito junto a
+    // "0,00" no ponto clicado (inclusive nos centavos). Trate esse dígito como
+    // o início dos reais, mas preserve uma vírgula digitada explicitamente.
+    if (primeiraEntradaReaisRef.current && zerado && inputEvent.inputType === 'insertText' && /^\d$/.test(inputEvent.data ?? '')) {
+      textoParaInterpretar = inputEvent.data!;
+    } else if (separadorDigitado) {
+      primeiraEntradaReaisRef.current = false;
+    }
+
+    const proximo = valorDaMoedaDigitada(textoParaInterpretar);
     const formatado = moedaDoValor(proximo);
+    const separadorExplicito = separadorDigitado && textoParaInterpretar === texto;
 
     // A vírgula (ou o ponto) digitada não é um dígito: serve apenas para levar o
     // cursor até os centavos, evitando que os números seguintes entrem nos reais.
-    const separadorDigitado = /[,.]$/.test(texto) || (texto.match(/,/g) ?? []).length > 1;
-
-    if (separadorDigitado) {
+    if (separadorExplicito) {
       const inicioDosCentavos = Math.min(formatado.length, posicaoFimDosReais(formatado) + 1);
       posicaoRef.current = { texto: formatado, posicao: inicioDosCentavos };
+    } else if (textoParaInterpretar !== texto) {
+      posicaoRef.current = { texto: formatado, posicao: posicaoFimDosReais(formatado) };
     } else {
       const estavaNosReais = cursor <= posicaoFimDosReais(texto);
       const digitosAntes = contarDigitosAntes(texto, cursor);
@@ -97,7 +113,8 @@ export function MoneyInput({
         : { texto: formatado, posicao: posicaoAposDigitos(formatado, digitosAntes) };
     }
 
-    if (permiteVazio && moedaDigitadaZerada(texto)) onChange('');
+    if (Number(proximo) !== 0) primeiraEntradaReaisRef.current = false;
+    if (permiteVazio && moedaDigitadaZerada(textoParaInterpretar)) onChange('');
     else onChange(proximo);
   };
 

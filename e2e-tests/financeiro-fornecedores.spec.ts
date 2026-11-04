@@ -31,8 +31,12 @@ test('gestor cria, edita e exclui um fornecedor', async ({ page }) => {
   // Criar
   await page.getByRole('button', { name: 'Novo Fornecedor' }).click();
   const dialog = page.getByRole('dialog');
+  await page.route('**/ws/01310100/json/', (route) => route.fulfill({ json: { logradouro: 'Avenida Paulista', bairro: 'Bela Vista', localidade: 'São Paulo', uf: 'SP' } }));
   await dialog.locator('#supplier-name').fill(nome);
   await dialog.locator('#supplier-document').fill('12345678909');
+  await dialog.locator('#supplier-cep').fill('01310-100');
+  await dialog.locator('#supplier-cep').press('Tab');
+  await expect(dialog.locator('#supplier-street')).toHaveValue('Avenida Paulista');
   await dialog.getByRole('button', { name: 'Salvar' }).click();
 
   const linha = page.getByRole('row').filter({ hasText: nome });

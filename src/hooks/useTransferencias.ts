@@ -17,6 +17,7 @@ export function useTransferencias(pageFilters?: TransferenciaPageFilters) {
   const invalidarDadosFinanceiros = () => Promise.all([
     queryClient.invalidateQueries({ queryKey: ['transferencias-financeiras'] }),
     queryClient.invalidateQueries({ queryKey: ['saldos-contas'] }),
+    queryClient.invalidateQueries({ queryKey: ['saldos-contas-periodo'] }),
     queryClient.invalidateQueries({ queryKey: ['lancamentos-financeiros'] }),
   ]);
   const criarMutation = useMutation({ mutationFn: transferenciaService.create, onSuccess: invalidarDadosFinanceiros });
