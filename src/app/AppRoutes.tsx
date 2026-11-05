@@ -23,6 +23,7 @@ import Shifts from '../pages/Shifts';
 import Migration from '../pages/Migration';
 import Documentos from '../pages/Documentos';
 import FinanceiroBancos from '../pages/FinanceiroBancos';
+import FinanceiroTransferencias from '../pages/FinanceiroTransferencias';
 import FinanceiroCategorias from '../pages/FinanceiroCategorias';
 import FinanceiroFornecedores from '../pages/FinanceiroFornecedores';
 import FinanceiroLancamentos from '../pages/FinanceiroLancamentos';
@@ -171,6 +172,7 @@ export function AppRoutes() {
             <Route path="documentos" element={<AdminPage><DocumentosAccessRoute /></AdminPage>} />
             <Route path="migracao" element={<AdminPage><MigrationAccessRoute /></AdminPage>} />
             <Route path="financeiro/bancos" element={<FinanceiroAccessRoute><FinanceiroBancos /></FinanceiroAccessRoute>} />
+            <Route path="financeiro/transferencias" element={<FinanceiroAccessRoute><FinanceiroTransferencias /></FinanceiroAccessRoute>} />
             <Route path="financeiro/lancamentos" element={<FinanceiroAccessRoute><FinanceiroLancamentos /></FinanceiroAccessRoute>} />
             <Route path="financeiro/vendas" element={<FinanceiroAccessRoute><FinanceiroVendas /></FinanceiroAccessRoute>} />
             <Route path="financeiro/recebimentos" element={<FinanceiroAccessRoute><FinanceiroRecebimentos /></FinanceiroAccessRoute>} />
