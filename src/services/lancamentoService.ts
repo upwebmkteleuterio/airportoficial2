@@ -70,7 +70,7 @@ export const lancamentoService = {
     const pageSize = Math.max(1, Math.floor(filtros.pageSize));
     const inicio = (page - 1) * pageSize;
     let query = supabase.from('lancamentos_financeiros')
-      .select('*, categoria:categorias_financeiras(id,nome,tipo), banco:bancos(id,nome,tipo)', { count: 'exact' })
+      .select('*, categoria:categorias_financeiras(id,nome,tipo), banco:bancos(id,nome,tipo), venda:vendas(id,condicao,forma_pagamento,referencia_transacao,cartao_ultimos_digitos,observacoes)', { count: 'exact' })
       .eq('status', filtros.status ?? 'EFETIVADO')
       .order('data_efetivacao', { ascending: false })
       .order('created_at', { ascending: false })
@@ -127,6 +127,13 @@ export const lancamentoService = {
   delete: async (id: string): Promise<void> => {
     const { error } = await supabase.from('lancamentos_financeiros').delete().eq('id', id);
     if (error) throw serviceError('Não foi possível excluir o lançamento financeiro', error);
+  },
+
+  getTransferenciaLegs: async (transferenciaId: string): Promise<{ id: string; tipo: TipoLancamento; banco: { id: string; nome: string } | null }[]> => {
+    const { data, error } = await supabase.from('lancamentos_financeiros')
+      .select('id, tipo, banco:bancos(id,nome)').eq('transferencia_id', transferenciaId);
+    if (error) throw serviceError('Não foi possível carregar as contas da transferência', error);
+    return (data ?? []) as unknown as { id: string; tipo: TipoLancamento; banco: { id: string; nome: string } | null }[];
   },
 
   getResumoMensal: async (filtros: { bancoId?: string; ano?: number }): Promise<ResumoFinanceiroMensal[]> => {

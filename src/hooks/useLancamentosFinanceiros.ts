@@ -1,6 +1,14 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { lancamentoService, type LancamentoFiltros } from '../services/lancamentoService';
 
+export function useTransferenciaLegs(transferenciaId: string | null) {
+  return useQuery({
+    queryKey: ['transferencia-legs', transferenciaId],
+    queryFn: () => lancamentoService.getTransferenciaLegs(transferenciaId as string),
+    enabled: Boolean(transferenciaId),
+  });
+}
+
 export function useLancamentosFinanceiros(filtros: LancamentoFiltros) {
   const queryClient = useQueryClient();
   const lancamentosQuery = useQuery({
