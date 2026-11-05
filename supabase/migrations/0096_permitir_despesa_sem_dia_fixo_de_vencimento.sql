@@ -1,0 +1,1 @@
+ALTER TABLE public.programacoes_saidas ALTER COLUMN dia_vencimento DROP NOT NULL

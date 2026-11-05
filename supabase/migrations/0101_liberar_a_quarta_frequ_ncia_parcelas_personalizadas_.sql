@@ -1,0 +1,1 @@
+ALTER TABLE public.programacoes_saidas ADD CONSTRAINT programacoes_saidas_frequencia_check CHECK (frequencia = ANY (ARRAY['MENSAL_CONTINUA'::text, 'AVULSA'::text, 'REPETICAO_FINITA'::text, 'PARCELAS_PERSONALIZADAS'::text]))

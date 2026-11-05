@@ -167,15 +167,34 @@ export interface ParcelaRecebimento extends LancamentoFinanceiro {
   venda: Venda | null;
 }
 
-export type TipoFrequenciaProgramacao = 'MENSAL_CONTINUA' | 'AVULSA' | 'REPETICAO_FINITA';
+export type TipoFrequenciaProgramacao = 'MENSAL_CONTINUA' | 'AVULSA' | 'REPETICAO_FINITA' | 'PARCELAS_PERSONALIZADAS';
+
+export interface ParcelaPersonalizadaInput {
+  data: string;
+  valor: string;
+}
+
+export interface ParcelaPersonalizadaEditavel {
+  data: string;
+  valor: number;
+}
+
+export interface ParcelasPersonalizadasEditor {
+  parcelas: ParcelaPersonalizadaEditavel[];
+  pagas: number;
+  valorPago: number;
+  dataMaisAntigaPaga: string | null;
+}
 
 export interface ProgramacaoSaida {
   id: string;
   descricao: string;
   frequencia: TipoFrequenciaProgramacao;
-  dia_vencimento: number;
+  dia_vencimento: number | null;
   data_inicio: string;
   repeticoes: number | null;
+  total_parcelas: number | null;
+  cancelada: boolean;
   valor_previsto: number | null;
   categoria_id: string;
   banco_id: string;

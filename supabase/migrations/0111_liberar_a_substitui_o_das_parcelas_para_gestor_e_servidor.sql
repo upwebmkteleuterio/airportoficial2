@@ -1,0 +1,1 @@
+GRANT EXECUTE ON FUNCTION public.fn_substituir_parcelas_personalizadas(text, jsonb) TO authenticated, service_role

@@ -1,0 +1,1 @@
+ALTER TABLE public.programacoes_saidas ADD CONSTRAINT programacoes_saidas_dia_por_frequencia_check CHECK ((frequencia = 'PARCELAS_PERSONALIZADAS' AND dia_vencimento IS NULL) OR (frequencia <> 'PARCELAS_PERSONALIZADAS' AND dia_vencimento IS NOT NULL))

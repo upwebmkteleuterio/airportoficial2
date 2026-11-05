@@ -1,0 +1,1 @@
+GRANT EXECUTE ON FUNCTION public.fn_excluir_programacao_saida(text) TO authenticated, service_role

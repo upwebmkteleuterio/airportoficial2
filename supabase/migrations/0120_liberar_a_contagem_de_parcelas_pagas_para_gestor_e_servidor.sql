@@ -1,0 +1,1 @@
+GRANT EXECUTE ON FUNCTION public.fn_programacoes_saida_pagas(text[]) TO authenticated, service_role

@@ -9,6 +9,11 @@ interface ConfirmDeleteModalProps {
   itemName?: string;
   isPending?: boolean;
   variant?: 'delete' | 'cancel' | 'launch';
+  descriptionOverride?: string;
+  titleOverride?: string;
+  cancelLabelOverride?: string;
+  confirmLabelOverride?: string;
+  pendingLabelOverride?: string;
 }
 
 export function ConfirmDeleteModal({
@@ -18,6 +23,11 @@ export function ConfirmDeleteModal({
   itemName,
   isPending = false,
   variant = 'delete',
+  descriptionOverride,
+  titleOverride,
+  cancelLabelOverride,
+  confirmLabelOverride,
+  pendingLabelOverride,
 }: ConfirmDeleteModalProps) {
   const cancelButtonRef = useRef<HTMLButtonElement>(null);
   const isCancellation = variant === 'cancel';
@@ -37,23 +47,23 @@ export function ConfirmDeleteModal({
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, isPending, onClose]);
 
-  const description = isLaunch
+  const description = descriptionOverride ?? (isLaunch
     ? (itemName ? `Tem certeza de que deseja marcar as notas da turma “${itemName}” como lançadas? A data de hoje será registrada.` : 'Tem certeza de que deseja marcar as notas desta turma como lançadas? A data de hoje será registrada.')
     : isCancellation
       ? (itemName ? `Tem certeza de que deseja cancelar “${itemName}”? A turma permanecerá registrada e poderá ser consultada.` : 'Tem certeza de que deseja cancelar esta turma? O registro permanecerá disponível para consulta.')
       : (itemName
         ? `Tem certeza de que deseja excluir “${itemName}”? Esta ação não pode ser desfeita.`
-        : 'Tem certeza de que deseja excluir este item? Esta ação não pode ser desfeita.');
+        : 'Tem certeza de que deseja excluir este item? Esta ação não pode ser desfeita.'));
 
-  const title = isLaunch ? 'Confirmar lançamento' : isCancellation ? 'Confirmar cancelamento' : 'Confirmar exclusão';
+  const title = titleOverride ?? (isLaunch ? 'Confirmar lançamento' : isCancellation ? 'Confirmar cancelamento' : 'Confirmar exclusão');
   const closeLabel = isLaunch
     ? 'Fechar confirmação de lançamento'
     : isCancellation
       ? 'Fechar confirmação de cancelamento'
       : 'Fechar confirmação de exclusão';
-  const cancelLabel = isLaunch ? 'Manter como não lançada' : isCancellation ? 'Manter turma' : 'Cancelar';
-  const actionLabel = isLaunch ? 'Confirmar lançamento' : isCancellation ? 'Confirmar cancelamento da turma' : 'Confirmar exclusão';
-  const pendingLabel = isLaunch ? 'Salvando...' : isCancellation ? 'Cancelando...' : 'Excluindo...';
+  const cancelLabel = cancelLabelOverride ?? (isLaunch ? 'Manter como não lançada' : isCancellation ? 'Manter turma' : 'Cancelar');
+  const actionLabel = confirmLabelOverride ?? (isLaunch ? 'Confirmar lançamento' : isCancellation ? 'Confirmar cancelamento da turma' : 'Confirmar exclusão');
+  const pendingLabel = pendingLabelOverride ?? (isLaunch ? 'Salvando...' : isCancellation ? 'Cancelando...' : 'Excluindo...');
 
   return (
     <Modal isOpen={isOpen} onClose={() => !isPending && onClose()}>
@@ -107,7 +117,7 @@ export function ConfirmDeleteModal({
             className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white transition-colors focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 ${isLaunch ? 'bg-emerald-600 hover:bg-emerald-700 focus-visible:ring-2 focus-visible:ring-emerald-400' : 'bg-red-600 hover:bg-red-700 focus-visible:ring-2 focus-visible:ring-red-400'}`}
           >
             {isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : isLaunch ? <CheckCircle2 className="h-4 w-4" aria-hidden="true" /> : isCancellation ? <Ban className="h-4 w-4" aria-hidden="true" /> : <Trash2 className="h-4 w-4" aria-hidden="true" />}
-            {isPending ? pendingLabel : isLaunch ? 'Confirmar lançamento' : isCancellation ? 'Cancelar turma' : 'Excluir'}
+            {isPending ? pendingLabel : confirmLabelOverride ?? (isLaunch ? 'Confirmar lançamento' : isCancellation ? 'Cancelar turma' : 'Excluir')}
           </button>
         </div>
       </div>

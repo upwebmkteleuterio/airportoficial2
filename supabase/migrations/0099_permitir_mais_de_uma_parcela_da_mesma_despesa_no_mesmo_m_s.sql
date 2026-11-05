@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS public.lancamentos_financeiros_programacao_mes_idx

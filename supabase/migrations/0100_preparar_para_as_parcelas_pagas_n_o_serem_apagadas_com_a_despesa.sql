@@ -1,0 +1,1 @@
+ALTER TABLE public.lancamentos_financeiros DROP CONSTRAINT lancamentos_financeiros_programacao_id_fkey

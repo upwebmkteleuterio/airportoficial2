@@ -1,0 +1,1 @@
+ALTER TABLE public.lancamentos_financeiros ADD CONSTRAINT lancamentos_financeiros_programacao_id_fkey FOREIGN KEY (programacao_id) REFERENCES public.programacoes_saidas(id) ON DELETE SET NULL

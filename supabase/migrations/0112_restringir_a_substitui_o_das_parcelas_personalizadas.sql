@@ -1,0 +1,1 @@
+REVOKE ALL ON FUNCTION public.fn_substituir_parcelas_personalizadas(text, jsonb) FROM PUBLIC

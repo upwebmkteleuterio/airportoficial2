@@ -1,0 +1,1 @@
+ALTER TABLE public.programacoes_saidas ADD CONSTRAINT programacoes_saidas_total_parcelas_check CHECK ((frequencia = 'MENSAL_CONTINUA' AND total_parcelas IS NULL) OR (frequencia = 'AVULSA' AND total_parcelas = 1) OR (frequencia = 'REPETICAO_FINITA' AND total_parcelas = repeticoes) OR (frequencia = 'PARCELAS_PERSONALIZADAS' AND total_parcelas IS NOT NULL AND total_parcelas >= 1))

@@ -1,0 +1,1 @@
+ALTER TABLE public.programacoes_saidas ADD COLUMN cancelada boolean NOT NULL DEFAULT false

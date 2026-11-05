@@ -1,0 +1,1 @@
+REVOKE ALL ON FUNCTION public.fn_cancelar_programacao_saida(text) FROM PUBLIC

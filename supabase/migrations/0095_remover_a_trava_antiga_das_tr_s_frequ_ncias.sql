@@ -1,0 +1,1 @@
+ALTER TABLE public.programacoes_saidas DROP CONSTRAINT IF EXISTS programacoes_saidas_frequencia_check

@@ -66,3 +66,50 @@ test('gestor programa uma despesa, gera a previsão do mês e registra o pagamen
 
   await expect(linhaParcela).toHaveCount(0, { timeout: T });
 });
+
+test('gestor cadastra duas parcelas personalizadas em dias diferentes do mesmo mês', async ({ page }) => {
+  test.setTimeout(120000);
+  const T = 20000;
+  const conta = await createDisposableConta(user.marker);
+  const categoria = await createDisposableCategoria(user.marker, 'SAIDA');
+  const descricao = `Parcelas próprias ${user.marker}`;
+  const proximoMes = new Date();
+  proximoMes.setDate(1);
+  proximoMes.setMonth(proximoMes.getMonth() + 1);
+  const mes = `${proximoMes.getFullYear()}-${String(proximoMes.getMonth() + 1).padStart(2, '0')}`;
+  const primeiraData = `${mes}-05`;
+  const segundaData = `${mes}-18`;
+
+  await signInAs(page, user);
+  await page.goto('/financeiro/despesas', { timeout: T });
+  await page.getByTestId('nova-despesa-button').click({ timeout: T });
+  const dialog = page.getByRole('dialog');
+  await dialog.locator('#despesa-descricao').fill(descricao);
+  await dialog.getByRole('radio', { name: /Parcelas personalizadas/ }).check();
+  await expect(dialog.locator('#despesa-dia-vencimento')).toHaveCount(0);
+  await expect(dialog.locator('#despesa-data-inicio')).toHaveCount(0);
+  await dialog.locator('#despesa-parcela-data-0').fill(primeiraData);
+  await fillMoneyInput(dialog.locator('#despesa-parcela-valor-0'), '125');
+  await dialog.getByRole('button', { name: 'Adicionar parcela' }).click();
+  await dialog.locator('#despesa-parcela-data-1').fill(segundaData);
+  await fillMoneyInput(dialog.locator('#despesa-parcela-valor-1'), '275');
+  await dialog.locator('#despesa-categoria').selectOption({ label: categoria });
+  await dialog.locator('#despesa-conta').selectOption({ label: conta.nome });
+  await expect(dialog.getByText('Valor previsto total: R$ 400,00')).toBeVisible();
+  await dialog.getByRole('button', { name: 'Salvar' }).click();
+
+  await page.getByRole('tab', { name: /Despesas com término/ }).click();
+  const linhaDespesa = page.getByRole('row').filter({ hasText: descricao });
+  await expect(linhaDespesa).toContainText('Parcelas personalizadas');
+  await expect(linhaDespesa).toContainText('Datas próprias');
+
+  await page.goto('/financeiro/contas-a-pagar', { timeout: T });
+  await page.getByLabel('Mês').fill(mes);
+  await expect(page.getByText(/Exibindo/)).toBeVisible({ timeout: T });
+  const parcelas = page.getByRole('row').filter({ hasText: descricao });
+  await expect(parcelas).toHaveCount(2, { timeout: T });
+  await expect(parcelas.nth(0)).toContainText(`05/${mes.slice(5)}/${mes.slice(0, 4)}`);
+  await expect(parcelas.nth(0)).toContainText(/R\$\s*125,00/);
+  await expect(parcelas.nth(1)).toContainText(`18/${mes.slice(5)}/${mes.slice(0, 4)}`);
+  await expect(parcelas.nth(1)).toContainText(/R\$\s*275,00/);
+});

@@ -1,0 +1,1 @@
+REVOKE ALL ON FUNCTION public.fn_programacoes_saida_pagas(text[]) FROM PUBLIC

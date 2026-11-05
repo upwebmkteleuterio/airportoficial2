@@ -1,0 +1,1 @@
+REVOKE ALL ON FUNCTION public.fn_definir_programacao_saida_ativa(text, boolean) FROM PUBLIC
