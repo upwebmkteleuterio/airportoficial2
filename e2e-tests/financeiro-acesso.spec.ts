@@ -41,6 +41,7 @@ test('gestor abre as telas financeiras pelo menu lateral', async ({ page }) => {
   await abrir('financeiro-bancos', '/financeiro/bancos', 'Bancos e Contas');
   await abrir('financeiro-categorias', '/financeiro/categorias', 'Categorias Financeiras');
   await abrir('financeiro-fornecedores', '/financeiro/fornecedores', 'Fornecedores');
+  await abrir('financeiro-transferencias', '/financeiro/transferencias', 'Transferências entre contas');
 });
 
 test('aluno não tem acesso ao financeiro', async ({ page }) => {

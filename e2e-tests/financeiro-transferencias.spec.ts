@@ -32,10 +32,10 @@ test('gestor cria, edita e exclui uma transferência entre contas', async ({ pag
   let transferenciaCriada = false;
 
   await signInAs(page, user);
-  await page.goto('/financeiro/bancos', { timeout: T });
+  await page.goto('/financeiro/transferencias', { timeout: T });
 
-  // Se a tela de contas não aparecer, a mensagem de falha mostra a rota atual e
-  // o conteúdo real da página, em vez de apenas dizer que o botão não existe.
+  // Se a tela de transferências não aparecer, a mensagem de falha mostra a rota
+  // atual e o conteúdo real da página, em vez de apenas dizer que o botão não existe.
   await expect
     .poll(
       async () => {
@@ -43,13 +43,22 @@ test('gestor cria, edita e exclui uma transferência entre contas', async ({ pag
         const conteudo = (await page.locator('body').innerText()).replace(/\s+/g, ' ').slice(0, 1500);
         return `[${caminho}] ${conteudo}`;
       },
-      { timeout: T, message: 'A tela de contas não renderizou' },
+      { timeout: T, message: 'A tela de transferências não renderizou' },
     )
-    .toContain('Bancos e Contas');
-  await expect(page.getByText(/Exibindo/).nth(1)).toBeVisible({ timeout: T });
+    .toContain('Transferências entre contas');
+  await expect(page.getByText(/Exibindo/).first()).toBeVisible({ timeout: T });
 
-  // A linha da transferência traz as duas contas na mesma linha, o que a
-  // distingue das linhas da tabela de contas.
+  // O filtro abre no mês atual e pode ser personalizado com um intervalo de datas.
+  const hoje = new Date();
+  const mesAtual = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
+  const filtroMes = page.locator('#transferencia-mes');
+  await expect(filtroMes).toHaveValue(mesAtual, { timeout: T });
+  await page.getByTestId('transferencia-personalizar-button').click({ timeout: T });
+  await expect(page.locator('#transferencia-date-from')).toHaveValue(`${mesAtual}-01`, { timeout: T });
+  await page.getByTestId('transferencia-voltar-mes-button').click({ timeout: T });
+  await expect(filtroMes).toHaveValue(mesAtual, { timeout: T });
+
+  // A linha da transferência traz as duas contas na mesma linha.
   const linha = page
     .getByRole('row')
     .filter({ hasText: origem.nome })
@@ -57,7 +66,7 @@ test('gestor cria, edita e exclui uma transferência entre contas', async ({ pag
 
   try {
     // Criar
-    await page.getByTestId('transferir-entre-contas-button').click({ timeout: T });
+    await page.getByTestId('nova-transferencia-button').click({ timeout: T });
     const dialog = page.getByRole('dialog');
     await dialog.getByTestId('transfer-origem').selectOption(origem.id, { timeout: T });
     await dialog.getByTestId('transfer-destino').selectOption(destino.id, { timeout: T });

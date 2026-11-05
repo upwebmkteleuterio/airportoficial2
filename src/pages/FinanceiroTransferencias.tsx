@@ -22,6 +22,18 @@ const inputClass = `w-full rounded border border-gray-300 bg-white px-3 py-2 tex
 const labelClass = 'mb-1 block text-xs font-bold uppercase text-gray-700 dark:text-slate-300';
 
 type TransferenciaForm = { origem_id: string; destino_id: string; valor: string; data: string; observacoes: string };
+type ModoPeriodo = 'mes' | 'personalizado';
+
+function mesAtual(): string {
+  const data = new Date();
+  return `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function intervaloDoMes(mes: string): { inicio: string; fim: string } {
+  const [ano, numeroMes] = mes.split('-').map(Number);
+  const ultimoDia = new Date(ano, numeroMes, 0).getDate();
+  return { inicio: `${mes}-01`, fim: `${mes}-${String(ultimoDia).padStart(2, '0')}` };
+}
 
 function dataLocalHoje(): string {
   const data = new Date();
@@ -41,6 +53,8 @@ function formatarData(value: string): string {
 
 export default function FinanceiroTransferencias() {
   const [page, setPage] = useState(1);
+  const [modo, setModo] = useState<ModoPeriodo>('mes');
+  const [mes, setMes] = useState(mesAtual);
   const [dateFrom, setDateFrom] = useState(primeiroDiaDoMes);
   const [dateTo, setDateTo] = useState(ultimoDiaDoMes);
   const [modalOpen, setModalOpen] = useState(false);
@@ -50,6 +64,9 @@ export default function FinanceiroTransferencias() {
   const [deleting, setDeleting] = useState<TransferenciaEntreContas | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
   const { contas, optionsTruncated } = useBancos();
+  // O período exibido é sempre o mês selecionado, a menos que o usuário opte
+  // por personalizar o intervalo com datas "De/Até".
+  const periodo = modo === 'personalizado' ? { inicio: dateFrom, fim: dateTo } : intervaloDoMes(mes);
   const {
     transferencias,
     total,
@@ -62,12 +79,12 @@ export default function FinanceiroTransferencias() {
     isCreating,
     isUpdating,
     isDeleting,
-  } = useTransferencias({ page, pageSize, dateFrom, dateTo });
+  } = useTransferencias({ page, pageSize, dateFrom: periodo.inicio, dateTo: periodo.fim });
   const queryClient = useQueryClient();
   const saving = isCreating || isUpdating;
   const contasAtivas = contas.filter((conta) => conta.ativo);
 
-  useEffect(() => setPage(1), [dateFrom, dateTo]);
+  useEffect(() => setPage(1), [periodo.inicio, periodo.fim]);
   useEffect(() => {
     if (!isLoading && page > 1 && transferencias.length === 0) setPage((current) => current - 1);
   }, [page, isLoading, transferencias.length]);
@@ -86,11 +103,15 @@ export default function FinanceiroTransferencias() {
   };
   const closeForm = () => { if (!saving) setModalOpen(false); };
 
-  const clearFilters = () => {
-    setDateFrom(primeiroDiaDoMes());
-    setDateTo(ultimoDiaDoMes());
-    setPage(1);
+  // Ao personalizar, o intervalo começa nas datas do mês que estava sendo visto.
+  const personalizarPeriodo = () => {
+    const mesSelecionado = intervaloDoMes(mes);
+    setDateFrom(mesSelecionado.inicio);
+    setDateTo(mesSelecionado.fim);
+    setModo('personalizado');
   };
+
+  const voltarParaMes = () => setModo('mes');
 
   const save = async (event: FormEvent) => {
     event.preventDefault();
@@ -147,9 +168,18 @@ export default function FinanceiroTransferencias() {
       <FinanceiroOptionsLimitWarning visible={optionsTruncated}/>
       <p className="flex items-start gap-2 rounded-xl border border-teal-100 bg-teal-50/60 p-3 text-xs text-teal-800 dark:border-teal-900/40 dark:bg-teal-950/20 dark:text-teal-200"><Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true"/>Cada transferência gera dois lançamentos efetivados: uma saída na conta de origem e uma entrada na conta de destino, na categoria de sistema “Transferência entre contas”.</p>
       <section aria-label="Filtros de transferências" className="grid grid-cols-1 gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-3 dark:border-slate-800 dark:bg-slate-900">
-        <div><label className={labelClass} htmlFor="transferencia-date-from">De</label><input id="transferencia-date-from" type="date" className={inputClass} value={dateFrom} onChange={(event) => setDateFrom(event.target.value || primeiroDiaDoMes())}/></div>
-        <div><label className={labelClass} htmlFor="transferencia-date-to">Até</label><input id="transferencia-date-to" type="date" className={inputClass} value={dateTo} onChange={(event) => setDateTo(event.target.value || ultimoDiaDoMes())}/></div>
-        <div className="flex items-end"><Button type="button" variant="secondary" onClick={clearFilters} className={`w-full py-2 ${focusClass}`}>Limpar filtros</Button></div>
+        {modo === 'mes' ? (
+          <>
+            <div><label className={labelClass} htmlFor="transferencia-mes">Mês</label><input id="transferencia-mes" type="month" className={inputClass} value={mes} onChange={(event) => setMes(event.target.value || mesAtual())}/></div>
+            <div className="flex items-end"><Button type="button" variant="secondary" data-testid="transferencia-personalizar-button" onClick={personalizarPeriodo} className={`w-full py-2 ${focusClass}`}>Personalizar período</Button></div>
+          </>
+        ) : (
+          <>
+            <div><label className={labelClass} htmlFor="transferencia-date-from">De</label><input id="transferencia-date-from" type="date" className={inputClass} value={dateFrom} onChange={(event) => setDateFrom(event.target.value || primeiroDiaDoMes())}/></div>
+            <div><label className={labelClass} htmlFor="transferencia-date-to">Até</label><input id="transferencia-date-to" type="date" className={inputClass} value={dateTo} onChange={(event) => setDateTo(event.target.value || ultimoDiaDoMes())}/></div>
+            <div className="flex items-end"><Button type="button" variant="secondary" data-testid="transferencia-voltar-mes-button" onClick={voltarParaMes} className={`w-full py-2 ${focusClass}`}>Voltar para mês</Button></div>
+          </>
+        )}
       </section>
       <QueryErrorState onRetry={() => void queryClient.invalidateQueries({ queryKey: ['transferencias-financeiras'] })} isRetrying={isFetching} isError={isError} isFetching={isFetching} isLoading={isLoading} message="Verifique sua conexão e tente novamente."/>
       <div className="flex min-h-[350px] flex-1 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
