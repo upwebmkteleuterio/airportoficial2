@@ -28,11 +28,14 @@ type TransferenciaPerna = {
   banco: { id: string; nome: string } | null;
 };
 
-async function carregarTransferencias(): Promise<TransferenciaEntreContas[]> {
+async function carregarTransferencias({ dateFrom, dateTo }: { dateFrom?: string; dateTo?: string } = {}): Promise<TransferenciaEntreContas[]> {
   const pageSize = FINANCEIRO_OPTIONS_LIMIT;
-  const primeiroLote = await supabase.from('lancamentos_financeiros')
+  let primeiroLoteQuery = supabase.from('lancamentos_financeiros')
     .select('transferencia_id,tipo,valor,data_efetivacao,observacoes,banco_id,banco:bancos(id,nome)', { count: 'exact' })
-    .not('transferencia_id', 'is', null)
+    .not('transferencia_id', 'is', null);
+  if (dateFrom) primeiroLoteQuery = primeiroLoteQuery.gte('data_efetivacao', dateFrom);
+  if (dateTo) primeiroLoteQuery = primeiroLoteQuery.lte('data_efetivacao', dateTo);
+  const primeiroLote = await primeiroLoteQuery
     .order('data_efetivacao', { ascending: false })
     .range(0, pageSize - 1);
   if (primeiroLote.error) throw serviceError('Não foi possível carregar as transferências entre contas', primeiroLote.error);
@@ -40,9 +43,12 @@ async function carregarTransferencias(): Promise<TransferenciaEntreContas[]> {
   const linhas = [...(primeiroLote.data ?? [])];
   const totalLinhas = primeiroLote.count ?? linhas.length;
   for (let offset = pageSize; offset < totalLinhas; offset += pageSize) {
-    const { data, error } = await supabase.from('lancamentos_financeiros')
+    let loteQuery = supabase.from('lancamentos_financeiros')
       .select('transferencia_id,tipo,valor,data_efetivacao,observacoes,banco_id,banco:bancos(id,nome)', { count: 'exact' })
-      .not('transferencia_id', 'is', null)
+      .not('transferencia_id', 'is', null);
+    if (dateFrom) loteQuery = loteQuery.gte('data_efetivacao', dateFrom);
+    if (dateTo) loteQuery = loteQuery.lte('data_efetivacao', dateTo);
+    const { data, error } = await loteQuery
       .order('data_efetivacao', { ascending: false })
       .range(offset, offset + pageSize - 1);
     if (error) throw serviceError('Não foi possível carregar as transferências entre contas', error);
@@ -78,10 +84,10 @@ async function carregarTransferencias(): Promise<TransferenciaEntreContas[]> {
 export const transferenciaService = {
   getAll: carregarTransferencias,
 
-  getPage: async ({ page, pageSize }: { page: number; pageSize: number }): Promise<{ data: TransferenciaEntreContas[]; total: number }> => {
+  getPage: async ({ page, pageSize, dateFrom, dateTo }: { page: number; pageSize: number; dateFrom?: string; dateTo?: string }): Promise<{ data: TransferenciaEntreContas[]; total: number }> => {
     const safePage = Math.max(1, Math.floor(page));
     const safePageSize = Math.max(1, Math.min(FINANCEIRO_OPTIONS_LIMIT, Math.floor(pageSize)));
-    const transferencias = await carregarTransferencias();
+    const transferencias = await carregarTransferencias({ dateFrom, dateTo });
     const start = (safePage - 1) * safePageSize;
     return { data: transferencias.slice(start, start + safePageSize), total: transferencias.length };
   },

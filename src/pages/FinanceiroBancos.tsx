@@ -15,6 +15,7 @@ import { RowActionMenu } from '../components/ui/RowActionMenu';
 import { PaginationFooter } from '../components/ui/PaginationFooter';
 import { MoneyInput } from '../components/ui/MoneyInput';
 import { FinanceiroOptionsLimitWarning } from '../components/financeiro/FinanceiroOptionsLimitWarning';
+import { primeiroDiaDoMes, ultimoDiaDoMes } from '../utils/dateRange';
 
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const pageSize = 20;
@@ -50,6 +51,8 @@ export default function FinanceiroBancos() {
   const [page, setPage] = useState(1);
   const [mes, setMes] = useState(mesAtual);
   const [transferenciasPage, setTransferenciasPage] = useState(1);
+  const [transferenciaDateFrom, setTransferenciaDateFrom] = useState(primeiroDiaDoMes);
+  const [transferenciaDateTo, setTransferenciaDateTo] = useState(ultimoDiaDoMes);
   const { contas, contasPagina, total, optionsTruncated, createBanco, updateBanco, deleteBanco, isLoading, isFetching, isCreating, isUpdating, isDeleting, isError } = useBancos({ page, pageSize, mes });
   const {
     transferencias,
@@ -62,7 +65,7 @@ export default function FinanceiroBancos() {
     isCreating: criandoTransferencia,
     isUpdating: atualizandoTransferencia,
     isDeleting: excluindoTransferencia,
-  } = useTransferencias({ page: transferenciasPage, pageSize });
+  } = useTransferencias({ page: transferenciasPage, pageSize, dateFrom: transferenciaDateFrom, dateTo: transferenciaDateTo });
   const queryClient = useQueryClient();
   // Os dois hooks precisam ser chamados em todo render: combinar as chamadas com
   // `||` ignora a segunda enquanto a primeira for verdadeira, o que muda a
@@ -210,6 +213,7 @@ export default function FinanceiroBancos() {
   const busy = isDeleting;
 
   useEffect(() => setPage(1), [mes]);
+  useEffect(() => setTransferenciasPage(1), [transferenciaDateFrom, transferenciaDateTo]);
 
   useEffect(() => {
     if (!isLoading && page > 1 && contasPagina.length === 0) setPage((current) => current - 1);
@@ -250,6 +254,10 @@ export default function FinanceiroBancos() {
 
       <section className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="flex items-center gap-2 border-b border-gray-200 px-4 py-3 dark:border-slate-800"><ArrowRightLeft className="h-4 w-4 text-teal-600" aria-hidden="true"/><h3 className="font-bold text-slate-800 dark:text-slate-200">Transferências</h3></div>
+        <div className="grid grid-cols-1 gap-3 border-b border-gray-200 p-4 sm:grid-cols-2 dark:border-slate-800">
+          <div><label htmlFor="transferencia-date-from" className="mb-1 block text-xs font-bold uppercase text-gray-700 dark:text-slate-300">De</label><input id="transferencia-date-from" type="date" value={transferenciaDateFrom} onChange={(event) => setTransferenciaDateFrom(event.target.value || primeiroDiaDoMes())} className="w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white"/></div>
+          <div><label htmlFor="transferencia-date-to" className="mb-1 block text-xs font-bold uppercase text-gray-700 dark:text-slate-300">Até</label><input id="transferencia-date-to" type="date" value={transferenciaDateTo} onChange={(event) => setTransferenciaDateTo(event.target.value || ultimoDiaDoMes())} className="w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white"/></div>
+        </div>
         {transferenciaError && !transferenciaOpen && <p role="alert" className="m-4 rounded-lg bg-rose-50 p-3 text-sm text-rose-700 dark:bg-rose-950/30 dark:text-rose-300">{transferenciaError}</p>}
         {transferenciasError ? <p role="alert" className="p-6 text-center text-sm text-rose-600">Não foi possível carregar as transferências.</p> : transferenciasLoading ? <p className="p-6 text-center text-sm text-gray-500">Carregando transferências...</p> : transferencias.length === 0 ? <p className="p-6 text-center text-sm text-gray-500">Nenhuma transferência encontrada.</p> : <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-xs"><thead className="bg-slate-50 font-bold uppercase tracking-wider text-gray-500 dark:bg-slate-850 dark:text-slate-400"><tr><th className="px-3 py-3">Origem</th><th className="px-3 py-3">Destino</th><th className="px-3 py-3 text-right">Valor</th><th className="px-3 py-3">Data</th><th className="px-3 py-3">Observações</th><th className="px-3 py-3 text-center">Ações</th></tr></thead><tbody className="divide-y divide-gray-150 text-gray-700 dark:divide-slate-800 dark:text-slate-200">{transferencias.map((transferencia) => <tr key={transferencia.id} data-testid={`transferencia-row-${transferencia.id}`}><td className="px-3 py-3">{transferencia.conta_origem_nome}</td><td className="px-3 py-3">{transferencia.conta_destino_nome}</td><td className="px-3 py-3 text-right font-mono">{money.format(transferencia.valor)}</td><td className="px-3 py-3">{new Intl.DateTimeFormat('pt-BR').format(new Date(`${transferencia.data}T00:00:00`))}</td><td className="px-3 py-3">{transferencia.observacoes || '—'}</td><td className="px-3 py-3"><div className="flex justify-center gap-2"><Button variant="secondary" type="button" data-testid={`editar-transferencia-${transferencia.id}`} disabled={criandoTransferencia || atualizandoTransferencia || excluindoTransferencia} onClick={() => openTransferencia(transferencia)}>Editar</Button><Button variant="secondary" type="button" data-testid={`excluir-transferencia-${transferencia.id}`} disabled={criandoTransferencia || atualizandoTransferencia || excluindoTransferencia} onClick={() => setTransferenciaDeleting(transferencia)}>Excluir</Button></div></td></tr>)}</tbody></table></div>}
         <PaginationFooter page={transferenciasPage} pageSize={pageSize} total={totalTransferencias} onPageChange={setTransferenciasPage} itemLabel="transferências"/>

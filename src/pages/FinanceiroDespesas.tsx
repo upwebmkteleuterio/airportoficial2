@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { CalendarClock, Edit2, HelpCircle, Plus, Trash2, X } from 'lucide-react';
+import { CalendarClock, Edit2, HelpCircle, Plus, Search, Trash2, X } from 'lucide-react';
 import { FinanceiroOptionsLimitWarning } from '../components/financeiro/FinanceiroOptionsLimitWarning';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '../components/ui/Button';
@@ -17,6 +17,7 @@ import { useBancos } from '../hooks/useBancos';
 import { useCategoriasFinanceiras } from '../hooks/useCategoriasFinanceiras';
 import { useAlunosPorCpf, useParticipantesFinanceiros } from '../hooks/useParticipantesFinanceiros';
 import { useParcelasPersonalizadasEditor, useProgramacoesSaida } from '../hooks/useProgramacoesSaida';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { useUIStore } from '../store/uiStore';
 import type { VisaoDespesas } from '../services/programacaoSaidaService';
 import { rotuloDaVisao, visaoDaFrequencia } from '../utils/despesasVisao';
@@ -97,7 +98,11 @@ export default function FinanceiroDespesas() {
   const userLogged = useUIStore((state) => state.userLogged);
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
-  const { programacoes, totalProgramacoes, pagasPorProgramacao, contagens, isLoading, isFetching, isError, createProgramacao, updateProgramacao, replaceCustomParcels, definirProgramacaoAtiva, cancelarProgramacao, deleteProgramacao, isCreating, isUpdating, isChangingActive, isCancelling, isDeleting } = useProgramacoesSaida({ page, pageSize, visao: activeView });
+  const [searchInput, setSearchInput] = useState('');
+  const search = useDebouncedValue(searchInput).trim();
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const { programacoes, totalProgramacoes, pagasPorProgramacao, contagens, isLoading, isFetching, isError, createProgramacao, updateProgramacao, replaceCustomParcels, definirProgramacaoAtiva, cancelarProgramacao, deleteProgramacao, isCreating, isUpdating, isChangingActive, isCancelling, isDeleting } = useProgramacoesSaida({ page, pageSize, visao: activeView, search: search || undefined, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined });
   const { parcelasEditor, isLoadingParcelasEditor } = useParcelasPersonalizadasEditor(editing?.frequencia === 'PARCELAS_PERSONALIZADAS' ? editing.id : null);
   const { alunos: cpfAlunos, isLoading: cpfAlunosLoading } = useAlunosPorCpf(cpfSearch);
   const saving = isCreating || isUpdating;
@@ -112,7 +117,7 @@ export default function FinanceiroDespesas() {
     if (!isLoading && page > 1 && programacoes.length === 0) setPage((current) => current - 1);
   }, [page, isLoading, programacoes.length]);
 
-  useEffect(() => setPage(1), [activeView]);
+  useEffect(() => setPage(1), [activeView, search, dateFrom, dateTo]);
 
   useEffect(() => {
     if (form.frequencia === 'PARCELAS_PERSONALIZADAS' && parcelasEditor && editing?.frequencia === 'PARCELAS_PERSONALIZADAS') {
@@ -247,12 +252,24 @@ export default function FinanceiroDespesas() {
     const lastDate = parcelas[parcelas.length - 1]?.data || hojeLocal();
     setParcelas((current) => [...current, { data: dataMesSeguinte(lastDate), valor: '' }]);
   };
+  const clearFilters = () => {
+    setSearchInput('');
+    setDateFrom('');
+    setDateTo('');
+    setPage(1);
+  };
 
   return (
     <div className="flex-1 flex flex-col p-6 gap-6 overflow-y-auto">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><h2 className="font-display text-2xl md:text-3xl font-extrabold text-slate-900 dark:text-white">Despesas</h2><p className="mt-1 text-sm text-gray-500 dark:text-slate-400">Cadastre programações recorrentes ou avulsas para gerar os pagamentos previstos de cada mês.</p></div><div className="flex gap-2"><Button type="button" variant="secondary" onClick={() => setHelpOpen(true)} icon={<HelpCircle className="h-4 w-4" aria-hidden="true"/>} aria-label="Ajuda" className={focusClass}>Ajuda</Button><button type="button" data-testid="nova-despesa-button" onClick={() => openForm()} className={`flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 dark:bg-teal-600 dark:hover:bg-teal-500 ${focusClass}`}><Plus className="h-4 w-4" aria-hidden="true"/>Nova Despesa</button></div></div>
       {errorMessage && !modalOpen && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700 dark:bg-rose-950/30 dark:text-rose-300">{errorMessage}</p>}
       <FinanceiroOptionsLimitWarning visible={contasOptionsTruncated || categoriasOptionsTruncated || participantesOptionsTruncated}/>
+      <section aria-label="Filtros de despesas" className="grid grid-cols-1 gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-4 dark:border-slate-800 dark:bg-slate-900">
+        <div><label htmlFor="despesa-search" className={labelClass}>Busca</label><div className="relative"><Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" aria-hidden="true"/><input id="despesa-search" className={`${inputClass} pl-9`} placeholder="Descrição, participante ou documento" value={searchInput} onChange={(event) => setSearchInput(event.target.value)}/></div></div>
+        <div><label htmlFor="despesa-date-from" className={labelClass}>De</label><input id="despesa-date-from" type="date" className={inputClass} value={dateFrom} onChange={(event) => { setDateFrom(event.target.value); setPage(1); }}/></div>
+        <div><label htmlFor="despesa-date-to" className={labelClass}>Até</label><input id="despesa-date-to" type="date" className={inputClass} value={dateTo} onChange={(event) => { setDateTo(event.target.value); setPage(1); }}/></div>
+        <div className="flex items-end"><Button type="button" variant="secondary" onClick={clearFilters} className={`w-full py-2 ${focusClass}`}>Limpar filtros</Button></div>
+      </section>
       <QueryErrorState onRetry={() => { void queryClient.invalidateQueries({ queryKey: ['programacoes-saida'] }); void queryClient.invalidateQueries({ queryKey: ['programacoes-saida-contagens'] }); }} isRetrying={retrying} isError={isError} isFetching={isFetching} isLoading={isLoading} message="Verifique sua conexão e tente novamente."/>
       {statusMessage && <p role="status" className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">{statusMessage}</p>}
       <section className="flex min-h-[350px] flex-1 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">

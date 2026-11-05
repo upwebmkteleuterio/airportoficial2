@@ -36,6 +36,7 @@ import {
   Upload
 } from 'lucide-react';
 import { useDocuments } from '../hooks/useDocuments';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { useUsers } from '../hooks/useUsers';
 import { useCompanies } from '../hooks/useCompanies';
 import { useClasses } from '../hooks/useClasses';
@@ -70,6 +71,7 @@ export function CentralGed() {
 
   // Search and general filters
   const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearchQuery = useDebouncedValue(searchQuery);
   const [selectedIaFilter, setSelectedIaFilter] = useState<string>('todos');
   const [isFiltersModalOpen, setIsFiltersModalOpen] = useState(false);
   const [tempEmpresa, setTempEmpresa] = useState('todas');
@@ -93,7 +95,7 @@ export function CentralGed() {
     pageSize,
     role: UserRole.ALUNO,
     status: 'pendente',
-    search: searchQuery,
+    search: debouncedSearchQuery,
     empresaId: selectedEmpresa,
     turmaId: selectedTurma
   });
@@ -106,12 +108,12 @@ export function CentralGed() {
     refetch: retryDocuments
   } = useDocuments(pageUserIds);
   const b2bCountQuery = useQuery({
-    queryKey: ['users', 'count', 'b2b-pendente', { search: searchQuery, empresaId: selectedEmpresa, turmaId: selectedTurma }],
+    queryKey: ['users', 'count', 'b2b-pendente', { search: debouncedSearchQuery, empresaId: selectedEmpresa, turmaId: selectedTurma }],
     queryFn: () => userService.getCount({
       role: UserRole.ALUNO,
       status: 'pendente',
       origemCadastro: 'b2b',
-      search: searchQuery,
+      search: debouncedSearchQuery,
       empresaId: selectedEmpresa,
       turmaId: selectedTurma
     })
@@ -230,7 +232,7 @@ export function CentralGed() {
 
   useEffect(() => {
     setPage(1);
-  }, [searchQuery, selectedEmpresa, selectedTurma, selectedIaFilter]);
+  }, [debouncedSearchQuery, selectedEmpresa, selectedTurma, selectedIaFilter]);
 
   useEffect(() => {
     if (!isFetchingUsers && page > totalPages) setPage(totalPages);
@@ -471,6 +473,7 @@ export function CentralGed() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
           <input
             type="text"
+            aria-label="Buscar alunos ou documentos"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Buscar alunos ou documentos..."

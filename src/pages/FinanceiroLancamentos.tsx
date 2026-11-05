@@ -13,6 +13,8 @@ import { MoneyInput } from '../components/ui/MoneyInput';
 import { useBancos } from '../hooks/useBancos';
 import { useCategoriasFinanceiras } from '../hooks/useCategoriasFinanceiras';
 import { useLancamentosFinanceiros } from '../hooks/useLancamentosFinanceiros';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
+import { primeiroDiaDoMes, ultimoDiaDoMes } from '../utils/dateRange';
 import { useAlunosPorCpf, useParticipantesFinanceiros } from '../hooks/useParticipantesFinanceiros';
 import { useUIStore } from '../store/uiStore';
 import { FinanceiroOptionsLimitWarning } from '../components/financeiro/FinanceiroOptionsLimitWarning';
@@ -85,10 +87,10 @@ export default function FinanceiroLancamentos() {
   const [tipoFiltro, setTipoFiltro] = useState<TipoLancamento | ''>('');
   const [bancoId, setBancoId] = useState('');
   const [categoriaId, setCategoriaId] = useState('');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
-  const [search, setSearch] = useState('');
+  const [dateFrom, setDateFrom] = useState(primeiroDiaDoMes);
+  const [dateTo, setDateTo] = useState(ultimoDiaDoMes);
   const [searchInput, setSearchInput] = useState('');
+  const search = useDebouncedValue(searchInput).trim();
   const [editing, setEditing] = useState<LancamentoComRelacoes | null>(null);
   const [deleting, setDeleting] = useState<LancamentoComRelacoes | null>(null);
   const [form, setForm] = useState<LancamentoForm>(novoFormulario);
@@ -102,13 +104,7 @@ export default function FinanceiroLancamentos() {
   const queryClient = useQueryClient();
   const isRetrying = useIsFetching({ queryKey: ['lancamentos-financeiros'] }) > 0;
 
-  useEffect(() => {
-    const timeout = window.setTimeout(() => {
-      setSearch(searchInput.trim());
-      setPage(1);
-    }, 300);
-    return () => window.clearTimeout(timeout);
-  }, [searchInput]);
+  useEffect(() => setPage(1), [search]);
 
   useEffect(() => {
     if (!isLoading && page > 1 && lancamentos.length === 0) {
@@ -228,7 +224,7 @@ export default function FinanceiroLancamentos() {
   };
 
   const clearFilters = () => {
-    setTipoFiltro(''); setBancoId(''); setCategoriaId(''); setDateFrom(''); setDateTo(''); setSearch(''); setSearchInput(''); setPage(1);
+    setTipoFiltro(''); setBancoId(''); setCategoriaId(''); setDateFrom(primeiroDiaDoMes()); setDateTo(ultimoDiaDoMes()); setSearchInput(''); setPage(1);
   };
 
   return (
@@ -253,8 +249,8 @@ export default function FinanceiroLancamentos() {
         <div className="lg:col-span-2"><label className={labelClass} htmlFor="lancamento-search">Busca</label><div className="relative"><Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" aria-hidden="true"/><input id="lancamento-search" className={`${inputClass} pl-9`} placeholder="Descrição, participante ou documento" value={searchInput} onChange={(event) => setSearchInput(event.target.value)}/></div></div>
         <div><label className={labelClass} htmlFor="lancamento-filter-type">Tipo</label><select id="lancamento-filter-type" className={inputClass} value={tipoFiltro} onChange={(event) => { const value = event.target.value as TipoLancamento | ''; updateFilter((next) => { setTipoFiltro(next as TipoLancamento | ''); if (categoriaId && !categorias.some((item) => item.id === categoriaId && (!next || item.tipo === next))) setCategoriaId(''); })(value); }}><option value="">Todos</option><option value="ENTRADA">Entradas</option><option value="SAIDA">Saídas</option></select></div>
         <div><label className={labelClass} htmlFor="lancamento-filter-category">Categoria</label><select id="lancamento-filter-category" className={inputClass} value={categoriaId} onChange={(event) => updateFilter(setCategoriaId)(event.target.value)}><option value="">Todas</option>{tipoFiltro ? categoriasDisponiveisFiltro.map((item) => <option key={item.id} value={item.id}>{item.nome}{item.ativo ? '' : ' (inativa)'}</option>) : <><optgroup label="Entradas">{categorias.filter((item) => item.tipo === 'ENTRADA').map((item) => <option key={item.id} value={item.id}>{item.nome}{item.ativo ? '' : ' (inativa)'}</option>)}</optgroup><optgroup label="Saídas">{categorias.filter((item) => item.tipo === 'SAIDA').map((item) => <option key={item.id} value={item.id}>{item.nome}{item.ativo ? '' : ' (inativa)'}</option>)}</optgroup></>}</select></div>
-        <div><label className={labelClass} htmlFor="lancamento-date-from">De</label><input id="lancamento-date-from" type="date" className={inputClass} value={dateFrom} onChange={(event) => updateFilter(setDateFrom)(event.target.value)}/></div>
-        <div><label className={labelClass} htmlFor="lancamento-date-to">Até</label><input id="lancamento-date-to" type="date" className={inputClass} value={dateTo} onChange={(event) => updateFilter(setDateTo)(event.target.value)}/></div>
+        <div><label className={labelClass} htmlFor="lancamento-date-from">De</label><input id="lancamento-date-from" type="date" className={inputClass} value={dateFrom} onChange={(event) => updateFilter(setDateFrom)(event.target.value || primeiroDiaDoMes())}/></div>
+        <div><label className={labelClass} htmlFor="lancamento-date-to">Até</label><input id="lancamento-date-to" type="date" className={inputClass} value={dateTo} onChange={(event) => updateFilter(setDateTo)(event.target.value || ultimoDiaDoMes())}/></div>
         <div className="sm:col-span-2 lg:col-span-6"><Button type="button" variant="secondary" onClick={clearFilters} className={`py-2 ${focusClass}`}>Limpar filtros</Button></div>
       </section>
       <QueryErrorState onRetry={() => void queryClient.invalidateQueries({ queryKey: ['lancamentos-financeiros'] })} isRetrying={isRetrying} isError={isError} isFetching={isFetching} isLoading={isLoading} message="Verifique sua conexão e tente novamente."/>

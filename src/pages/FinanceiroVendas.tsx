@@ -20,6 +20,8 @@ import { useClasses } from '../hooks/useClasses';
 import { useCourses } from '../hooks/useCourses';
 import { useAlunosPorCpf, useParticipantesFinanceiros } from '../hooks/useParticipantesFinanceiros';
 import { useVendas, type VendaFiltros } from '../hooks/useVendas';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
+import { primeiroDiaDoMes, ultimoDiaDoMes } from '../utils/dateRange';
 import type { FormaPagamento, ParticipanteOpcao, TipoCondicaoVenda, TipoParticipanteVenda, VendaComRelacoes } from '../types/financeiro';
 
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -81,8 +83,10 @@ export default function FinanceiroVendas() {
   const { courses } = useCourses();
   const { classes } = useClasses();
   const [page, setPage] = useState(1);
-  const [search, setSearch] = useState('');
   const [searchInput, setSearchInput] = useState('');
+  const search = useDebouncedValue(searchInput).trim();
+  const [dateFrom, setDateFrom] = useState(primeiroDiaDoMes);
+  const [dateTo, setDateTo] = useState(ultimoDiaDoMes);
   const [filtroParticipante, setFiltroParticipante] = useState<VendaFiltros['participanteTipo']>();
   const [editing, setEditing] = useState<VendaComRelacoes | null>(null);
   const [deleting, setDeleting] = useState<VendaComRelacoes | null>(null);
@@ -95,7 +99,7 @@ export default function FinanceiroVendas() {
   const [receiptVendaId, setReceiptVendaId] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const documentTemplates = useDocumentTemplates();
-  const filtros = useMemo(() => ({ page, pageSize, search: search || undefined, participanteTipo: filtroParticipante }), [page, search, filtroParticipante]);
+  const filtros = useMemo(() => ({ page, pageSize, search: search || undefined, participanteTipo: filtroParticipante, dateFrom, dateTo }), [page, search, filtroParticipante, dateFrom, dateTo]);
   const { vendas, total, isLoading, isFetching, isError, saveVenda, isSaving, deleteVenda, isDeleting } = useVendas(filtros);
   const { alunos, isLoading: alunosLoading } = useAlunosPorCpf(cpfSearch);
   const queryClient = useQueryClient();
@@ -105,10 +109,7 @@ export default function FinanceiroVendas() {
   const selectedEmpresa = empresas.find((empresa) => empresa.id === form.empresaId);
   const saving = isSaving;
 
-  useEffect(() => {
-    const timeout = window.setTimeout(() => { setSearch(searchInput.trim()); setPage(1); }, 300);
-    return () => window.clearTimeout(timeout);
-  }, [searchInput]);
+  useEffect(() => setPage(1), [search]);
   useEffect(() => {
     if (!isLoading && page > 1 && vendas.length === 0) setPage((current) => current - 1);
   }, [page, isLoading, vendas.length]);
@@ -199,13 +200,20 @@ export default function FinanceiroVendas() {
     catch (error) { setDeleting(null); setErrorMessage(error instanceof Error ? error.message : 'Não foi possível excluir a venda.'); }
   };
   const openReceipt = (vendaId: string) => { setReceiptVendaId(vendaId); setReceiptOpen(true); };
+  const clearFilters = () => {
+    setSearchInput('');
+    setFiltroParticipante(undefined);
+    setDateFrom(primeiroDiaDoMes());
+    setDateTo(ultimoDiaDoMes());
+    setPage(1);
+  };
 
   return (
     <div className="flex-1 flex flex-col p-6 gap-6 overflow-y-auto">
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 shrink-0"><div><h2 className="font-display text-2xl md:text-3xl font-extrabold text-slate-900 dark:text-white">Vendas</h2><p className="mt-1 text-sm text-gray-500 dark:text-slate-400">Registre vendas e gere os recebimentos previstos conforme as parcelas.</p></div><div className="flex items-center gap-2"><Button variant="secondary" type="button" onClick={() => setHelpOpen(true)} icon={<HelpCircle className="h-4 w-4" aria-hidden="true"/>} aria-label="Ajuda" className={focusClass}>Ajuda</Button><button type="button" data-testid="nova-venda-button" onClick={() => openForm()} className={`flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 dark:bg-teal-600 dark:hover:bg-teal-500 ${focusClass}`}><Plus className="h-4 w-4" aria-hidden="true"/>Nova Venda</button></div></div>
       {errorMessage && !modalOpen && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700 dark:bg-rose-950/30 dark:text-rose-300">{errorMessage}</p>}
       <FinanceiroOptionsLimitWarning visible={contasOptionsTruncated || categoriasOptionsTruncated || participantesOptionsTruncated}/>
-      <section aria-label="Filtros de vendas" className="grid grid-cols-1 gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:grid-cols-3 dark:border-slate-800 dark:bg-slate-900"><div><label htmlFor="vendas-search" className={labelClass}>Busca</label><div className="relative"><Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" aria-hidden="true"/><input id="vendas-search" className={`${inputClass} pl-9`} placeholder="Participante, documento ou referência" value={searchInput} onChange={(event) => setSearchInput(event.target.value)}/></div></div><div><label htmlFor="vendas-participante-filter" className={labelClass}>Participante</label><select id="vendas-participante-filter" className={inputClass} value={filtroParticipante ?? ''} onChange={(event) => { setFiltroParticipante((event.target.value || undefined) as VendaFiltros['participanteTipo']); setPage(1); }}><option value="">Todos</option><option value="ALUNO">Aluno</option><option value="EMPRESA">Empresa</option></select></div></section>
+      <section aria-label="Filtros de vendas" className="grid grid-cols-1 gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-5 dark:border-slate-800 dark:bg-slate-900"><div><label htmlFor="vendas-search" className={labelClass}>Busca</label><div className="relative"><Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" aria-hidden="true"/><input id="vendas-search" className={`${inputClass} pl-9`} placeholder="Participante, documento ou referência" value={searchInput} onChange={(event) => setSearchInput(event.target.value)}/></div></div><div><label htmlFor="vendas-participante-filter" className={labelClass}>Participante</label><select id="vendas-participante-filter" className={inputClass} value={filtroParticipante ?? ''} onChange={(event) => { setFiltroParticipante((event.target.value || undefined) as VendaFiltros['participanteTipo']); setPage(1); }}><option value="">Todos</option><option value="ALUNO">Aluno</option><option value="EMPRESA">Empresa</option></select></div><div><label htmlFor="vendas-date-from" className={labelClass}>De</label><input id="vendas-date-from" type="date" className={inputClass} value={dateFrom} onChange={(event) => { setDateFrom(event.target.value || primeiroDiaDoMes()); setPage(1); }}/></div><div><label htmlFor="vendas-date-to" className={labelClass}>Até</label><input id="vendas-date-to" type="date" className={inputClass} value={dateTo} onChange={(event) => { setDateTo(event.target.value || ultimoDiaDoMes()); setPage(1); }}/></div><div className="flex items-end"><Button type="button" variant="secondary" onClick={clearFilters} className={`w-full py-2 ${focusClass}`}>Limpar filtros</Button></div></section>
       <QueryErrorState onRetry={() => void queryClient.invalidateQueries({ queryKey: ['vendas'] })} isRetrying={isRetrying} isError={isError} isFetching={isFetching} isLoading={isLoading} message="Verifique sua conexão e tente novamente."/>
       <div className="flex min-h-[350px] flex-1 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900"><div className="flex-1 overflow-x-auto overflow-y-auto custom-scrollbar"><table data-testid="vendas-table" className="w-full min-w-[1250px] table-fixed border-collapse text-left text-xs"><thead className="sticky top-0 z-10 border-b border-gray-200 bg-slate-50 font-bold uppercase tracking-wider text-gray-500 dark:border-slate-800 dark:bg-slate-850 dark:text-slate-400"><tr><th className="w-12 px-2 py-3 text-center" aria-label="Ações"></th><th className="w-[17%] px-3 py-3">Participante</th><th className="w-[12%] px-3 py-3">Curso</th><th className="w-[8%] px-3 py-3">Turma</th><th className="w-[9%] px-3 py-3">Condição</th><th className="w-[9%] px-3 py-3">Parcelas</th><th className="w-[11%] px-3 py-3 text-right">Total</th><th className="w-[13%] px-3 py-3">Referência</th><th className="w-[12%] px-3 py-3">Conta</th></tr></thead><tbody className="divide-y divide-gray-150 font-mono text-gray-700 dark:text-slate-200">
         {isLoading ? <TableSkeleton columns={9}/> : isError ? null : vendas.length === 0 ? <tr><td colSpan={9} className="px-4 py-12 text-center font-sans text-gray-500"><div className="flex flex-col items-center gap-2"><ShoppingCart className="h-7 w-7 text-teal-600" aria-hidden="true"/><p className="font-bold text-slate-800 dark:text-slate-200">Nenhuma venda encontrada</p><p className="text-xs">Ajuste a busca ou registre uma nova venda.</p></div></td></tr> : vendas.map((record) => { const totalVenda = record.parcelas.reduce((sum, parcela) => sum + Number(parcela.valor), 0); const settled = record.parcelas.filter((parcela) => parcela.status === 'EFETIVADO').length; return <tr key={record.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50"><td className="px-2 py-2 text-center"><RowActionMenu ariaLabel={`Ações para ${record.participante_nome}`} items={[{ label: 'Editar', icon: <Edit2 className="h-4 w-4" aria-hidden="true"/>, onClick: () => openForm(record) }, { label: 'Recibo', icon: <FileText className="h-4 w-4" aria-hidden="true"/>, onClick: () => openReceipt(record.id) }, { label: 'Excluir', icon: <Trash2 className="h-4 w-4" aria-hidden="true"/>, tone: 'danger', onClick: () => { setErrorMessage(''); setDeleting(record); } }]}/></td><td className="px-3 py-2 font-sans"><span className="block truncate font-semibold">{record.participante_nome}</span><span className="block truncate text-[10px] text-gray-500">{record.participante_documento ?? '—'}</span></td><td className="px-3 py-2 font-sans">{record.curso?.nome_curso ?? '—'}</td><td className="px-3 py-2">{record.turma?.id_interno_escola ?? '—'}</td><td className="px-3 py-2 font-sans">{record.condicao === 'A_VISTA' ? 'À vista' : 'Parcelado'}</td><td className="px-3 py-2">{settled}/{record.parcelas.length}</td><td className="px-3 py-2 text-right font-bold">{money.format(totalVenda)}</td><td className="px-3 py-2 font-sans">{record.referencia_transacao ?? '—'}{record.cartao_ultimos_digitos && <span className="block text-[10px] text-gray-500">•••• {record.cartao_ultimos_digitos}</span>}</td><td className="px-3 py-2 font-sans">{record.conta?.nome ?? '—'}</td></tr>; })}

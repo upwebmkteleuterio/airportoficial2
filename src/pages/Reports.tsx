@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { useUIStore } from '../store/uiStore';
 import { useAudit } from '../hooks/useAudit';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { useUsers } from '../hooks/useUsers';
 import { documentService } from '../services/documentService';
 import { AuditDetailPanel } from '../components/audit/AuditDetailPanel';
@@ -79,6 +80,8 @@ export function Reports() {
   const [actionFilter, setActionFilter] = useState('');
   const [operadorFilter, setOperadorFilter] = useState('');
   const [targetSearch, setTargetSearch] = useState('');
+  const debouncedGedSearchTerm = useDebouncedValue(filters.gedSearchTerm);
+  const debouncedTargetSearch = useDebouncedValue(targetSearch);
   const [documentoFilter, setDocumentoFilter] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -89,10 +92,10 @@ export function Reports() {
   const { logs: apiLogs, total: auditTotal, isLoading, isFetching, eventCounts } = useAudit({
     page: currentPage,
     pageSize: itemsPerPage,
-    search: filters.gedSearchTerm,
+    search: debouncedGedSearchTerm,
     action: actionFilter,
     operadorId: operadorFilter,
-    targetSearch,
+    targetSearch: debouncedTargetSearch,
     documentoTipo: documentoFilter,
     dateFrom,
     dateTo,
@@ -110,7 +113,7 @@ export function Reports() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [filters.gedSearchTerm, actionFilter, operadorFilter, targetSearch, documentoFilter, dateFrom, dateTo]);
+  }, [debouncedGedSearchTerm, actionFilter, operadorFilter, debouncedTargetSearch, documentoFilter, dateFrom, dateTo]);
 
   const totalItems = auditTotal;
   const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
@@ -232,7 +235,7 @@ export function Reports() {
 
           {/* SEARCH BAR */}
           <div className="flex flex-col gap-1 w-full sm:w-auto flex-1 min-w-[220px]">
-            <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Buscar Logs</span>
+            <label htmlFor="top-reports-search-input" className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Buscar Logs</label>
             <div className="relative group">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500 w-4 h-4" />
               <input
@@ -290,7 +293,7 @@ export function Reports() {
 
           {/* TARGET SEARCH */}
           <div className="flex flex-col gap-1 w-full sm:w-auto flex-1 min-w-[220px]">
-            <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Nome de aluno/instrutor acessado</span>
+            <label htmlFor="target-reports-search-input" className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Nome de aluno/instrutor acessado</label>
             <div className="relative group">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500 w-4 h-4" />
               <input

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { HandCoins, Search } from 'lucide-react';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { useQueryClient } from '@tanstack/react-query';
 import { EfetivarPrevistoModal } from '../components/financeiro/EfetivarPrevistoModal';
 import { FinanceiroOptionsLimitWarning } from '../components/financeiro/FinanceiroOptionsLimitWarning';
@@ -27,7 +28,8 @@ function formatDate(data: string): string {
 
 export default function FinanceiroRecebimentos() {
   const [mes, setMes] = useState(currentMonth);
-  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const search = useDebouncedValue(searchInput).trim();
   const [bancoId, setBancoId] = useState('');
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<ParcelaRecebimento | null>(null);
@@ -56,7 +58,7 @@ export default function FinanceiroRecebimentos() {
       <FinanceiroOptionsLimitWarning visible={optionsTruncated}/>
       <section aria-label="Filtros de recebimentos" className="grid grid-cols-1 gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:grid-cols-3 dark:border-slate-800 dark:bg-slate-900">
         <div><label htmlFor="recebimento-mes" className={labelClass}>Mês</label><input id="recebimento-mes" type="month" className={inputClass} value={mes} onChange={(event) => setMes(event.target.value)}/></div>
-        <div><label htmlFor="recebimento-search" className={labelClass}>Busca</label><div className="relative"><Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" aria-hidden="true"/><input id="recebimento-search" className={`${inputClass} pl-9`} placeholder="Referência, participante ou documento" value={search} onChange={(event) => setSearch(event.target.value)}/></div></div>
+        <div><label htmlFor="recebimento-search" className={labelClass}>Busca</label><div className="relative"><Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" aria-hidden="true"/><input id="recebimento-search" className={`${inputClass} pl-9`} placeholder="Referência, participante ou documento" value={searchInput} onChange={(event) => setSearchInput(event.target.value)}/></div></div>
         <div><label htmlFor="recebimento-conta" className={labelClass}>Conta</label><select id="recebimento-conta" className={inputClass} value={bancoId} onChange={(event) => setBancoId(event.target.value)}><option value="">Todas as contas</option>{contas.map((conta) => <option key={conta.id} value={conta.id}>{conta.nome}</option>)}</select></div>
       </section>
       <section aria-label="Resumo mensal de recebimentos" data-testid="recebimentos-totais" className="grid grid-cols-1 gap-3 sm:grid-cols-3">

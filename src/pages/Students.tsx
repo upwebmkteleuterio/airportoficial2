@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Search, Filter, MoreVertical, UserPlus, Mail, Phone, User, Edit2, Trash2 } from 'lucide-react';
 import { useDirectoryPeople } from '../hooks/useDirectoryPeople';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { UserRole } from '../types';
 import { Modal } from '../components/ui/Modal';
 import { StudentRegistrationModal } from '../components/StudentRegistrationModal';
@@ -30,6 +31,7 @@ export function Students() {
   const [registrationModalOpen, setRegistrationModalOpen] = useState(false);
   const [personRegistrationOpen, setPersonRegistrationOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearchQuery = useDebouncedValue(searchQuery);
   const [toast, setToast] = useState<ToastState | null>(null);
   const [detailsPanelOpen, setDetailsPanelOpen] = useState(false);
   const [selectedStudentForDetails, setSelectedStudentForDetails] = useState<StudentRow | null>(null);
@@ -44,7 +46,7 @@ export function Students() {
     role: UserRole.ALUNO,
     page: currentPage,
     pageSize: itemsPerPage,
-    search: searchQuery,
+    search: debouncedSearchQuery,
     onlyActive: true,
   });
 
@@ -57,7 +59,7 @@ export function Students() {
     is_directory_person: person.is_directory_person,
   }));
 
-  useEffect(() => setCurrentPage(1), [searchQuery]);
+  useEffect(() => setCurrentPage(1), [debouncedSearchQuery]);
   useEffect(() => {
     if (!isLoading && currentPage > 1 && people.length === 0) setCurrentPage((page) => page - 1);
   }, [currentPage, isLoading, people.length]);
@@ -119,7 +121,7 @@ export function Students() {
         </div>
         <div className="relative w-full sm:w-72">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-          <input type="text" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Buscar por nome ou CPF..." className="w-full pl-9 pr-4 py-2 bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 dark:text-white transition-shadow shadow-sm" />
+          <input type="text" aria-label="Buscar alunos por nome ou CPF" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Buscar por nome ou CPF..." className="w-full pl-9 pr-4 py-2 bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 dark:text-white transition-shadow shadow-sm" />
         </div>
       </div>
 

@@ -15,6 +15,7 @@ import {
   X
 } from 'lucide-react';
 import { useDirectoryPeople } from '../hooks/useDirectoryPeople';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { UserRole } from '../types';
 import { Modal } from '../components/ui/Modal';
 import { StaffRegistrationModal } from '../components/StaffRegistrationModal';
@@ -39,6 +40,7 @@ export function Instructors() {
   const [registrationModalOpen, setRegistrationModalOpen] = useState(false);
   const [personRegistrationOpen, setPersonRegistrationOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearchQuery = useDebouncedValue(searchQuery);
   const [toast, setToast] = useState<ToastState | null>(null);
   
   const [detailsPanelOpen, setDetailsPanelOpen] = useState(false);
@@ -88,13 +90,13 @@ export function Instructors() {
     role: UserRole.INSTRUTOR,
     page: currentPage,
     pageSize: itemsPerPage,
-    search: searchQuery,
+    search: debouncedSearchQuery,
     onlyActive: false,
   });
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery]);
+  }, [debouncedSearchQuery]);
   useEffect(() => {
     if (!isLoading && currentPage > 1 && people.length === 0) setCurrentPage((page) => page - 1);
   }, [currentPage, isLoading, people.length]);
@@ -162,11 +164,9 @@ export function Instructors() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
           <input
             type="text"
+            aria-label="Buscar instrutores por nome, CPF ou e-mail"
             value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value);
-              setCurrentPage(1); // Reset to page 1 on search
-            }}
+            onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Buscar por nome, CPF ou e-mail..."
             className="w-full pl-9 pr-4 py-2 bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 dark:text-white transition-shadow shadow-sm"
           />

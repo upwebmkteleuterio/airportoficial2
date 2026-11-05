@@ -12,6 +12,7 @@ import {
   Trash2
 } from 'lucide-react';
 import { useUsers } from '../hooks/useUsers';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { UserRole } from '../types';
 import { Modal } from '../components/ui/Modal';
 import { StaffRegistrationModal } from '../components/StaffRegistrationModal';
@@ -27,6 +28,7 @@ export function Coordinators() {
   const queryClient = useQueryClient();
   const [registrationModalOpen, setRegistrationModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearchQuery = useDebouncedValue(searchQuery);
   
   const [detailsPanelOpen, setDetailsPanelOpen] = useState(false);
   const [selectedStaffForDetails, setSelectedStaffForDetails] = useState<any | null>(null);
@@ -68,12 +70,12 @@ export function Coordinators() {
     page: currentPage,
     pageSize: itemsPerPage,
     role: UserRole.COORDENADOR,
-    search: searchQuery
+    search: debouncedSearchQuery
   });
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery]);
+  }, [debouncedSearchQuery]);
 
   const totalPages = Math.ceil(total / itemsPerPage) || 1;
   const paginatedCoordinators = users;
@@ -118,11 +120,9 @@ export function Coordinators() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
           <input
             type="text"
+            aria-label="Buscar coordenadores por nome, CPF ou e-mail"
             value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value);
-              setCurrentPage(1); // Reset to page 1 on search
-            }}
+            onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Buscar por nome, CPF ou e-mail..."
             className="w-full pl-9 pr-4 py-2 bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 dark:text-white transition-shadow shadow-sm"
           />

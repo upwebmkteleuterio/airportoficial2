@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { transferenciaService } from '../services/transferenciaService';
 
-type TransferenciaPageFilters = { page: number; pageSize: number };
+type TransferenciaPageFilters = { page: number; pageSize: number; dateFrom?: string; dateTo?: string };
 
 export function useTransferencias(pageFilters?: TransferenciaPageFilters) {
   const queryClient = useQueryClient();

@@ -16,6 +16,9 @@ export interface ProgramacoesSaidaFiltros {
   page: number;
   pageSize: number;
   visao?: VisaoDespesas;
+  search?: string;
+  dateFrom?: string;
+  dateTo?: string;
 }
 
 type ProgramacaoInput = Omit<ProgramacaoSaida, 'id' | 'created_at' | 'updated_at'>;
@@ -42,13 +45,17 @@ function toParcela(row: ParcelaDespesa): ParcelaDespesa {
 }
 
 export const programacaoSaidaService = {
-  getPage: async ({ page, pageSize, visao }: ProgramacoesSaidaFiltros): Promise<{ data: ProgramacaoSaidaComRelacoes[]; total: number; pagasPorProgramacao: Record<string, number> }> => {
+  getPage: async ({ page, pageSize, visao, search, dateFrom, dateTo }: ProgramacoesSaidaFiltros): Promise<{ data: ProgramacaoSaidaComRelacoes[]; total: number; pagasPorProgramacao: Record<string, number> }> => {
     const safePage = Math.max(1, Math.floor(page));
     const safePageSize = Math.min(1000, Math.max(1, Math.floor(pageSize)));
     let query = supabase.from('programacoes_saidas')
       .select('*, categoria:categorias_financeiras(id,nome), conta:bancos(id,nome)', { count: 'exact' });
     if (visao === 'continuas') query = query.eq('frequencia', 'MENSAL_CONTINUA');
     if (visao === 'termino') query = query.in('frequencia', ['AVULSA', 'REPETICAO_FINITA', 'PARCELAS_PERSONALIZADAS']);
+    if (dateFrom) query = query.gte('data_inicio', dateFrom);
+    if (dateTo) query = query.lte('data_inicio', dateTo);
+    const safeSearch = search ? sanitizeSearch(search) : '';
+    if (safeSearch) query = query.or(`descricao.ilike.%${safeSearch}%,participante_nome.ilike.%${safeSearch}%,participante_documento.ilike.%${safeSearch}%`);
     const { data, count, error } = await query.order('descricao', { ascending: true })
       .range((safePage - 1) * safePageSize, safePage * safePageSize - 1);
     if (error) throw serviceError('Não foi possível carregar as despesas', error);
