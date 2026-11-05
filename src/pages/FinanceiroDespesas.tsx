@@ -18,6 +18,8 @@ import { useCategoriasFinanceiras } from '../hooks/useCategoriasFinanceiras';
 import { useAlunosPorCpf, useParticipantesFinanceiros } from '../hooks/useParticipantesFinanceiros';
 import { useParcelasPersonalizadasEditor, useProgramacoesSaida } from '../hooks/useProgramacoesSaida';
 import { useUIStore } from '../store/uiStore';
+import type { VisaoDespesas } from '../services/programacaoSaidaService';
+import { rotuloDaVisao, visaoDaFrequencia } from '../utils/despesasVisao';
 import type { ParticipanteOpcao, ProgramacaoSaidaComRelacoes, TipoFrequenciaProgramacao, TipoParticipante } from '../types/financeiro';
 
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -88,7 +90,7 @@ export default function FinanceiroDespesas() {
   const [deleting, setDeleting] = useState<ProgramacaoSaidaComRelacoes | null>(null);
   const [confirmingAction, setConfirmingAction] = useState<{ item: ProgramacaoSaidaComRelacoes; action: 'deactivate' | 'cancel' } | null>(null);
   const [statusMessage, setStatusMessage] = useState('');
-  const [activeView, setActiveView] = useState<'continuas' | 'termino'>('continuas');
+  const [activeView, setActiveView] = useState<VisaoDespesas>('continuas');
   const [modalOpen, setModalOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -192,6 +194,9 @@ export default function FinanceiroDespesas() {
         })).sort((a, b) => a.data.localeCompare(b.data));
         await replaceCustomParcels({ id: saved.id, parcelas: savedParcelas });
       }
+      const savedView = visaoDaFrequencia(payload.frequencia);
+      setActiveView(savedView);
+      setStatusMessage(`Despesa ${editing ? 'atualizada' : 'cadastrada'} na aba “${rotuloDaVisao(savedView)}”.`);
       setModalOpen(false);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Não foi possível salvar a despesa.');
@@ -292,7 +297,7 @@ export default function FinanceiroDespesas() {
         {form.frequencia === 'REPETICAO_FINITA' && <div><label htmlFor="despesa-repeticoes" className={labelClass}>Número de repetições</label><NumberStepper id="despesa-repeticoes" value={form.repeticoes} min={1} required ariaLabel="número de repetições" onChange={(repeticoes) => setForm((current) => ({ ...current, repeticoes }))}/></div>}
         {form.frequencia === 'PARCELAS_PERSONALIZADAS' ? <section aria-label="Parcelas personalizadas" className="space-y-3 rounded-lg border border-gray-200 p-4 dark:border-slate-700">
           {editing?.frequencia === 'PARCELAS_PERSONALIZADAS' && parcelasEditor && <p className="text-xs text-slate-600 dark:text-slate-300">{parcelasEditor.pagas} de {editing.total_parcelas ?? parcelasEditor.pagas + parcelasEditor.parcelas.length} parcelas já pagas — as parcelas pagas não podem ser alteradas.</p>}
-          {waitingForParcels ? <p role="status" className="text-sm text-gray-500">Carregando parcelas...</p> : parcelas.map((parcela, index) => <div key={`${index}-${parcela.data}`} className="grid gap-3 rounded-md border border-gray-200 p-3 sm:grid-cols-[auto_1fr_1fr_auto] sm:items-end dark:border-slate-700"><span className="pb-2 text-sm font-semibold text-slate-800 dark:text-slate-200">Parcela {index + 1}</span><div><label htmlFor={`despesa-parcela-valor-${index}`} className={labelClass}>Valor</label><MoneyInput id={`despesa-parcela-valor-${index}`} ariaLabel={`Valor da parcela ${index + 1}`} className={inputClass} permiteVazio placeholder="A definir" value={parcela.valor} onChange={(valor) => setParcelas((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, valor } : item))}/></div><div><label htmlFor={`despesa-parcela-data-${index}`} className={labelClass}>Data de vencimento</label><input id={`despesa-parcela-data-${index}`} className={inputClass} type="date" required value={parcela.data} onChange={(event) => setParcelas((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, data: event.target.value } : item))}/></div><button type="button" aria-label={`Remover parcela ${index + 1}`} disabled={parcelas.length === 1 || waitingForParcels} onClick={() => setParcelas((current) => current.filter((_, itemIndex) => itemIndex !== index))} className={`mb-1 rounded-md border border-gray-300 p-2 text-rose-700 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-rose-300 ${focusClass}`}><Trash2 className="h-4 w-4" aria-hidden="true"/></button></div>)}
+          {waitingForParcels ? <p role="status" className="text-sm text-gray-500">Carregando parcelas...</p> : parcelas.map((parcela, index) => <div key={index} className="grid gap-3 rounded-md border border-gray-200 p-3 sm:grid-cols-[auto_1fr_1fr_auto] sm:items-end dark:border-slate-700"><span className="pb-2 text-sm font-semibold text-slate-800 dark:text-slate-200">Parcela {index + 1}</span><div><label htmlFor={`despesa-parcela-valor-${index}`} className={labelClass}>Valor</label><MoneyInput id={`despesa-parcela-valor-${index}`} ariaLabel={`Valor da parcela ${index + 1}`} className={inputClass} permiteVazio placeholder="A definir" value={parcela.valor} onChange={(valor) => setParcelas((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, valor } : item))}/></div><div><label htmlFor={`despesa-parcela-data-${index}`} className={labelClass}>Data de vencimento</label><input id={`despesa-parcela-data-${index}`} className={inputClass} type="date" required value={parcela.data} onChange={(event) => setParcelas((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, data: event.target.value } : item))}/></div><button type="button" aria-label={`Remover parcela ${index + 1}`} disabled={parcelas.length === 1 || waitingForParcels} onClick={() => setParcelas((current) => current.filter((_, itemIndex) => itemIndex !== index))} className={`mb-1 rounded-md border border-gray-300 p-2 text-rose-700 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-rose-300 ${focusClass}`}><Trash2 className="h-4 w-4" aria-hidden="true"/></button></div>)}
           <button type="button" onClick={addParcela} disabled={waitingForParcels} className={`inline-flex items-center gap-2 rounded-md border border-teal-600 px-3 py-2 text-sm font-semibold text-teal-700 hover:bg-teal-50 disabled:opacity-50 dark:text-teal-300 dark:hover:bg-slate-800 ${focusClass}`}><Plus className="h-4 w-4" aria-hidden="true"/>Adicionar parcela</button>
           <p className="text-sm font-semibold text-slate-900 dark:text-white">Valor previsto total: {money.format(totalParcelasValor)}</p>
           <p className="text-xs text-gray-500 dark:text-slate-400">Cada vencimento aparece em Contas a pagar na data informada.</p>

@@ -88,7 +88,10 @@ test('gestor cadastra duas parcelas personalizadas em dias diferentes do mesmo m
   await dialog.getByRole('radio', { name: /Parcelas personalizadas/ }).check();
   await expect(dialog.locator('#despesa-dia-vencimento')).toHaveCount(0);
   await expect(dialog.locator('#despesa-data-inicio')).toHaveCount(0);
-  await dialog.locator('#despesa-parcela-data-0').fill(primeiraData);
+  const dataParcela = dialog.locator('#despesa-parcela-data-0');
+  await dataParcela.focus();
+  await dataParcela.fill(primeiraData);
+  await expect(dataParcela).toBeFocused();
   await fillMoneyInput(dialog.locator('#despesa-parcela-valor-0'), '125');
   await dialog.getByRole('button', { name: 'Adicionar parcela' }).click();
   await dialog.locator('#despesa-parcela-data-1').fill(segundaData);

@@ -88,8 +88,12 @@ test('gestor cadastra despesas avulsa e com repetição finita', async ({ page }
   await dialog.locator('#despesa-conta').selectOption({ label: conta.nome });
   await dialog.getByRole('button', { name: 'Salvar' }).click();
 
-  await page.getByRole('tab', { name: /Despesas com término/ }).click();
+  const abaTermino = page.getByRole('tab', { name: /Despesas com término/ });
   const linhaAvulsa = page.getByRole('row').filter({ hasText: avulsa });
+  await expect(abaTermino).toHaveAttribute('aria-selected', 'true');
+  await expect(linhaAvulsa).toBeVisible();
+
+  await abaTermino.click();
   await expect(linhaAvulsa).toBeVisible();
   await expect(linhaAvulsa).toContainText('Avulsa');
   await expect(linhaAvulsa).toContainText(/R\$\s*120,00/);
