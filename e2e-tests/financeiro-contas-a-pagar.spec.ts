@@ -61,8 +61,7 @@ test('gestor programa uma despesa, gera a previsão do mês e registra o pagamen
   await expect(linhaParcela).toBeVisible({ timeout: T });
   await expect(linhaParcela).toContainText(/R\$\s*500,00/, { timeout: T });
 
-  await linhaParcela.getByRole('button', { name: /Ações para/ }).click({ timeout: T });
-  await page.getByRole('menuitem', { name: 'Efetivar' }).click({ timeout: T });
+  await linhaParcela.getByRole('button', { name: `Efetivar ${descricao}` }).click({ timeout: T });
   await page.getByRole('dialog').getByRole('button', { name: 'Confirmar pagamento' }).click({ timeout: T });
 
   await expect(linhaParcela).toHaveCount(0, { timeout: T });

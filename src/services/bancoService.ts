@@ -27,7 +27,7 @@ function erroExclusao(error: unknown): never {
       ? String((error as { message: unknown }).message)
       : String(error);
   if (mensagem.includes('lancamentos_financeiros_banco_id_fkey')) {
-    throw new Error('Não é possível excluir: existem lançamentos vinculados.');
+    throw serviceError('Não é possível excluir', new Error('existem lançamentos vinculados.'));
   }
   throw serviceError('Não foi possível excluir o banco', error);
 }

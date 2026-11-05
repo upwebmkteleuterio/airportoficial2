@@ -27,7 +27,7 @@ async function criarVendaAVista(
   await dialog.locator('#venda-participante-tipo').selectOption('EMPRESA');
   await dialog.locator('#venda-empresa').selectOption(empresa.id);
   await dialog.locator('#venda-curso').selectOption({ index: 1 });
-  await dialog.locator('#venda-valor').fill('1000');
+  await fillMoneyInput(dialog.locator('#venda-valor'), '1000');
   await dialog.locator('#venda-categoria').selectOption({ label: categoria });
   await dialog.locator('#venda-conta').selectOption({ label: conta.nome });
   await dialog.locator('#venda-referencia').fill(referencia);
@@ -73,8 +73,7 @@ test('gestor efetiva um recebimento alterando valor e data', async ({ page }) =>
   await expect(linha).toContainText(/R\$\s*1\.000,00/, { timeout: T });
 
   // Efetivar ajustando o valor recebido e a data de recebimento.
-  await linha.getByRole('button', { name: /Ações para/ }).click({ timeout: T });
-  await page.getByRole('menuitem', { name: 'Efetivar' }).click({ timeout: T });
+  await linha.getByRole('button', { name: /^Efetivar/ }).click({ timeout: T });
   const dialog = page.getByRole('dialog');
   await expect(dialog.locator('#efetivar-valor')).toHaveValue(/1\.000,00/, { timeout: T });
   await fillMoneyInput(dialog.locator('#efetivar-valor'), '350');

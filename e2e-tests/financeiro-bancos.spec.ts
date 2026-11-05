@@ -49,10 +49,16 @@ test('gestor cria, edita e exclui uma conta', async ({ page }) => {
   const dialog = page.getByRole('dialog');
   await dialog.locator('#bank-name').fill(nome, { timeout: T });
   const saldoInicial = dialog.locator('#bank-opening-balance');
+  await expect(saldoInicial).toHaveValue('');
   const caixaSaldo = await saldoInicial.boundingBox();
   if (!caixaSaldo) throw new Error('Campo Saldo inicial não está visível.');
   await saldoInicial.click({ position: { x: caixaSaldo.width - 2, y: caixaSaldo.height / 2 } });
+  await expect(saldoInicial).toHaveValue('0,00');
   await saldoInicial.pressSequentially('1500');
+  await expect(saldoInicial).toHaveValue('15,00');
+  await saldoInicial.press('Control+A');
+  await saldoInicial.press('Backspace');
+  await saldoInicial.pressSequentially('150000');
   await expect(saldoInicial).toHaveValue('1.500,00');
   await dialog.getByRole('button', { name: 'Salvar' }).click({ timeout: T });
 

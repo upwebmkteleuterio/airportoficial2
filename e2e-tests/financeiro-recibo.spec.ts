@@ -6,6 +6,7 @@ import {
   createTestUser,
   createVendaDocumentTemplate,
   deleteTestUser,
+  fillMoneyInput,
   removeDisposableFinanceiro,
   signInAs,
   type TestUser,
@@ -47,7 +48,7 @@ test('gestor gera o recibo de uma venda a partir do modelo', async ({ page }) =>
   await form.locator('#venda-participante-tipo').selectOption('EMPRESA');
   await form.locator('#venda-empresa').selectOption(empresa.id);
   await form.locator('#venda-curso').selectOption({ index: 1 });
-  await form.locator('#venda-valor').fill('1000');
+  await fillMoneyInput(form.locator('#venda-valor'), '1000');
   await form.locator('#venda-categoria').selectOption({ label: categoria });
   await form.locator('#venda-conta').selectOption({ label: conta.nome });
   await form.locator('#venda-forma-pagamento').selectOption('PIX');

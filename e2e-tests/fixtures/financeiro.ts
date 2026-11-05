@@ -95,10 +95,12 @@ export async function createTestUser(role: 'GESTOR' | 'ALUNO' = 'GESTOR'): Promi
 }
 
 export async function fillMoneyInput(input: Locator, value: string): Promise<void> {
+  const [reais, centavos = ''] = value.replace(',', '.').split('.');
+  const digitos = `${reais.replace(/\D/g, '')}${centavos.replace(/\D/g, '').padEnd(2, '0').slice(0, 2)}`;
   await input.click();
   await input.press('Control+A');
   await input.press('Backspace');
-  await input.pressSequentially(value);
+  await input.pressSequentially(digitos);
 }
 
 /** Entra pela tela de login real, como um usuário faria. */

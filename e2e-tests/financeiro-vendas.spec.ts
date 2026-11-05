@@ -100,8 +100,7 @@ test('gestor registra uma venda, efetiva o recebimento e o saldo acompanha', asy
   await expect(linhaRecebimento).toContainText(/R\$\s*1\.000,00/, { timeout: T });
 
   // Efetivar o recebimento com data e valor pré-preenchidos.
-  await linhaRecebimento.getByRole('button', { name: /Ações para/ }).click({ timeout: T });
-  await page.getByRole('menuitem', { name: 'Efetivar' }).click({ timeout: T });
+  await linhaRecebimento.getByRole('button', { name: /^Efetivar/ }).click({ timeout: T });
   const dialogEfetivar = page.getByRole('dialog');
   await expect(dialogEfetivar.locator('#efetivar-valor')).toHaveValue(/1\.000,00/, { timeout: T });
   await dialogEfetivar.getByRole('button', { name: 'Confirmar recebimento' }).click({ timeout: T });

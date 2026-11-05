@@ -21,6 +21,16 @@ test('gestor abre as telas financeiras pelo menu lateral', async ({ page }) => {
   // falha aqui, com mensagem clara, em vez de estourar o tempo total.
   await expect(page.locator('#sidebar-nav-financeiro-lancamentos')).toBeVisible({ timeout: 15000 });
 
+  // O painel abre o alerta de prazos de turmas quando existem turmas perto do
+  // prazo. Ele cobre a tela inteira, então precisa ser dispensado antes de usar
+  // o menu lateral.
+  const alertaDePrazos = page.getByRole('button', { name: 'Ciente, ir para o painel' });
+  await alertaDePrazos.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+  if (await alertaDePrazos.isVisible().catch(() => false)) {
+    await alertaDePrazos.click();
+    await expect(alertaDePrazos).toHaveCount(0);
+  }
+
   const abrir = async (item: string, caminho: string, titulo: string) => {
     await page.locator(`#sidebar-nav-${item}`).click({ timeout: 15000 });
     await expect(page).toHaveURL(new RegExp(caminho), { timeout: 15000 });
