@@ -94,18 +94,14 @@ export function Sidebar() {
       ],
     },
     ...(userLogged?.role === 'GESTOR' || userLogged?.role === 'EQUIPE' ? [{
-      title: 'Operações',
-      items: [{ id: 'migracao', icon: ArrowLeftRight, label: 'Migração' }],
-    }] : []),
-    ...(userLogged?.role === 'GESTOR' || userLogged?.role === 'EQUIPE' ? [{
       title: 'Documentos',
       items: [{ id: 'documentos', icon: FileText, label: 'Documentos' }],
     }] : []),
     ...(userLogged?.role === 'GESTOR' ? [{
       title: 'Financeiro',
       items: [
-        { id: 'financeiro-vendas', icon: ShoppingCart, label: 'Vendas' },
         { id: 'financeiro-lancamentos', icon: Receipt, label: 'Lançamentos' },
+        { id: 'financeiro-vendas', icon: ShoppingCart, label: 'Vendas' },
         { id: 'financeiro-recebimentos', icon: HandCoins, label: 'Recebimentos' },
         { id: 'financeiro-despesas', icon: CalendarClock, label: 'Despesas' },
         { id: 'financeiro-contas-a-pagar', icon: ReceiptText, label: 'Contas a pagar' },
@@ -144,6 +140,10 @@ export function Sidebar() {
         { id: 'relatorios', icon: ShieldAlert, label: 'Dossiê ANAC' },
       ],
     },
+    ...(userLogged?.role === 'GESTOR' || userLogged?.role === 'EQUIPE' ? [{
+      title: 'Operações',
+      items: [{ id: 'migracao', icon: ArrowLeftRight, label: 'Migração' }],
+    }] : []),
   ];
 
   type SidebarNavItem = {

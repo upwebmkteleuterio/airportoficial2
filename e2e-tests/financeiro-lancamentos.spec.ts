@@ -51,6 +51,9 @@ test('gestor cria, edita e exclui um lançamento e o saldo da conta acompanha', 
   await dialog.getByRole('button', { name: 'Salvar' }).click();
 
   await expect(page.getByRole('row').filter({ hasText: descricao })).toBeVisible();
+  const hoje = new Date();
+  const diaHoje = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`;
+  await expect(page.getByTestId(`lancamento-dia-${diaHoje}`)).toBeVisible();
   await expect(chipConta).toContainText(/R\$\s*250,00/);
 
   // Editar o valor para R$ 300,00

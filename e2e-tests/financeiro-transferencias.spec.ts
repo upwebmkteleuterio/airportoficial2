@@ -81,7 +81,8 @@ test('gestor cria, edita e exclui uma transferência entre contas', async ({ pag
     await expect(linha).toContainText(observacoes, { timeout: T });
 
     // Editar
-    await linha.getByRole('button', { name: 'Editar' }).click({ timeout: T });
+    await linha.getByRole('button', { name: /Ações para a transferência/ }).click({ timeout: T });
+    await page.getByRole('menuitem', { name: 'Editar' }).click({ timeout: T });
     const dialogEdicao = page.getByRole('dialog');
     await fillMoneyInput(dialogEdicao.getByTestId('transfer-valor'), '175,75');
     await dialogEdicao.getByTestId('transfer-observacoes').fill(observacoesEditadas, { timeout: T });
@@ -91,13 +92,15 @@ test('gestor cria, edita e exclui uma transferência entre contas', async ({ pag
     await expect(linha).toContainText(observacoesEditadas, { timeout: T });
 
     // Excluir
-    await linha.getByRole('button', { name: 'Excluir' }).click({ timeout: T });
+    await linha.getByRole('button', { name: /Ações para a transferência/ }).click({ timeout: T });
+    await page.getByRole('menuitem', { name: 'Excluir' }).click({ timeout: T });
     await page.getByRole('button', { name: 'Confirmar exclusão' }).click({ timeout: T });
     await expect(linha).toHaveCount(0, { timeout: T });
     transferenciaCriada = false;
   } finally {
     if (transferenciaCriada && (await linha.count())) {
-      await linha.getByRole('button', { name: 'Excluir' }).click({ timeout: T });
+      await linha.getByRole('button', { name: /Ações para a transferência/ }).click({ timeout: T });
+      await page.getByRole('menuitem', { name: 'Excluir' }).click({ timeout: T });
       await page.getByRole('button', { name: 'Confirmar exclusão' }).click({ timeout: T });
     }
   }
