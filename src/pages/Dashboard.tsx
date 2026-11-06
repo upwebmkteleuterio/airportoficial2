@@ -57,6 +57,7 @@ import {
     Info,
     BookOpen,
     MapPin,
+    Monitor,
 } from "lucide-react";
 
 import { useClasses } from "../hooks/useClasses";
@@ -1728,8 +1729,8 @@ export function Dashboard() {
                                             {item.data_prova_2_chamada ? new Date(item.data_prova_2_chamada + "T00:00:00").toLocaleDateString("pt-BR") : '—'}
                                         </td>)}
                                         {visibleColumns.software_utilizado && (<td
-                                            className="px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 font-sans max-w-xs truncate">
-                                            {item.software_utilizado || '—'}
+                                            className="px-4 py-2 border-r border-gray-200/30 dark:border-slate-800/30 font-sans max-w-xs">
+                                            <TruncatedInfoTooltip text={item.software_utilizado || '—'} title="Software utilizado" icon={Monitor}/>
                                         </td>)}
                                         {visibleColumns.sn && (<td
                                             className="px-4 py-2 text-center border-r border-gray-200/30 dark:border-slate-800/30"

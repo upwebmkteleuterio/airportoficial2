@@ -46,6 +46,7 @@ import { documentService } from '../services/documentService';
 import { userService } from '../services/userService';
 import { getDocumentSelectorLabel, getRequiredDocumentTypes } from '../utils/documentRequirements';
 import { Modal } from '../components/ui/Modal';
+import { TruncatedInfoTooltip } from '../components/ui/TruncatedInfoTooltip';
 import { Button } from '../components/ui/Button';
 import { SlidePanel } from '../components/ui/SlidePanel';
 
@@ -915,7 +916,7 @@ export function CentralGed() {
                   ) : currentReviewDocuments.map((document) => (
                     <div key={document.id} onClick={() => { if (activeRejectDocumentId !== document.id) clearRejectionState(); setActiveDocumentId(document.id); }} className={`flex cursor-pointer items-center justify-between gap-3 rounded-lg p-3 text-xs shadow-sm dark:bg-slate-900 ${selectedReviewDocument?.id === document.id ? 'border border-teal-400 bg-teal-50/50 dark:bg-teal-950/20' : 'bg-white'}`}>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate font-bold text-slate-900 dark:text-white">{document.arquivo_nome}</p>
+                        <TruncatedInfoTooltip text={document.arquivo_nome} title="Arquivo" icon={FileText} className="font-bold text-slate-900 dark:text-white"/>
                         <p className="mt-1 text-[10px] text-slate-500">{document.tipo_documento} · {document.status} · versão {document.versao ?? 1} · SHA-256: {document.hash_sha256.slice(0, 12)}…</p>
                         {document.observacoes_revisor && <p className="mt-2 rounded bg-rose-50 p-2 text-[10px] text-rose-800">Parecer: {document.observacoes_revisor}</p>}
                         {activeReviewItem.documents.some((candidate) => candidate.substitui_documento_id === document.id) && <p className="mt-2 flex items-center gap-1 text-[10px] font-semibold text-amber-700"><History className="h-3 w-3" />Existe uma nova versão enviada.</p>}
@@ -1133,9 +1134,7 @@ export function CentralGed() {
                                   >
                                     Escolher arquivo
                                   </button>
-                                  <span className="min-w-0 max-w-[14rem] truncate text-[10px] text-slate-600 dark:text-slate-300" title={file?.name || 'Nenhum arquivo escolhido'}>
-                                    {file?.name || 'Nenhum arquivo escolhido'}
-                                  </span>
+                                  <TruncatedInfoTooltip text={file?.name || 'Nenhum arquivo escolhido'} title="Arquivo" icon={FileText} className="min-w-0 max-w-[14rem] text-[10px] text-slate-600 dark:text-slate-300"/>
                                   <button
                                     type="button"
                                     onClick={() => {

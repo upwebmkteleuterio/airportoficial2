@@ -21,13 +21,15 @@ import {
   Copy,
   Check,
   Search,
-  User
+  User,
+  Tag
 } from 'lucide-react';
 import { useUIStore } from '../store/uiStore';
 import { useAudit } from '../hooks/useAudit';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { useUsers } from '../hooks/useUsers';
 import { documentService } from '../services/documentService';
+import { TruncatedInfoTooltip } from '../components/ui/TruncatedInfoTooltip';
 import { AuditDetailPanel } from '../components/audit/AuditDetailPanel';
 import { AuditoriaLogView, UserRole } from '../types';
 
@@ -478,9 +480,7 @@ export function Reports() {
                             <span className="text-slate-700 dark:text-slate-200 font-sans text-xs font-semibold">
                               {operadorEmail ?? operadorNome}
                             </span>
-                            <span className="text-[10px] text-gray-400 truncate">
-                              {operadorEmail ? operadorNome : log.operador ? (roleLabels[log.operador.role] ?? log.operador.role) : 'Operador'}
-                            </span>
+                            <TruncatedInfoTooltip text={operadorEmail ? operadorNome : log.operador ? (roleLabels[log.operador.role] ?? log.operador.role) : 'Operador'} title="Operador" icon={User} className="text-[10px] text-gray-400"/>
                           </div>
                         </div>
                       </td>
@@ -504,13 +504,9 @@ export function Reports() {
                       <td className="px-5 py-3">
                         {documentoNome || documentoTipo ? (
                           <div className="flex flex-col max-w-[220px]">
-                            <span className="text-slate-700 dark:text-slate-200 font-sans text-xs font-semibold truncate">
-                              {documentoTipo ?? 'Documento'}
-                            </span>
+                            <TruncatedInfoTooltip text={documentoTipo ?? 'Documento'} title="Tipo de documento" icon={Tag} className="text-slate-700 dark:text-slate-200 font-sans text-xs font-semibold"/>
                             {documentoNome && (
-                              <span className="text-[10px] text-gray-400 truncate" title={documentoNome}>
-                                {documentoNome}
-                              </span>
+                              <TruncatedInfoTooltip text={documentoNome} title="Documento" icon={FileText} className="text-[10px] text-gray-400"/>
                             )}
                           </div>
                         ) : (

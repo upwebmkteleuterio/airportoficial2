@@ -19,6 +19,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Link as LinkIcon,
+  Link2,
   HelpCircle,
   CalendarDays,
   Info,
@@ -38,6 +39,7 @@ import { useAudit } from '../hooks/useAudit';
 import { Empresa } from '../types';
 
 import { ConfirmDeleteModal } from '../components/ui/ConfirmDeleteModal';
+import { TruncatedInfoTooltip } from '../components/ui/TruncatedInfoTooltip';
 
 import { Modal } from '../components/ui/Modal';
 import { HelpModal } from '../components/ui/HelpModal';
@@ -787,10 +789,8 @@ export function Companies() {
           <div className="mt-4 p-3 bg-slate-100 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
             <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">Link de Compartilhamento</label>
             <div className="flex items-center justify-between gap-2 overflow-hidden bg-white dark:bg-slate-900 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded">
-              <span className="text-xs truncate text-slate-700 dark:text-slate-300 flex-1">
-                {window.location.origin}/{linkModalCompany?.nome_fantasia?.toLowerCase().replace(/[^a-z0-9]/g, "") || linkModalCompany?.razao_social?.toLowerCase().replace(/[^a-z0-9]/g, "")}/{linkModalCompany?.id}{selectedClassesForLink.length > 0 ? `?classes=${selectedClassesForLink.join(',')}` : ''}
-              </span>
-              <a 
+              <TruncatedInfoTooltip text={`${window.location.origin}/${linkModalCompany?.nome_fantasia?.toLowerCase().replace(/[^a-z0-9]/g, "") || linkModalCompany?.razao_social?.toLowerCase().replace(/[^a-z0-9]/g, "")}/${linkModalCompany?.id}${selectedClassesForLink.length > 0 ? `?classes=${selectedClassesForLink.join(',')}` : ''}`} title="Link de compartilhamento" icon={Link2} className="text-xs text-slate-700 dark:text-slate-300 flex-1"/>
+              <a
                 href={`${window.location.origin}/${linkModalCompany?.nome_fantasia?.toLowerCase().replace(/[^a-z0-9]/g, "") || linkModalCompany?.razao_social?.toLowerCase().replace(/[^a-z0-9]/g, "")}/${linkModalCompany?.id}${selectedClassesForLink.length > 0 ? '?classes=' + selectedClassesForLink.join(',') : ''}`}
                 target="_blank"
                 rel="noreferrer"

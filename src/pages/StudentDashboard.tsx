@@ -21,7 +21,9 @@ import {
   RefreshCw,
   X,
   Check,
-  FileSignature
+  FileSignature,
+  PenLine,
+  Upload
 } from 'lucide-react';
 import { useStudentDocuments } from '../hooks/useDocuments';
 import { useClasses } from '../hooks/useClasses';
@@ -30,6 +32,7 @@ import { useUIStore } from '../store/uiStore';
 import { useAudit } from '../hooks/useAudit';
 import { DocumentStatus } from '../types';
 
+import { TruncatedInfoTooltip } from '../components/ui/TruncatedInfoTooltip';
 import { Modal } from '../components/ui/Modal';
 
 export function StudentDashboard() {
@@ -616,9 +619,7 @@ export function StudentDashboard() {
                 </div>
 
                 <div className="text-center">
-                  <p className="text-[11px] text-teal-600 dark:text-teal-400 font-mono mb-3 animate-pulse truncate">
-                    {uploadPhase}
-                  </p>
+                  <TruncatedInfoTooltip text={uploadPhase} title="Etapa do envio" icon={Upload} className="text-[11px] text-teal-600 dark:text-teal-400 font-mono mb-3 animate-pulse"/>
                   <div className="w-full bg-gray-250 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
                     <div 
                       className="bg-teal-600 dark:bg-teal-400 h-1.5 rounded-full transition-all duration-150"
@@ -701,7 +702,7 @@ export function StudentDashboard() {
                               RFC 7807 Blocked
                             </span>
                           </div>
-                          <p className="text-[10px] text-gray-400 font-mono mt-0.5 truncate max-w-md">{doc.arquivo_nome}</p>
+                          <TruncatedInfoTooltip text={doc.arquivo_nome} title="Arquivo" icon={FileText} className="text-[10px] text-gray-400 font-mono mt-0.5 max-w-md"/>
                           
                           {/* Standard RFC 7807 Error presentation */}
                           <div className="mt-2 bg-rose-500/[0.02] dark:bg-rose-950/10 border border-rose-500/10 rounded-lg p-3 text-xs space-y-1 text-rose-700 dark:text-rose-350">
@@ -799,7 +800,7 @@ export function StudentDashboard() {
                       </div>
                       <div>
                         <p className="font-bold text-slate-900 dark:text-white">{doc.tipo_documento}</p>
-                        <p className="text-[10px] text-gray-400 font-mono mt-0.5 truncate max-w-xs">{doc.arquivo_nome}</p>
+                        <TruncatedInfoTooltip text={doc.arquivo_nome} title="Arquivo" icon={FileText} className="text-[10px] text-gray-400 font-mono mt-0.5 max-w-xs"/>
                       </div>
                     </div>
 
@@ -868,7 +869,7 @@ export function StudentDashboard() {
 
           <div className="space-y-2 py-2">
             <div className="flex justify-between text-[11px] font-mono text-slate-500 dark:text-slate-400">
-              <span className="truncate max-w-[240px] font-bold">{signingPhase}</span>
+              <TruncatedInfoTooltip text={signingPhase} title="Etapa da assinatura" icon={PenLine} className="max-w-[240px] font-bold"/>
               <span>{Math.round(signingProgress)}%</span>
             </div>
             <div className="w-full bg-gray-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden">

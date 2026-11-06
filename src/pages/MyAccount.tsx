@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { AlertCircle, CheckCircle2, LockKeyhole, LoaderCircle, Mail, ShieldCheck, User } from 'lucide-react';
+import { TruncatedInfoTooltip } from '../components/ui/TruncatedInfoTooltip';
 import { Button } from '../components/ui/Button';
 import { useMyAccount } from '../hooks/useMyAccount';
 import { validatePassword } from '../services/accountService';
@@ -158,7 +159,7 @@ export function MyAccount() {
                   </div>
                   <div className="min-w-0">
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Nome</p>
-                    <p className="truncate font-semibold text-slate-900 dark:text-white">{formatProfileValue('nome_completo', profile.nome_completo)}</p>
+                    <TruncatedInfoTooltip text={formatProfileValue('nome_completo', profile.nome_completo)} title="Nome" icon={User} className="font-semibold text-slate-900 dark:text-white"/>
                   </div>
                 </div>
               </div>
@@ -169,7 +170,7 @@ export function MyAccount() {
                   </div>
                   <div className="min-w-0">
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">E-mail</p>
-                    <p className="truncate font-semibold text-slate-900 dark:text-white">{formatProfileValue('email', profile.email)}</p>
+                    <TruncatedInfoTooltip text={formatProfileValue('email', profile.email)} title="E-mail" icon={Mail} className="font-semibold text-slate-900 dark:text-white"/>
                   </div>
                 </div>
               </div>
@@ -180,7 +181,7 @@ export function MyAccount() {
                   </div>
                   <div className="min-w-0">
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Perfil</p>
-                    <p className="truncate font-semibold text-slate-900 dark:text-white">{formatProfileValue('role', profile.role)}</p>
+                    <TruncatedInfoTooltip text={formatProfileValue('role', profile.role)} title="Perfil" icon={ShieldCheck} className="font-semibold text-slate-900 dark:text-white"/>
                   </div>
                 </div>
               </div>

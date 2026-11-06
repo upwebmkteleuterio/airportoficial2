@@ -36,6 +36,7 @@ import {
   Edit2,
   ClipboardList,
   Search,
+  User,
 } from 'lucide-react';
 import { useClassDetails } from '../hooks/useClasses';
 import { useUsers } from '../hooks/useUsers';
@@ -47,6 +48,7 @@ import { useUIStore } from '../store/uiStore';
 import { useAudit } from '../hooks/useAudit';
 import { Modal } from '../components/ui/Modal';
 import { SlidePanel } from '../components/ui/SlidePanel';
+import { TruncatedInfoTooltip } from '../components/ui/TruncatedInfoTooltip';
 import { FolderIcon } from '../components/ui/FolderIcon';
 import { PasswordModal } from '../components/ui/PasswordModal';
 import { SharedDocumentsPanel } from '../components/SharedDocumentsPanel';
@@ -1011,7 +1013,7 @@ function ClassDetails() {
                             className="px-3 py-3 border-r border-gray-200 dark:border-slate-800 text-center w-24 font-sans"
                           >
                             <div className="text-[9px] text-gray-400 dark:text-slate-500 font-semibold uppercase">{dayName} - {d}/{m}</div>
-                            <div className="text-[10px] font-bold text-slate-850 dark:text-slate-200 mt-1 truncate px-1" title={period}>{period}</div>
+                            <TruncatedInfoTooltip text={period} title="Período" icon={CalendarDays} className="text-[10px] font-bold text-slate-850 dark:text-slate-200 mt-1 px-1"/>
                           </th>
                         );
                       })}
@@ -1063,9 +1065,7 @@ function ClassDetails() {
                             <div className="w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 flex items-center justify-center text-[11px] font-bold text-slate-600 dark:text-slate-300">
                               {initials}
                             </div>
-                            <span className="truncate max-w-[180px] text-sm">
-                              {studentName}
-                            </span>
+                            <TruncatedInfoTooltip text={studentName} title="Aluno" icon={User} className="max-w-[180px] text-sm"/>
                           </td>
 
                           {/* Percentual Presença Badge */}
@@ -1231,9 +1231,7 @@ function ClassDetails() {
                             <div className="w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 flex items-center justify-center text-[11px] font-bold text-slate-600 dark:text-slate-300">
                               {initials}
                             </div>
-                            <span className="truncate max-w-[180px] text-sm">
-                              {studentName}
-                            </span>
+                            <TruncatedInfoTooltip text={studentName} title="Aluno" icon={User} className="max-w-[180px] text-sm"/>
                           </td>
                           <td className="px-4 py-2 border-r border-gray-150 dark:border-slate-800/80 text-center">
                             <NotaInput value={nota1} onChange={(value) => handleGradeDraftChange(m, 'nota1', value)} disabled={savingGradeId !== null} />

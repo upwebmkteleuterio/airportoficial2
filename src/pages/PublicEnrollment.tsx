@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Plane, User, MapPin, FileCheck, Check, ChevronRight, ChevronLeft, Building2 } from 'lucide-react';
+import { Plane, User, MapPin, FileCheck, FileText, Check, ChevronRight, ChevronLeft, Building2 } from 'lucide-react';
 import { useClasses } from '../hooks/useClasses';
 import { useCourses } from '../hooks/useCourses';
 import { useCompanies } from '../hooks/useCompanies';
 import { supabase } from '../integrations/supabase/client';
+import { TruncatedInfoTooltip } from '../components/ui/TruncatedInfoTooltip';
 import { PersonalInfoFields, AddressFields, useStudentFormValidation, isValidFullName, isValidDate, isValidCPF, isValidCEP, isValidPhone } from '../components/shared/StudentFormShared';
 
 const GRAUS_ENSINO = [
@@ -404,7 +405,7 @@ export default function PublicEnrollment() {
                       <label htmlFor={`file-${key}`} className="mt-3 cursor-pointer px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded text-xs font-bold hover:bg-slate-100 transition-colors shadow-sm">
                         {files[key] ? 'Alterar Arquivo' : 'Selecionar Arquivo'}
                       </label>
-                      {files[key] && <span className="text-xs text-slate-500 mt-2 truncate w-full px-4">{files[key]?.name}</span>}
+                      {files[key] && <TruncatedInfoTooltip text={files[key]?.name ?? ''} title="Arquivo" icon={FileText} className="text-xs text-slate-500 mt-2 w-full px-4"/>}
                     </div>
                     </React.Fragment>
                   ))}
