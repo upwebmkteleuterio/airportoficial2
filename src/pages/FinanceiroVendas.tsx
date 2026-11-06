@@ -134,7 +134,7 @@ export default function FinanceiroVendas() {
   const openForm = (record?: VendaComRelacoes) => {
     setEditing(record ?? null);
     const participant = record ? { tipo: record.participante_tipo, id: record.pessoa_id ?? record.empresa_id ?? '', nome: record.participante_nome, documento: record.participante_documento } as ParticipanteOpcao : null;
-    const initialForm = record ? {
+    const initialForm: VendaForm = record ? {
       participanteTipo: record.participante_tipo, participante: participant, empresaId: record.empresa_id ?? '', cursoId: record.curso_id ?? '',
       valor: String(record.parcelas.reduce((sum, parcela) => sum + Number(parcela.valor), 0)), condicao: record.condicao,
       parcelasQuantidade: String(record.parcelas_quantidade), primeiroVencimento: record.parcelas[0]?.data_competencia ?? hojeLocal(),

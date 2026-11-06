@@ -94,9 +94,9 @@ export function StaffDetailsPanel({ isOpen, onClose, staff }: StaffDetailsPanelP
       <div className="border-b border-gray-200 dark:border-slate-800 px-6 shrink-0 bg-slate-50 dark:bg-slate-850">
         <AnimatedTabs
           tabs={[
-            { id: 'personal', label: 'Dados Pessoais', icon: <User className="w-4 h-4" aria-hidden="true" /> },
-            { id: 'address', label: 'Endereço', icon: <MapPin className="w-4 h-4" aria-hidden="true" /> },
-            { id: 'history', label: 'Histórico de Turmas', icon: <History className="w-4 h-4" aria-hidden="true" /> },
+            { id: 'personal' as const, label: 'Dados Pessoais', icon: <User className="w-4 h-4" aria-hidden="true" /> },
+            { id: 'address' as const, label: 'Endereço', icon: <MapPin className="w-4 h-4" aria-hidden="true" /> },
+            { id: 'history' as const, label: 'Histórico de Turmas', icon: <History className="w-4 h-4" aria-hidden="true" /> },
           ] satisfies readonly AnimatedTab<StaffTab>[]}
           value={activeTab}
           onChange={setActiveTab}

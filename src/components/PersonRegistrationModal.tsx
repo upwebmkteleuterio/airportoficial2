@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { SlidePanel } from './ui/SlidePanel';
-import type { Pessoa } from '../services/personService';
 
 interface PersonRegistrationModalProps {
   isOpen: boolean;
-  initialData?: Pessoa | null;
+  initialData?: { nome?: string | null; cpf?: string | null } | null;
   requireCpf?: boolean;
   contextLabel?: 'instrutor' | 'aluno';
   onClose: () => void;

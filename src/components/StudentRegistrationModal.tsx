@@ -37,7 +37,7 @@ type FormData = {
   estado: string;
   trabalha_aviacao_civil: string;
   trabalha_seguranca_avsec: string;
-  tipo_documento: string;
+  tipo_documento: 'identidade_cpf' | 'identidade_sem_cpf' | 'cnh';
   senha_temporaria: string;
 };
 type FilesState = Record<FileField, File | null>;

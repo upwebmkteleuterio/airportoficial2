@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Search, Filter, MoreVertical, UserPlus, Mail, Phone, User, Edit2, Trash2 } from 'lucide-react';
-import { useDirectoryPeople } from '../hooks/useDirectoryPeople';
+import { useDirectoryPeople, type DirectoryPerson } from '../hooks/useDirectoryPeople';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { UserRole } from '../types';
 import { Modal } from '../components/ui/Modal';
@@ -18,11 +18,7 @@ const formatStudentDate = (value: unknown) => {
   return Number.isNaN(date.getTime()) ? '-' : date.toLocaleDateString('pt-BR');
 };
 
-type StudentRow = Record<string, any> & {
-  id: string;
-  nome_completo: string;
-  is_directory_person: boolean;
-};
+type StudentRow = DirectoryPerson;
 
 type ToastState = { type: 'success' | 'error'; message: string };
 

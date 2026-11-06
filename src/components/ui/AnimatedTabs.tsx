@@ -11,7 +11,7 @@ export interface AnimatedTab<T extends string = string> {
 interface AnimatedTabsProps<T extends string> {
   tabs: readonly AnimatedTab<T>[];
   value: T;
-  onChange: (value: T) => void;
+  onChange: (value: NoInfer<T>) => void;
   ariaLabel: string;
   className?: string;
   idPrefix?: string;

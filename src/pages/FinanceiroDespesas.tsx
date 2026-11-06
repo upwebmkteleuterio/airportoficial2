@@ -285,8 +285,8 @@ export default function FinanceiroDespesas() {
       <section className="flex min-h-[350px] flex-1 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <AnimatedTabs
           tabs={[
-            { id: 'continuas', label: `Despesas contínuas (${contagens.continuas})` },
-            { id: 'termino', label: `Despesas com término (${contagens.termino})` },
+            { id: 'continuas' as const, label: `Despesas contínuas (${contagens.continuas})` },
+            { id: 'termino' as const, label: `Despesas com término (${contagens.termino})` },
           ]}
           value={activeView}
           onChange={setActiveView}
