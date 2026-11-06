@@ -101,12 +101,12 @@ export function Sidebar() {
       title: 'Financeiro',
       items: [
         { id: 'financeiro-lancamentos', icon: Receipt, label: 'Lançamentos' },
+        { id: 'financeiro-transferencias', icon: ArrowRightLeft, label: 'Transferências' },
         { id: 'financeiro-vendas', icon: ShoppingCart, label: 'Vendas' },
         { id: 'financeiro-recebimentos', icon: HandCoins, label: 'Recebimentos' },
         { id: 'financeiro-despesas', icon: CalendarClock, label: 'Despesas' },
         { id: 'financeiro-contas-a-pagar', icon: ReceiptText, label: 'Contas a pagar' },
         { id: 'financeiro-bancos', icon: Landmark, label: 'Bancos' },
-        { id: 'financeiro-transferencias', icon: ArrowRightLeft, label: 'Transferências' },
         { id: 'financeiro-categorias', icon: Tags, label: 'Categorias' },
         { id: 'financeiro-fornecedores', icon: Truck, label: 'Fornecedores' },
       ],
