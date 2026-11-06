@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { HandCoins, Search } from 'lucide-react';
+import { HandCoins, Layers, Repeat, Search } from 'lucide-react';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { useQueryClient } from '@tanstack/react-query';
 import { EfetivarPrevistoModal } from '../components/financeiro/EfetivarPrevistoModal';
@@ -11,8 +11,9 @@ import { TableSkeleton, SummaryCardSkeleton } from '../components/ui/FinanceiroS
 import { PaginationFooter } from '../components/ui/PaginationFooter';
 import { useBancos } from '../hooks/useBancos';
 import { useCategoriasFinanceiras } from '../hooks/useCategoriasFinanceiras';
-import { useDespesasPrevistas, useGerarPrevisoesDoMes, useProgramacoesSaida, useTotaisContasAPagar } from '../hooks/useProgramacoesSaida';
+import { useDespesasPrevistas, useGerarPrevisoesDoMes, useNumerosDasParcelas, useProgramacoesSaida, useTotaisContasAPagar } from '../hooks/useProgramacoesSaida';
 import type { ParcelaDespesa } from '../types/financeiro';
+import { rotuloDaParcela } from '../utils/parcelaDespesa';
 
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const inputClass = 'w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white';
@@ -44,6 +45,22 @@ export default function FinanceiroContasAPagar() {
   const filtros = useMemo(() => ({ mes, search: search.trim() || undefined, bancoId: bancoId || undefined, page, pageSize }), [mes, search, bancoId, page]);
   const { parcelas, total, isLoading, isFetching, isError } = useDespesasPrevistas(filtros);
   const { totais, isLoading: totalsLoading, isError: totalsError } = useTotaisContasAPagar({ mes, bancoId: bancoId || undefined });
+  // A numeração das parcelas personalizadas depende das datas já cadastradas.
+  const programacoesPersonalizadas = useMemo(
+    () => Array.from(new Set(parcelas.flatMap((parcela) => parcela.programacao?.frequencia === 'PARCELAS_PERSONALIZADAS' ? [parcela.programacao.id] : []))),
+    [parcelas],
+  );
+  const { numerosDasParcelas } = useNumerosDasParcelas(programacoesPersonalizadas);
+
+  const rotuloDaCobranca = (parcela: ParcelaDespesa): string =>
+    parcela.programacao ? rotuloDaParcela(parcela.programacao, parcela.data_competencia, numerosDasParcelas[parcela.id]) : '';
+
+  const seloDaCobranca = (parcela: ParcelaDespesa) => {
+    const rotulo = rotuloDaCobranca(parcela);
+    if (!rotulo) return null;
+    const Icone = parcela.programacao?.frequencia === 'MENSAL_CONTINUA' ? Repeat : Layers;
+    return <span className="mt-0.5 flex items-center gap-1 text-[10px] font-normal text-gray-500 dark:text-slate-400"><Icone className="h-3 w-3" aria-hidden="true"/>{rotulo}</span>;
+  };
   const { gerarPrevisoes, isGenerating } = useGerarPrevisoesDoMes();
   const { efetivarPagamento, isSettling } = useProgramacoesSaida({ page: 1, pageSize });
   const queryClient = useQueryClient();
@@ -97,7 +114,7 @@ export default function FinanceiroContasAPagar() {
       </section>
       <QueryErrorState onRetry={retry} isRetrying={isFetching || totalsLoading} isError={isError || totalsError} isFetching={isFetching || totalsLoading} isLoading={isLoading} message="Verifique sua conexão e tente novamente."/>
       <div className="flex min-h-[350px] flex-1 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900"><div className="flex-1 overflow-x-auto overflow-y-auto"><table data-testid="contas-a-pagar-table" className="w-full min-w-[1050px] table-fixed border-collapse text-left text-xs"><thead className="sticky top-0 z-10 border-b border-gray-200 bg-slate-50 font-bold uppercase tracking-wider text-gray-500 dark:border-slate-800 dark:bg-slate-850 dark:text-slate-400"><tr><th className="w-[15%] px-2 py-3 text-center" aria-label="Ações"></th><th className="w-[12%] px-3 py-3">Vencimento</th><th className="w-[17%] px-3 py-3">Descrição</th><th className="w-[19%] px-3 py-3">Participante</th><th className="w-[13%] px-3 py-3">Categoria</th><th className="w-[12%] px-3 py-3">Conta</th><th className="w-[12%] px-3 py-3 text-right">Valor</th></tr></thead><tbody className="divide-y divide-gray-150 text-gray-700 dark:text-slate-200">
-        {isLoading ? <TableSkeleton columns={7}/> : isError ? null : parcelas.length === 0 ? <tr><td colSpan={7} className="px-4 py-12 text-center"><div className="flex flex-col items-center gap-2"><HandCoins className="h-7 w-7 text-teal-600" aria-hidden="true"/><p className="font-bold text-slate-800 dark:text-slate-200">Nenhuma conta a pagar prevista para este mês.</p></div></td></tr> : parcelas.map((parcela) => <tr key={parcela.id} tabIndex={0} onClick={() => setDetalhes(parcela)} onKeyDown={(event) => { if (event.target !== event.currentTarget) return; if (event.key === 'Enter') setDetalhes(parcela); if (event.key === ' ') { event.preventDefault(); setDetalhes(parcela); } }} className="cursor-pointer hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-teal-500 dark:hover:bg-slate-800/50"><td className="px-2 py-2 text-center"><button type="button" aria-label={`Efetivar ${parcela.descricao}`} title="Efetivar" onClick={(event) => { event.stopPropagation(); setSelected(parcela); }} className="inline-flex items-center gap-2 rounded-md bg-teal-700 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-teal-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 dark:bg-teal-600 dark:hover:bg-teal-500"><HandCoins className="h-4 w-4" aria-hidden="true"/>Efetivar</button></td><td className="px-3 py-2">{formatDate(parcela.data_competencia)}</td><td className="px-3 py-2 font-semibold">{parcela.descricao}</td><td className="px-3 py-2"><span className="block truncate font-semibold">{parcela.participante_nome ?? '—'}</span><span className="block truncate text-[10px] text-gray-500">{parcela.participante_documento ?? '—'}</span></td><td className="px-3 py-2">{categorias.find((categoria) => categoria.id === parcela.categoria_id)?.nome ?? '—'}</td><td className="px-3 py-2">{contas.find((conta) => conta.id === parcela.banco_id)?.nome ?? '—'}</td><td className="px-3 py-2 text-right font-bold">{Number(parcela.valor) === 0 ? 'A definir' : money.format(Number(parcela.valor))}</td></tr>)}
+        {isLoading ? <TableSkeleton columns={7}/> : isError ? null : parcelas.length === 0 ? <tr><td colSpan={7} className="px-4 py-12 text-center"><div className="flex flex-col items-center gap-2"><HandCoins className="h-7 w-7 text-teal-600" aria-hidden="true"/><p className="font-bold text-slate-800 dark:text-slate-200">Nenhuma conta a pagar prevista para este mês.</p></div></td></tr> : parcelas.map((parcela) => <tr key={parcela.id} tabIndex={0} onClick={() => setDetalhes(parcela)} onKeyDown={(event) => { if (event.target !== event.currentTarget) return; if (event.key === 'Enter') setDetalhes(parcela); if (event.key === ' ') { event.preventDefault(); setDetalhes(parcela); } }} className="cursor-pointer hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-teal-500 dark:hover:bg-slate-800/50"><td className="px-2 py-2 text-center"><button type="button" aria-label={`Efetivar ${parcela.descricao}`} title="Efetivar" onClick={(event) => { event.stopPropagation(); setSelected(parcela); }} className="inline-flex items-center gap-2 rounded-md bg-teal-700 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-teal-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 dark:bg-teal-600 dark:hover:bg-teal-500"><HandCoins className="h-4 w-4" aria-hidden="true"/>Efetivar</button></td><td className="px-3 py-2">{formatDate(parcela.data_competencia)}</td><td className="px-3 py-2 font-semibold">{parcela.descricao}{seloDaCobranca(parcela)}</td><td className="px-3 py-2"><span className="block truncate font-semibold">{parcela.participante_nome ?? '—'}</span><span className="block truncate text-[10px] text-gray-500">{parcela.participante_documento ?? '—'}</span></td><td className="px-3 py-2">{categorias.find((categoria) => categoria.id === parcela.categoria_id)?.nome ?? '—'}</td><td className="px-3 py-2">{contas.find((conta) => conta.id === parcela.banco_id)?.nome ?? '—'}</td><td className="px-3 py-2 text-right font-bold">{Number(parcela.valor) === 0 ? 'A definir' : money.format(Number(parcela.valor))}</td></tr>)}
         </tbody></table></div>{isFetching && !isLoading && <p role="status" className="px-4 py-2 text-xs text-gray-500">Atualizando...</p>}<PaginationFooter page={page} pageSize={pageSize} total={total} onPageChange={setPage} itemLabel="contas a pagar" /></div>
     <DetalhesRegistroModal isOpen={detalhes !== null} onClose={() => setDetalhes(null)} titulo="Detalhes da conta a pagar" subtitulo={detalhes?.descricao ?? ''} grupos={detalhes ? [
       { titulo: 'Conta a pagar', linhas: [
@@ -106,6 +123,7 @@ export default function FinanceiroContasAPagar() {
         { rotulo: 'Valor', valor: Number(detalhes.valor) === 0 ? 'A definir' : money.format(Number(detalhes.valor)) },
         { rotulo: 'Categoria', valor: categorias.find((categoria) => categoria.id === detalhes.categoria_id)?.nome ?? '—' },
         { rotulo: 'Conta', valor: contas.find((conta) => conta.id === detalhes.banco_id)?.nome ?? '—' },
+        ...(rotuloDaCobranca(detalhes) ? [{ rotulo: 'Cobrança', valor: rotuloDaCobranca(detalhes) }] : []),
         { rotulo: 'Situação', valor: detalhes.status === 'EFETIVADO' ? 'Efetivado' : 'Previsto' },
       ] },
       { titulo: 'Participante', linhas: [
