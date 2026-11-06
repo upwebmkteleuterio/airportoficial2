@@ -35,6 +35,17 @@ async function criarVendaAVista(
   await expect(page.getByRole('row').filter({ hasText: empresa.nome })).toContainText(/R\$\s*1\.000,00/);
 }
 
+/**
+ * Valor do card "Recebido no mês", que soma os recebimentos de toda a empresa.
+ * Devolve null enquanto o card ainda está carregando.
+ */
+async function lerTotalRecebido(page: Page): Promise<number | null> {
+  const card = page.getByTestId('recebimentos-totais').getByText('Recebido no mês').locator('..');
+  const texto = await card.innerText();
+  const valor = texto.replace(/[^\d,]/g, '');
+  return valor ? Number(valor.replace(',', '.')) : null;
+}
+
 test.beforeEach(async ({ page }) => {
   user = await createTestUser('GESTOR');
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -72,6 +83,11 @@ test('gestor efetiva um recebimento alterando valor e data', async ({ page }) =>
   const linha = page.getByRole('row').filter({ hasText: empresa.nome });
   await expect(linha).toContainText(/R\$\s*1\.000,00/, { timeout: T });
 
+  // O card do mês soma os recebimentos de toda a empresa, então a conferência
+  // abaixo é feita pelo quanto a efetivação acrescentou, não por valor absoluto.
+  await expect.poll(() => lerTotalRecebido(page), { timeout: T }).not.toBeNull();
+  const recebidoAntes = (await lerTotalRecebido(page)) ?? 0;
+
   // Efetivar ajustando o valor recebido e a data de recebimento.
   await linha.getByRole('button', { name: /^Efetivar/ }).click({ timeout: T });
   const dialog = page.getByRole('dialog');
@@ -80,10 +96,17 @@ test('gestor efetiva um recebimento alterando valor e data', async ({ page }) =>
   await dialog.locator('#efetivar-data').fill(dataEfetivacao, { timeout: T });
   await dialog.getByRole('button', { name: 'Confirmar recebimento' }).click({ timeout: T });
 
-  // O previsto sai da lista de recebimentos do mês.
+  // O previsto sai da lista do mês e o total recebido sobe exatamente o valor pago.
   await expect(linha).toHaveCount(0, { timeout: T });
-  const totalRecebido = page.getByTestId('recebimentos-totais').getByText('Recebido no mês').locator('..');
-  await expect(totalRecebido).toContainText(/R\$\s*350,00/, { timeout: T });
+  await expect
+    .poll(
+      async () => {
+        const valor = await lerTotalRecebido(page);
+        return valor === null ? null : Math.round(valor * 100);
+      },
+      { timeout: T },
+    )
+    .toBe(Math.round((recebidoAntes + 350) * 100));
 
   // O saldo da conta recebeu o valor ajustado, e o lançamento guardou a data.
   await page.goto('/financeiro/lancamentos', { timeout: T });
