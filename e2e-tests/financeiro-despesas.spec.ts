@@ -200,7 +200,7 @@ test('cancelar despesa com término preserva parcela paga e remove parcela em ab
   await page.getByLabel('Mês').fill(mes);
   await expect(page.getByText(/Exibindo/)).toBeVisible({ timeout: T });
   await expect(page.getByRole('row').filter({ hasText: descricao })).toHaveCount(2, { timeout: T });
-  await page.getByRole('button', { name: `Efetivar ${descricao}` }).first().click();
+  await page.getByRole('button', { name: new RegExp(`^Efetivar ${descricao}`) }).first().click();
   await page.getByRole('dialog').getByRole('button', { name: 'Confirmar pagamento' }).click();
   // A gravação do pagamento precisa terminar antes de sair da tela.
   await expect(page.getByRole('row').filter({ hasText: descricao })).toHaveCount(1, { timeout: T });
@@ -259,7 +259,7 @@ test('excluir despesa mantém parcela paga no histórico de lançamentos', async
   await page.goto('/financeiro/contas-a-pagar');
   await page.getByLabel('Mês').fill(mes);
   await expect(page.getByText(/Exibindo/)).toBeVisible({ timeout: T });
-  await page.getByRole('button', { name: `Efetivar ${descricao}` }).first().click();
+  await page.getByRole('button', { name: new RegExp(`^Efetivar ${descricao}`) }).first().click();
   await page.getByRole('dialog').getByRole('button', { name: 'Confirmar pagamento' }).click();
   // A gravação do pagamento precisa terminar antes de sair da tela.
   await expect(page.getByRole('row').filter({ hasText: descricao })).toHaveCount(1, { timeout: T });
@@ -306,7 +306,7 @@ test('filtra despesas com término finalizadas após efetivar uma parcela', asyn
   await expect(page.getByText(/Exibindo/)).toBeVisible({ timeout: T });
   const parcela = page.getByRole('row').filter({ hasText: descricao });
   await expect(parcela).toBeVisible({ timeout: T });
-  await parcela.getByRole('button', { name: `Efetivar ${descricao}` }).click();
+  await parcela.getByRole('button', { name: new RegExp(`^Efetivar ${descricao}`) }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Confirmar pagamento' }).click();
   await expect(parcela).toHaveCount(0, { timeout: T });
 

@@ -84,16 +84,6 @@ export function useDespesasPrevistas(filtros: DespesasPrevistasFiltros) {
   return { parcelas: query.data?.data ?? [], total: query.data?.total ?? 0, isLoading: query.isLoading, isFetching: query.isFetching, isError: query.isError };
 }
 
-export function useNumerosDasParcelas(programacaoIds: string[]) {
-  const chave = [...programacaoIds].sort().join(',');
-  const query = useQuery({
-    queryKey: ['parcelas-numeros', chave],
-    queryFn: () => programacaoSaidaService.getNumerosDasParcelas(programacaoIds),
-    enabled: programacaoIds.length > 0,
-  });
-  return { numerosDasParcelas: query.data ?? {} };
-}
-
 export function useTotaisContasAPagar(filtros: { mes: string; bancoId?: string }) {
   const query = useQuery({
     queryKey: ['contas-a-pagar-totais', filtros],

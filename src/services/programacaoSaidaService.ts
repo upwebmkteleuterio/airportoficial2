@@ -178,30 +178,6 @@ export const programacaoSaidaService = {
     return { data: ((data ?? []) as ParcelaDespesa[]).map(toParcela), total: count ?? 0 };
   },
 
-  /**
-   * Número de cada parcela de uma despesa com parcelas personalizadas. Como a ordem
-   * depende das datas já cadastradas (inclusive as pagas), não é possível calcular o
-   * número apenas com os dados da despesa.
-   */
-  getNumerosDasParcelas: async (programacaoIds: string[]): Promise<Record<string, number>> => {
-    if (programacaoIds.length === 0) return {};
-    const { data, error } = await supabase.from('lancamentos_financeiros')
-      .select('id, programacao_id, data_competencia')
-      .in('programacao_id', programacaoIds)
-      .order('data_competencia', { ascending: true })
-      .order('id', { ascending: true })
-      .limit(1000);
-    if (error) throw serviceError('Não foi possível carregar a numeração das parcelas', error);
-    const numeros: Record<string, number> = {};
-    const contagem: Record<string, number> = {};
-    for (const row of data ?? []) {
-      const numero = (contagem[row.programacao_id] ?? 0) + 1;
-      contagem[row.programacao_id] = numero;
-      numeros[row.id] = numero;
-    }
-    return numeros;
-  },
-
   getTotaisPrevistos: async (mes: string, bancoId?: string): Promise<{ totalPrevisto: number; totalPago: number; totalAPagar: number }> => {
     const inicio = mesInicio(mes);
     const fim = new Date(Date.UTC(Number(mes.slice(0, 4)), Number(mes.slice(5, 7)), 1)).toISOString().slice(0, 10);
