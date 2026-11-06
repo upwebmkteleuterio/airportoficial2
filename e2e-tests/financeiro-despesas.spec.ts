@@ -213,6 +213,8 @@ test('cancelar despesa com término preserva parcela paga e remove parcela em ab
   const confirmacao = page.getByRole('dialog', { name: 'Confirmar cancelamento' });
   await expect(confirmacao).toContainText('parcelas ainda não pagas');
   await confirmacao.getByRole('button', { name: 'Cancelar despesa' }).click();
+  const grupoSituacao = page.getByRole('group', { name: 'Situação das despesas com término' });
+  await grupoSituacao.getByRole('button', { name: 'Finalizadas' }).click();
   await expect(linha).toContainText('Cancelada');
   await expect(linha).toContainText('1 de 2 pagas');
   await expect(linha.getByRole('button', { name: `Cancelar despesa ${descricao}` })).toHaveCount(0);
@@ -273,4 +275,49 @@ test('excluir despesa mantém parcela paga no histórico de lançamentos', async
 
   await page.goto('/financeiro/lancamentos');
   await expect(page.getByRole('row').filter({ hasText: descricao })).toContainText(/R\$\s*90,00/, { timeout: T });
+});
+
+test('filtra despesas com término finalizadas após efetivar uma parcela', async ({ page }) => {
+  test.setTimeout(150000);
+  const T = 20000;
+  const conta = await createDisposableConta(user.marker);
+  const categoria = await createDisposableCategoria(user.marker, 'SAIDA');
+  const descricao = `Despesa avulsa finalizada ${user.marker}`;
+  const hoje = new Date();
+  const mes = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
+  const primeiroDiaDoMes = `${mes}-01`;
+
+  await signInAs(page, user);
+  await page.goto('/financeiro/despesas');
+  await page.getByTestId('nova-despesa-button').click();
+  const dialog = page.getByRole('dialog');
+  await dialog.locator('#despesa-descricao').fill(descricao);
+  await dialog.getByRole('radio', { name: /Avulsa/ }).check();
+  await dialog.locator('#despesa-dia-vencimento').fill('1');
+  await dialog.locator('#despesa-data-inicio').fill(primeiroDiaDoMes);
+  await fillMoneyInput(dialog.locator('#despesa-valor'), '145');
+  await dialog.locator('#despesa-categoria').selectOption({ label: categoria });
+  await dialog.locator('#despesa-conta').selectOption({ label: conta.nome });
+  await dialog.getByRole('button', { name: 'Salvar' }).click();
+  await expect(dialog).toHaveCount(0, { timeout: T });
+
+  await page.goto('/financeiro/contas-a-pagar');
+  await page.getByLabel('Mês').fill(mes);
+  await expect(page.getByText(/Exibindo/)).toBeVisible({ timeout: T });
+  const parcela = page.getByRole('row').filter({ hasText: descricao });
+  await expect(parcela).toBeVisible({ timeout: T });
+  await parcela.getByRole('button', { name: `Efetivar ${descricao}` }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Confirmar pagamento' }).click();
+  await expect(parcela).toHaveCount(0, { timeout: T });
+
+  await page.goto('/financeiro/despesas');
+  await page.getByRole('tab', { name: /Despesas com término/ }).click();
+  const grupoSituacao = page.getByRole('group', { name: 'Situação das despesas com término' });
+  const linha = page.getByRole('row').filter({ hasText: descricao });
+  await expect(grupoSituacao.getByRole('button', { name: 'Em andamento' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(linha).toHaveCount(0, { timeout: T });
+
+  await grupoSituacao.getByRole('button', { name: 'Finalizadas' }).click();
+  await expect(linha).toBeVisible({ timeout: T });
+  await expect(linha).toContainText('Finalizada');
 });

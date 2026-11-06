@@ -1,0 +1,1 @@
+ALTER TABLE public.programacoes_saidas ADD COLUMN IF NOT EXISTS situacao_termino text NOT NULL DEFAULT 'EM_ANDAMENTO'

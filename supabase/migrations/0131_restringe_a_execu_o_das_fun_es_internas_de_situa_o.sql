@@ -1,0 +1,1 @@
+REVOKE ALL ON FUNCTION public.fn_recalcular_situacao_termino(text), public.fn_atualizar_situacao_termino_por_lancamento(), public.fn_atualizar_situacao_termino_da_programacao() FROM PUBLIC, anon, authenticated

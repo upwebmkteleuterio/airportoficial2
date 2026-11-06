@@ -1,0 +1,1 @@
+DROP TRIGGER IF EXISTS programacoes_saidas_situacao_termino ON public.programacoes_saidas

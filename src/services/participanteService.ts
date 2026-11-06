@@ -56,7 +56,7 @@ export const participanteService = {
     if (digitos.length < 3) return [];
     const { data, error } = await supabase.from('pessoas').select('id, nome, cpf')
       .eq('ativo', true).or('papel.is.null,papel.eq.ALUNO')
-      .ilike('cpf', `%${digitos}%`).order('nome', { ascending: true }).limit(20);
+      .like('cpf', `${digitos}%`).order('nome', { ascending: true }).limit(20);
     if (error) throw serviceError('Não foi possível buscar alunos pelo CPF', error);
     return ((data ?? []) as PessoaParticipante[]).map((pessoa) => toPessoaOpcao(pessoa, 'ALUNO'));
   },

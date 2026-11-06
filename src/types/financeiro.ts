@@ -199,6 +199,7 @@ export interface ProgramacaoSaida {
   repeticoes: number | null;
   total_parcelas: number | null;
   cancelada: boolean;
+  situacao_termino: 'EM_ANDAMENTO' | 'FINALIZADA' | 'CANCELADA';
   valor_previsto: number | null;
   categoria_id: string;
   banco_id: string;

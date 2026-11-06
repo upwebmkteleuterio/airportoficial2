@@ -1,0 +1,1 @@
+DROP TRIGGER IF EXISTS lancamentos_financeiros_situacao_termino ON public.lancamentos_financeiros
