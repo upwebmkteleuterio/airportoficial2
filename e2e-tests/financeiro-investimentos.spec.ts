@@ -147,3 +147,89 @@ test('gestor só exclui uma aplicação que ainda não tem movimentos', async ({
   await page.getByRole('dialog', { name: 'Confirmar exclusão' }).getByRole('button', { name: 'Confirmar exclusão' }).click({ timeout: T });
   await expect(linhaLivre).toHaveCount(0, { timeout: T });
 });
+
+test('valor aplicado no cadastro gera a saída na categoria de aplicação', async ({ page }) => {
+  test.setTimeout(150000);
+  const T = 20000;
+  // A conta nasce com caixa: o valor aplicado sai desse saldo.
+  const conta = await createDisposableConta(user.marker, 5000);
+  const nome = `Aplicação inicial ${user.marker}`;
+
+  await signInAs(page, user);
+  await page.goto('/financeiro/investimentos', { timeout: T });
+  await page.getByTestId('nova-aplicacao-button').click({ timeout: T });
+  const dialog = page.getByRole('dialog');
+  await dialog.getByTestId('aplicacao-nome').fill(nome, { timeout: T });
+  await dialog.getByTestId('aplicacao-banco').selectOption(conta.id, { timeout: T });
+  await dialog.getByTestId('aplicacao-tipo').selectOption('CDB', { timeout: T });
+  await fillMoneyInput(dialog.getByTestId('aplicacao-valor-inicial'), '2000');
+  await dialog.getByTestId('salvar-aplicacao-button').click({ timeout: T });
+
+  // A aplicação já nasce com o valor aplicado e disponível.
+  const linha = page.getByRole('row').filter({ hasText: nome });
+  await expect(linha).toContainText(/R\$\s*2\.000,00/, { timeout: T });
+  await expect(page.getByTestId('investimentos-total-geral')).toContainText(/R\$\s*2\.000,00/, { timeout: T });
+
+  // O dinheiro saiu do caixa como lançamento de aplicação.
+  await page.goto('/financeiro/lancamentos', { timeout: T });
+  const chipConta = page.getByTestId('saldos-por-conta').getByRole('button').filter({ hasText: conta.nome });
+  await expect(chipConta).toContainText(/R\$\s*3\.000,00/, { timeout: T });
+
+  // Colunas: ações, data, descrição, categoria, conta, participante, forma, tipo, valor, observações.
+  const lancamento = page.getByRole('row').filter({ hasText: `Aplicação — ${nome}` });
+  await expect(lancamento).toHaveCount(1, { timeout: T });
+  const celulas = lancamento.locator('td');
+  await expect(celulas.nth(3)).toContainText('Aplicação', { timeout: T });
+  await expect(celulas.nth(7)).toContainText('Saída', { timeout: T });
+  await expect(celulas.nth(8)).toContainText(/R\$\s*2\.000,00/, { timeout: T });
+  await expect(celulas.nth(9)).toContainText('Aplicação inicial', { timeout: T });
+});
+
+test('aporte e resgate aparecem em Lançamentos nas categorias de aplicação e resgate', async ({ page }) => {
+  test.setTimeout(180000);
+  const T = 20000;
+  const conta = await createDisposableConta(user.marker, 5000);
+  const nome = `Aplicação fluxo ${user.marker}`;
+
+  await signInAs(page, user);
+  await page.goto('/financeiro/investimentos', { timeout: T });
+  await criarAplicacao(page, conta, nome);
+
+  // Aplica R$ 1.000,00, ganha R$ 100,00 de rendimento e resgata tudo (R$ 1.100,00).
+  await registrarMovimento(page, nome, 'Aplicar', '1000');
+  await registrarMovimento(page, nome, 'Registrar rendimento', '100');
+  await registrarMovimento(page, nome, 'Resgatar', '1100');
+
+  const linha = page.getByRole('row').filter({ hasText: nome });
+  const colunas = linha.locator('td');
+  await expect(colunas.nth(5)).toContainText(/R\$\s*100,00/, { timeout: T });
+  await expect(colunas.nth(7)).toContainText(/R\$\s*0,00/, { timeout: T });
+
+  // O painel mostra a rentabilidade acumulada (100 sobre 1.000 = 10%).
+  await linha.getByRole('button', { name: `Ações para ${nome}` }).click({ timeout: T });
+  await page.getByRole('menuitem', { name: 'Ver movimentos' }).click({ timeout: T });
+  const detalhes = page.getByRole('dialog');
+  await expect(detalhes.getByTestId('movimentos-lista')).toContainText('Resgate', { timeout: T });
+  await expect(detalhes).toContainText('Rentabilidade acumulada', { timeout: T });
+  await expect(detalhes).toContainText('10,00 %', { timeout: T });
+  await detalhes.getByRole('button', { name: 'Fechar', exact: true }).click({ timeout: T });
+
+  // No caixa: 5.000 − 1.000 + 1.100 = 5.100 (o rendimento entra pelo resgate).
+  await page.goto('/financeiro/lancamentos', { timeout: T });
+  const chipConta = page.getByTestId('saldos-por-conta').getByRole('button').filter({ hasText: conta.nome });
+  await expect(chipConta).toContainText(/R\$\s*5\.100,00/, { timeout: T });
+
+  // O botão de ações identifica cada lançamento: a descrição do resgate também
+  // contém "Aplicação —", então o filtro por texto pegaria as duas linhas.
+  const saida = page.getByRole('row').filter({ has: page.getByRole('button', { name: `Ações para Aplicação — ${nome}` }) });
+  await expect(saida).toHaveCount(1, { timeout: T });
+  await expect(saida.locator('td').nth(3)).toContainText('Aplicação', { timeout: T });
+  await expect(saida.locator('td').nth(7)).toContainText('Saída', { timeout: T });
+  await expect(saida.locator('td').nth(8)).toContainText(/R\$\s*1\.000,00/, { timeout: T });
+
+  const entrada = page.getByRole('row').filter({ has: page.getByRole('button', { name: `Ações para Resgate de aplicação — ${nome}` }) });
+  await expect(entrada).toHaveCount(1, { timeout: T });
+  await expect(entrada.locator('td').nth(3)).toContainText('Resgate de aplicação', { timeout: T });
+  await expect(entrada.locator('td').nth(7)).toContainText('Entrada', { timeout: T });
+  await expect(entrada.locator('td').nth(8)).toContainText(/R\$\s*1\.100,00/, { timeout: T });
+});

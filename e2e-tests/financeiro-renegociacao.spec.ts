@@ -172,3 +172,99 @@ test('gestor escolhe renegociar ao salvar uma edição que mudou o vencimento', 
   await expect(detalhes).toContainText(motivo, { timeout: T });
   await expect(detalhes).toContainText(/\d{2}\/\d{2}\/\d{4} · [A-Za-zÀ-ÿ]/, { timeout: T });
 });
+
+test('renegociação preserva a parcela já recebida e redistribui as demais', async ({ page }) => {
+  test.setTimeout(180000);
+  const T = 20000;
+  const conta = await createDisposableConta(user.marker);
+  const categoria = await createDisposableCategoria(user.marker, 'ENTRADA');
+  const empresa = await createDisposableEmpresa(user.marker);
+  const motivo = `Cliente pediu prazo maior ${user.marker}`;
+
+  await signInAs(page, user);
+  // Três parcelas de R$ 300,00 (900 no total).
+  await criarVendaParcelada(page, conta, categoria, empresa, '3');
+
+  // Recebe a primeira parcela: ela passa a ser intocável na renegociação.
+  await page.goto('/financeiro/recebimentos', { timeout: T });
+  const linhaRecebimento = page.getByRole('row').filter({ hasText: empresa.nome });
+  await linhaRecebimento.getByRole('button', { name: /^Efetivar/ }).click({ timeout: T });
+  await page.getByRole('dialog').getByRole('button', { name: 'Confirmar recebimento' }).click({ timeout: T });
+  await expect(linhaRecebimento).toHaveCount(0, { timeout: T });
+
+  await page.goto('/financeiro/vendas', { timeout: T });
+  const linha = page.getByRole('row').filter({ hasText: empresa.nome });
+  await linha.getByRole('button', { name: `Ações para ${empresa.nome}` }).click({ timeout: T });
+  await page.getByRole('menuitem', { name: 'Renegociar' }).click({ timeout: T });
+
+  const dialog = page.getByRole('dialog');
+  // A parcela recebida fica bloqueada, com aviso.
+  await expect(dialog.getByTestId('renegociar-valor-0')).toBeDisabled({ timeout: T });
+  await expect(dialog.getByText('Parcela já recebida — não pode ser alterada na renegociação.')).toBeVisible({ timeout: T });
+
+  // As demais são redistribuídas: 300 (recebida) + 500 + 500 + 200 = 1.500.
+  await fillMoneyInput(dialog.getByTestId('renegociar-valor-1'), '500');
+  await fillMoneyInput(dialog.getByTestId('renegociar-valor-2'), '500');
+  await dialog.getByRole('button', { name: 'Adicionar parcela' }).click({ timeout: T });
+  await fillMoneyInput(dialog.getByTestId('renegociar-valor-3'), '200');
+  await expect(dialog).toContainText(/R\$\s*900,00\s*→\s*R\$\s*1\.500,00/, { timeout: T });
+
+  await dialog.getByTestId('renegociar-motivo').fill(motivo, { timeout: T });
+  await dialog.getByTestId('confirmar-renegociacao-button').click({ timeout: T });
+
+  // A venda fica marcada, com uma parcela recebida e três em aberto.
+  await expect(page.getByRole('status').filter({ hasText: 'Renegociação salva com sucesso.' })).toBeVisible({ timeout: T });
+  await expect(linha.getByTestId('venda-renegociada-tag')).toBeVisible({ timeout: T });
+  await expect(linha).toContainText('1/4', { timeout: T });
+  await expect(linha).toContainText(/R\$\s*1\.500,00/, { timeout: T });
+
+  // O histórico registra o motivo e quem renegociou.
+  await linha.click({ timeout: T });
+  const detalhes = page.getByRole('dialog');
+  await expect(detalhes).toContainText(motivo, { timeout: T });
+  await expect(detalhes).toContainText(/\d{2}\/\d{2}\/\d{4} · [A-Za-zÀ-ÿ]/, { timeout: T });
+});
+
+test('renegociação com menos parcelas reduz o total e atualiza os recebimentos', async ({ page }) => {
+  test.setTimeout(180000);
+  const T = 20000;
+  const conta = await createDisposableConta(user.marker);
+  const categoria = await createDisposableCategoria(user.marker, 'ENTRADA');
+  const empresa = await createDisposableEmpresa(user.marker);
+  const motivo = `Cliente pagou parte da dívida ${user.marker}`;
+
+  await signInAs(page, user);
+  // Três parcelas de R$ 300,00 (900 no total).
+  await criarVendaParcelada(page, conta, categoria, empresa, '3');
+
+  const linha = page.getByRole('row').filter({ hasText: empresa.nome });
+  await linha.getByRole('button', { name: `Ações para ${empresa.nome}` }).click({ timeout: T });
+  await page.getByRole('menuitem', { name: 'Renegociar' }).click({ timeout: T });
+
+  const dialog = page.getByRole('dialog');
+  // O motivo é obrigatório: sem ele o navegador bloqueia o envio e nada muda.
+  await dialog.getByTestId('confirmar-renegociacao-button').click({ timeout: T });
+  const motivoBloqueado = await dialog
+    .getByTestId('renegociar-motivo')
+    .evaluate((campo) => !(campo as HTMLTextAreaElement).checkValidity());
+  expect(motivoBloqueado).toBe(true);
+  await expect(dialog.getByTestId('renegociar-motivo')).toBeVisible({ timeout: T });
+
+  // Remove a última parcela e aumenta a primeira: 500 + 300 = 800.
+  await dialog.getByRole('button', { name: 'Remover' }).last().click({ timeout: T });
+  await fillMoneyInput(dialog.getByTestId('renegociar-valor-0'), '500');
+  await expect(dialog).toContainText(/R\$\s*900,00\s*→\s*R\$\s*800,00/, { timeout: T });
+
+  await dialog.getByTestId('renegociar-motivo').fill(motivo, { timeout: T });
+  await dialog.getByTestId('confirmar-renegociacao-button').click({ timeout: T });
+
+  await expect(linha.getByTestId('venda-renegociada-tag')).toBeVisible({ timeout: T });
+  await expect(linha).toContainText('0/2', { timeout: T });
+  await expect(linha).toContainText(/R\$\s*800,00/, { timeout: T });
+
+  // A parcela do mês já aparece com o novo valor em Recebimentos.
+  await page.goto('/financeiro/recebimentos', { timeout: T });
+  const linhaRecebimento = page.getByRole('row').filter({ hasText: empresa.nome });
+  await expect(linhaRecebimento).toHaveCount(1, { timeout: T });
+  await expect(linhaRecebimento).toContainText(/R\$\s*500,00/, { timeout: T });
+});
