@@ -1,0 +1,1 @@
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.aplicacoes, public.aplicacao_movimentos, public.venda_renegociacoes TO authenticated

@@ -1,0 +1,1 @@
+CREATE INDEX IF NOT EXISTS aplicacao_movimentos_aplicacao_idx ON public.aplicacao_movimentos (aplicacao_id, data DESC)

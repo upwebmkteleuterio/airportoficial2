@@ -1,5 +1,5 @@
 export type TipoLancamento = 'ENTRADA' | 'SAIDA';
-export type TipoSituacaoLancamento = 'PREVISTO' | 'EFETIVADO';
+export type TipoSituacaoLancamento = 'PREVISTO' | 'EFETIVADO' | 'CANCELADO';
 export type TipoBanco = 'BANCO' | 'COFRE_LOCAL' | 'CARTAO';
 export type FormaPagamento = 'PIX' | 'DINHEIRO' | 'BOLETO' | 'TRANSFERENCIA' | 'CARTAO' | 'CHEQUE' | 'OUTRO';
 export type TipoParticipante = 'ALUNO' | 'INSTRUTOR' | 'COORDENADOR' | 'EMPRESA' | 'FORNECEDOR';
@@ -99,6 +99,15 @@ export interface LancamentoFinanceiro {
   venda_id?: string | null;
   transferencia_id?: string | null;
   programacao_id?: string | null;
+  estornado: boolean;
+  estorno_de: string | null;
+  estorno_motivo: string | null;
+  cancelado_motivo: string | null;
+  renegociada: boolean;
+  nova_parcela: boolean;
+  valor_original: number | null;
+  data_original: string | null;
+  parcela_original: number | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -146,6 +155,9 @@ export interface Venda {
   referencia_transacao: string | null;
   cartao_ultimos_digitos: string | null;
   observacoes: string;
+  cancelada: boolean;
+  cancelada_motivo: string | null;
+  renegociada: boolean;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -157,6 +169,22 @@ export interface ParcelaVenda {
   data_competencia: string;
   data_efetivacao: string;
   status: TipoSituacaoLancamento;
+  estornado: boolean;
+  estorno_motivo: string | null;
+  cancelado_motivo: string | null;
+  renegociada: boolean;
+  nova_parcela: boolean;
+  valor_original: number | null;
+  data_original: string | null;
+  parcela_original: number | null;
+}
+
+export interface VendaRenegociacao {
+  id: string;
+  venda_id: string;
+  observacao: string;
+  created_by: string | null;
+  created_at: string;
 }
 
 export interface VendaComRelacoes extends Venda {
@@ -223,4 +251,36 @@ export interface ProgramacaoSaidaComRelacoes extends ProgramacaoSaida {
 
 export interface ParcelaDespesa extends LancamentoFinanceiro {
   programacao: ProgramacaoSaida | null;
+}
+
+export type TipoAplicacao = 'CDB' | 'POUPANCA' | 'FUNDO' | 'TESOURO' | 'ACOES' | 'OUTRO';
+export type TipoMovimentoAplicacao = 'APORTE' | 'RENDIMENTO' | 'RESGATE';
+
+export interface AplicacaoSaldo {
+  id: string;
+  banco_id: string;
+  banco_nome: string;
+  nome: string;
+  tipo: TipoAplicacao;
+  data_aplicacao: string;
+  ativo: boolean;
+  observacoes: string;
+  aportes: number;
+  rendimentos: number;
+  resgates: number;
+  disponivel: number;
+  movimentos: number;
+}
+
+export interface AplicacaoMovimento {
+  id: string;
+  aplicacao_id: string;
+  tipo: TipoMovimentoAplicacao;
+  valor: number;
+  data: string;
+  percentual: number | null;
+  observacoes: string;
+  lancamento_id: string | null;
+  created_by: string | null;
+  created_at: string;
 }

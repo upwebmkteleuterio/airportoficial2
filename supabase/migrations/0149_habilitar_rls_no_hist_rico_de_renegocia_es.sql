@@ -1,0 +1,1 @@
+ALTER TABLE public.venda_renegociacoes ENABLE ROW LEVEL SECURITY

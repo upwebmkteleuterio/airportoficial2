@@ -1,0 +1,1 @@
+CREATE INDEX IF NOT EXISTS lancamentos_financeiros_estorno_de_idx ON public.lancamentos_financeiros (estorno_de) WHERE estorno_de IS NOT NULL

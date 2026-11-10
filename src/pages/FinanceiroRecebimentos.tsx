@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { FileText, HandCoins, Hash, Landmark, Layers, Receipt, Search, Tag, User } from 'lucide-react';
+import { Ban, FileText, HandCoins, Hash, Landmark, Layers, Receipt, Search, Tag, User } from 'lucide-react';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { useQueryClient } from '@tanstack/react-query';
 import { EfetivarPrevistoModal } from '../components/financeiro/EfetivarPrevistoModal';
+import { CancelarParcelaModal } from '../components/financeiro/CancelarParcelaModal';
 import { DetalhesRegistroModal } from '../components/financeiro/DetalhesRegistroModal';
 import { NotaFiscalModal } from '../components/financeiro/NotaFiscalModal';
 import { RowActionMenu } from '../components/ui/RowActionMenu';
@@ -13,7 +14,7 @@ import { TruncatedInfoTooltip } from '../components/ui/TruncatedInfoTooltip';
 import { PaginationFooter } from '../components/ui/PaginationFooter';
 import { useBancos } from '../hooks/useBancos';
 import { useCategoriasFinanceiras } from '../hooks/useCategoriasFinanceiras';
-import { useVendasPrevistas, useTotaisRecebimentos, useEfetivarParcela } from '../hooks/useVendas';
+import { useVendasPrevistas, useTotaisRecebimentos, useEfetivarParcela, useCancelarParcela } from '../hooks/useVendas';
 import type { FormaPagamento, ParcelaRecebimento } from '../types/financeiro';
 import { separarDescricao } from '../utils/descricaoParcela';
 
@@ -44,6 +45,7 @@ export default function FinanceiroRecebimentos() {
   const [bancoId, setBancoId] = useState('');
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<ParcelaRecebimento | null>(null);
+  const [cancelando, setCancelando] = useState<ParcelaRecebimento | null>(null);
   const [detalhes, setDetalhes] = useState<ParcelaRecebimento | null>(null);
   const [notaFiscal, setNotaFiscal] = useState<ParcelaRecebimento | null>(null);
   const { contas, optionsTruncated: contasOptionsTruncated } = useBancos();
@@ -52,6 +54,7 @@ export default function FinanceiroRecebimentos() {
   const { parcelas, total, isLoading, isFetching, isError } = useVendasPrevistas(filters);
   const { totais, isLoading: totalsLoading, isError: totalsError } = useTotaisRecebimentos({ mes, bancoId: bancoId || undefined });
   const { efetivarParcela, isSettling } = useEfetivarParcela();
+  const { cancelarParcela, isCancelando } = useCancelarParcela();
   const queryClient = useQueryClient();
   const retry = () => {
     void queryClient.invalidateQueries({ queryKey: ['vendas-previstas'] });
@@ -64,6 +67,12 @@ export default function FinanceiroRecebimentos() {
     if (!selected) return;
     await efetivarParcela({ id: selected.id, updates: { status: 'EFETIVADO', data_efetivacao: data, valor } });
     setSelected(null);
+  };
+
+  const confirmCancellation = async (motivo: string) => {
+    if (!cancelando) return;
+    await cancelarParcela({ id: cancelando.id, motivo });
+    setCancelando(null);
   };
 
   return (
@@ -82,7 +91,7 @@ export default function FinanceiroRecebimentos() {
       </section>
       <QueryErrorState onRetry={retry} isRetrying={isFetching || totalsLoading} isError={isError || totalsError} isFetching={isFetching || totalsLoading} isLoading={isLoading} message="Verifique sua conexão e tente novamente."/>
       <div className="flex min-h-[350px] flex-1 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900"><div className="flex-1 overflow-x-auto overflow-y-auto custom-scrollbar"><table data-testid="recebimentos-table" className="w-full min-w-[1180px] table-fixed border-collapse text-left text-xs"><thead className="sticky top-0 z-10 border-b border-gray-200 bg-slate-50 font-bold uppercase tracking-wider text-gray-500 dark:border-slate-800 dark:bg-slate-850 dark:text-slate-400"><tr><th className="w-[15%] px-2 py-3 text-center" aria-label="Ações"></th><th className="w-[12%] px-3 py-3">Vencimento</th><th className="w-[17%] px-3 py-3">Descrição</th><th className="w-[19%] px-3 py-3">Participante</th><th className="w-[13%] px-3 py-3">Categoria</th><th className="w-[10%] px-3 py-3">Referência</th><th className="w-[12%] px-3 py-3">Conta</th><th className="w-[12%] px-3 py-3 text-right">Valor</th></tr></thead><tbody className="divide-y divide-gray-150 text-gray-700 dark:text-slate-200">
-        {isLoading ? <TableSkeleton columns={8}/> : isError ? null : parcelas.length === 0 ? <tr><td colSpan={8} className="px-4 py-12 text-center text-gray-500"><div className="flex flex-col items-center gap-2"><HandCoins className="h-7 w-7 text-teal-600" aria-hidden="true"/><p className="font-bold text-slate-800 dark:text-slate-200">Nenhum recebimento previsto para este mês.</p></div></td></tr> : parcelas.map((parcela) => { const { base, rotulo } = separarDescricao(parcela.descricao); return <tr key={parcela.id} tabIndex={0} onClick={() => setDetalhes(parcela)} onKeyDown={(event) => { if (event.target !== event.currentTarget) return; if (event.key === 'Enter') setDetalhes(parcela); if (event.key === ' ') { event.preventDefault(); setDetalhes(parcela); } }} className="cursor-pointer hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-teal-500 dark:hover:bg-slate-800/50"><td className="px-2 py-2 text-center"><div className="flex items-center justify-center gap-2"><button type="button" aria-label={`Efetivar ${parcela.descricao}`} title="Efetivar" onClick={(event) => { event.stopPropagation(); setSelected(parcela); }} className="inline-flex items-center gap-2 rounded-md bg-teal-700 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-teal-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 dark:bg-teal-600 dark:hover:bg-teal-500"><HandCoins className="h-4 w-4" aria-hidden="true"/>Efetivar</button><RowActionMenu ariaLabel={`Ações para ${parcela.descricao}`} items={[{ label: 'Emitir nota fiscal', icon: <FileText className="h-4 w-4" aria-hidden="true"/>, onClick: () => setNotaFiscal(parcela) }]}/></div></td><td className="px-3 py-2">{formatDate(parcela.data_competencia)}</td><td className="px-3 py-2"><TruncatedInfoTooltip text={base} title="Descrição" icon={Receipt} className="font-semibold"/>{rotulo && <span className="mt-0.5 flex items-center gap-1 text-[10px] font-normal text-gray-500 dark:text-slate-400"><Layers className="h-3 w-3" aria-hidden="true"/>{rotulo}</span>}</td><td className="px-3 py-2"><TruncatedInfoTooltip text={parcela.participante_nome ?? '—'} title="Participante" icon={User} className="font-semibold"/><TruncatedInfoTooltip text={parcela.participante_documento ?? '—'} title="Documento" icon={FileText} className="text-[10px] text-gray-500"/></td><td className="px-3 py-2"><TruncatedInfoTooltip text={categorias.find((categoria) => categoria.id === parcela.categoria_id)?.nome ?? '—'} title="Categoria" icon={Tag}/></td><td className="px-3 py-2"><TruncatedInfoTooltip text={parcela.numero_documento ?? parcela.venda?.referencia_transacao ?? '—'} title="Referência" icon={Hash}/></td><td className="px-3 py-2"><TruncatedInfoTooltip text={contas.find((conta) => conta.id === parcela.banco_id)?.nome ?? '—'} title="Conta" icon={Landmark}/></td><td className="px-3 py-2 text-right font-bold">{money.format(Number(parcela.valor))}</td></tr>; })}
+        {isLoading ? <TableSkeleton columns={8}/> : isError ? null : parcelas.length === 0 ? <tr><td colSpan={8} className="px-4 py-12 text-center text-gray-500"><div className="flex flex-col items-center gap-2"><HandCoins className="h-7 w-7 text-teal-600" aria-hidden="true"/><p className="font-bold text-slate-800 dark:text-slate-200">Nenhum recebimento previsto para este mês.</p></div></td></tr> : parcelas.map((parcela) => { const { base, rotulo } = separarDescricao(parcela.descricao); return <tr key={parcela.id} tabIndex={0} onClick={() => setDetalhes(parcela)} onKeyDown={(event) => { if (event.target !== event.currentTarget) return; if (event.key === 'Enter') setDetalhes(parcela); if (event.key === ' ') { event.preventDefault(); setDetalhes(parcela); } }} className="cursor-pointer hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-teal-500 dark:hover:bg-slate-800/50"><td className="px-2 py-2 text-center"><div className="flex items-center justify-center gap-2"><button type="button" aria-label={`Efetivar ${parcela.descricao}`} title="Efetivar" onClick={(event) => { event.stopPropagation(); setSelected(parcela); }} className="inline-flex items-center gap-2 rounded-md bg-teal-700 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-teal-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 dark:bg-teal-600 dark:hover:bg-teal-500"><HandCoins className="h-4 w-4" aria-hidden="true"/>Efetivar</button><RowActionMenu ariaLabel={`Ações para ${parcela.descricao}`} items={[{ label: 'Emitir nota fiscal', icon: <FileText className="h-4 w-4" aria-hidden="true"/>, onClick: () => setNotaFiscal(parcela) }, { label: 'Cancelar parcela', icon: <Ban className="h-4 w-4" aria-hidden="true"/>, tone: 'danger', onClick: () => setCancelando(parcela) }]}/></div></td><td className="px-3 py-2">{formatDate(parcela.data_competencia)}</td><td className="px-3 py-2"><TruncatedInfoTooltip text={base} title="Descrição" icon={Receipt} className="font-semibold"/>{rotulo && <span className="mt-0.5 flex items-center gap-1 text-[10px] font-normal text-gray-500 dark:text-slate-400"><Layers className="h-3 w-3" aria-hidden="true"/>{rotulo}</span>}</td><td className="px-3 py-2"><TruncatedInfoTooltip text={parcela.participante_nome ?? '—'} title="Participante" icon={User} className="font-semibold"/><TruncatedInfoTooltip text={parcela.participante_documento ?? '—'} title="Documento" icon={FileText} className="text-[10px] text-gray-500"/></td><td className="px-3 py-2"><TruncatedInfoTooltip text={categorias.find((categoria) => categoria.id === parcela.categoria_id)?.nome ?? '—'} title="Categoria" icon={Tag}/></td><td className="px-3 py-2"><TruncatedInfoTooltip text={parcela.numero_documento ?? parcela.venda?.referencia_transacao ?? '—'} title="Referência" icon={Hash}/></td><td className="px-3 py-2"><TruncatedInfoTooltip text={contas.find((conta) => conta.id === parcela.banco_id)?.nome ?? '—'} title="Conta" icon={Landmark}/></td><td className="px-3 py-2 text-right font-bold">{money.format(Number(parcela.valor))}</td></tr>; })}
         </tbody></table></div>{isFetching && !isLoading && <p role="status" className="px-4 py-2 text-xs text-gray-500">Atualizando...</p>}<PaginationFooter page={page} pageSize={pageSize} total={total} onPageChange={setPage} itemLabel="recebimentos" /></div>
       <DetalhesRegistroModal isOpen={detalhes !== null} onClose={() => setDetalhes(null)} titulo="Detalhes do recebimento" subtitulo={detalhes?.descricao ?? ''} grupos={detalhes ? [
         { titulo: 'Recebimento', linhas: [
@@ -107,6 +116,7 @@ export default function FinanceiroRecebimentos() {
         ] }] : []),
         { linhas: [{ rotulo: 'Observações', valor: detalhes.observacoes || '—' }] },
       ] : []}/>
+      <CancelarParcelaModal isOpen={cancelando !== null} onClose={() => setCancelando(null)} onConfirm={confirmCancellation} isPending={isCancelando} descricao={cancelando?.descricao ?? ''} vencimento={cancelando?.data_competencia ?? ''} valor={Number(cancelando?.valor ?? 0)}/>
       <EfetivarPrevistoModal isOpen={selected !== null} onClose={() => setSelected(null)} onConfirm={confirmSettlement} isPending={isSettling} descricao={selected?.descricao ?? ''} valorSugerido={Number(selected?.valor ?? 0)}/>
       <NotaFiscalModal
         isOpen={notaFiscal !== null}

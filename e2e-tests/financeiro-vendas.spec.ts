@@ -127,7 +127,9 @@ test('gestor edita uma venda e atualiza o total exibido', async ({ page }) => {
   await linha.getByRole('button', { name: `Ações para ${empresa.nome}` }).click();
   await page.getByRole('menuitem', { name: 'Editar' }).click();
   const dialog = page.getByRole('dialog');
-  await fillMoneyInput(dialog.locator('#venda-valor'), '1250');
+  // O valor da venda é a soma das parcelas: a correção do valor é feita na
+  // própria parcela, que mantém a identidade já salva.
+  await fillMoneyInput(dialog.getByTestId('venda-parcela-valor-0'), '1250');
   await dialog.getByRole('button', { name: 'Atualizar' }).click();
 
   await expect(linha).toContainText(/R\$\s*1\.250,00/);

@@ -28,6 +28,17 @@ export function useLancamentosFinanceiros(filtros: LancamentoFiltros) {
     onSuccess: invalidarDadosFinanceiros,
   });
   const deleteMutation = useMutation({ mutationFn: lancamentoService.delete, onSuccess: invalidarDadosFinanceiros });
+  const estornarMutation = useMutation({
+    mutationFn: lancamentoService.estornar,
+    onSuccess: () => Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['lancamentos-financeiros'] }),
+      queryClient.invalidateQueries({ queryKey: ['saldos-contas'] }),
+      queryClient.invalidateQueries({ queryKey: ['resumo-financeiro-mensal'] }),
+      queryClient.invalidateQueries({ queryKey: ['vendas'] }),
+      queryClient.invalidateQueries({ queryKey: ['vendas-previstas'] }),
+      queryClient.invalidateQueries({ queryKey: ['recebimentos-totais'] }),
+    ]),
+  });
 
   return {
     lancamentos: lancamentosQuery.data?.data ?? [],
@@ -38,8 +49,10 @@ export function useLancamentosFinanceiros(filtros: LancamentoFiltros) {
     createLancamento: createMutation.mutateAsync,
     updateLancamento: updateMutation.mutateAsync,
     deleteLancamento: deleteMutation.mutateAsync,
+    estornarLancamento: estornarMutation.mutateAsync,
     isCreating: createMutation.isPending,
     isUpdating: updateMutation.isPending,
     isDeleting: deleteMutation.isPending,
+    isEstornando: estornarMutation.isPending,
   };
 }

@@ -21,6 +21,8 @@ const routePaths: Record<string, string> = {
   documentos: '/documentos',
   migracao: '/migracao',
   'financeiro-bancos': '/financeiro/bancos',
+  'financeiro-conciliacao': '/financeiro/conciliacao',
+  'financeiro-investimentos': '/financeiro/investimentos',
   'financeiro-transferencias': '/financeiro/transferencias',
   'financeiro-lancamentos': '/financeiro/lancamentos',
   'financeiro-vendas': '/financeiro/vendas',

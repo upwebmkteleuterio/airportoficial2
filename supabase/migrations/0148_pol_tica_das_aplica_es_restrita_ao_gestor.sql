@@ -1,0 +1,1 @@
+CREATE POLICY "aplicacoes_gestor_policy" ON public.aplicacoes AS PERMISSIVE FOR ALL TO "authenticated" USING (can_manage_financeiro()) WITH CHECK (can_manage_financeiro())

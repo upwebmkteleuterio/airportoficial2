@@ -1,0 +1,1 @@
+CREATE POLICY "venda_renegociacoes_gestor_policy" ON public.venda_renegociacoes AS PERMISSIVE FOR ALL TO "authenticated" USING (can_manage_financeiro()) WITH CHECK (can_manage_financeiro())

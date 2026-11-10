@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { AlignLeft, ArrowLeftRight, Banknote, CreditCard, Edit2, FileText, Filter, HelpCircle, Landmark, Plus, Receipt, Search, Trash2, User, Vault, X } from 'lucide-react';
+import { AlignLeft, ArrowLeftRight, Banknote, CreditCard, Edit2, Eye, FileText, Filter, HelpCircle, Landmark, Plus, Receipt, Search, Trash2, Undo2, User, Vault, X } from 'lucide-react';
 import { useIsFetching, useQueryClient } from '@tanstack/react-query';
 import { Button } from '../components/ui/Button';
 import { ConfirmDeleteModal } from '../components/ui/ConfirmDeleteModal';
@@ -11,6 +11,7 @@ import { PaginationFooter } from '../components/ui/PaginationFooter';
 import { RowActionMenu } from '../components/ui/RowActionMenu';
 import { TruncatedInfoTooltip } from '../components/ui/TruncatedInfoTooltip';
 import { DetalhesRegistroModal } from '../components/financeiro/DetalhesRegistroModal';
+import { EstornarLancamentoModal } from '../components/financeiro/EstornarLancamentoModal';
 import { MoneyInput } from '../components/ui/MoneyInput';
 import { useBancos } from '../hooks/useBancos';
 import { useCategoriasFinanceiras } from '../hooks/useCategoriasFinanceiras';
@@ -20,7 +21,8 @@ import { primeiroDiaDoMes, ultimoDiaDoMes } from '../utils/dateRange';
 import { useAlunosPorCpf, useParticipantesFinanceiros } from '../hooks/useParticipantesFinanceiros';
 import { useUIStore } from '../store/uiStore';
 import { FinanceiroOptionsLimitWarning } from '../components/financeiro/FinanceiroOptionsLimitWarning';
-import type { FormaPagamento, LancamentoComRelacoes, LancamentoFinanceiro, ParticipanteOpcao, TipoLancamento, TipoParticipante, TipoSituacaoLancamento } from '../types/financeiro';
+import type { FormaPagamento, LancamentoComRelacoes, ParticipanteOpcao, TipoLancamento, TipoParticipante, TipoSituacaoLancamento } from '../types/financeiro';
+import type { LancamentoInput } from '../services/lancamentoService';
 
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const pageSize = 20;
@@ -107,6 +109,7 @@ export default function FinanceiroLancamentos() {
   const [editing, setEditing] = useState<LancamentoComRelacoes | null>(null);
   const [detalhes, setDetalhes] = useState<LancamentoComRelacoes | null>(null);
   const [deleting, setDeleting] = useState<LancamentoComRelacoes | null>(null);
+  const [estornando, setEstornando] = useState<LancamentoComRelacoes | null>(null);
   const [form, setForm] = useState<LancamentoForm>(novoFormulario);
   const [modalOpen, setModalOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -114,7 +117,7 @@ export default function FinanceiroLancamentos() {
   const [errorMessage, setErrorMessage] = useState('');
   const [cpfSearch, setCpfSearch] = useState('');
   const filtros = useMemo(() => ({ page, pageSize, tipo: tipoFiltro || undefined, bancoId: bancoId || undefined, categoriaId: categoriaId || undefined, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, search: search || undefined }), [page, tipoFiltro, bancoId, categoriaId, dateFrom, dateTo, search]);
-  const { lancamentos, total, isLoading, isFetching, isError, createLancamento, updateLancamento, deleteLancamento, isCreating, isUpdating, isDeleting } = useLancamentosFinanceiros(filtros);
+  const { lancamentos, total, isLoading, isFetching, isError, createLancamento, updateLancamento, deleteLancamento, estornarLancamento, isCreating, isUpdating, isDeleting, isEstornando } = useLancamentosFinanceiros(filtros);
   const { data: transferenciaLegs } = useTransferenciaLegs(detalhes?.transferencia_id ?? null);
   const { alunos, isLoading: alunosLoading } = useAlunosPorCpf(cpfSearch);
   const queryClient = useQueryClient();
@@ -232,7 +235,7 @@ export default function FinanceiroLancamentos() {
       if (editing) {
         await updateLancamento({ id: editing.id, updates: { ...common, turma_id: editing.turma_id, matricula_id: editing.matricula_id } });
       } else {
-        const input: Omit<LancamentoFinanceiro, 'id' | 'created_at' | 'updated_at'> = {
+        const input: LancamentoInput = {
           ...common, turma_id: null, matricula_id: null, created_by: userLogged?.id ?? null,
         };
         await createLancamento(input);
@@ -253,6 +256,12 @@ export default function FinanceiroLancamentos() {
       setDeleting(null);
       setErrorMessage(error instanceof Error ? error.message : 'Não foi possível excluir o lançamento.');
     }
+  };
+
+  const confirmEstorno = async (dados: { valor: number; data: string; motivo: string }) => {
+    if (!estornando) return;
+    await estornarLancamento({ id: estornando.id, ...dados });
+    setEstornando(null);
   };
 
   const clearFilters = () => {
@@ -283,8 +292,13 @@ export default function FinanceiroLancamentos() {
         <div className="flex-1 overflow-x-auto overflow-y-auto custom-scrollbar"><table data-testid="lancamentos-table" className="w-full min-w-[1250px] table-fixed border-collapse text-left text-xs"><thead className="sticky top-0 z-10 border-b border-gray-200 bg-slate-50 font-bold uppercase tracking-wider text-gray-500 dark:border-slate-800 dark:bg-slate-850 dark:text-slate-400"><tr><th className="w-12 px-2 py-3 text-center" aria-label="Ações"></th><th className="w-[8%] px-3 py-3">Data</th><th className="w-[15%] px-3 py-3">Descrição</th><th className="w-[11%] px-3 py-3">Categoria</th><th className="w-[11%] px-3 py-3">Conta</th><th className="w-[13%] px-3 py-3">Participante</th><th className="w-[11%] px-3 py-3">Forma de pagamento</th><th className="w-[7%] px-3 py-3">Tipo</th><th className="w-[10%] px-3 py-3 text-right">Valor</th><th className="w-[14%] px-3 py-3">Observações</th></tr></thead>
           <tbody className="divide-y divide-gray-150 font-mono text-gray-700 dark:text-slate-200">
             {isLoading ? <TableSkeleton columns={10}/> : isError ? null : lancamentos.length === 0 ? <tr><td colSpan={10} className="px-4 py-12 text-center font-sans text-gray-500"><div className="flex flex-col items-center gap-2.5"><div className="rounded-full bg-teal-500/10 p-3 text-teal-500"><Receipt className="h-6 w-6" aria-hidden="true"/></div><p className="text-sm font-bold text-slate-800 dark:text-slate-200">Nenhum lançamento encontrado</p><p className="text-xs text-gray-400">Ajuste os filtros ou cadastre um novo lançamento.</p></div></td></tr> : lancamentosAgrupados.map((linha) => linha.tipo === 'dia' ? <tr key={linha.chave} data-testid={`lancamento-dia-${linha.dia}`}><td colSpan={10} className="border-y border-slate-200 bg-slate-100/80 px-3 py-2 font-sans text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300">{formatarDataDoDia(linha.dia)}</td></tr> : <tr key={linha.chave} tabIndex={0} onClick={() => setDetalhes(linha.record)} onKeyDown={(event) => { if (event.target !== event.currentTarget) return; if (event.key === 'Enter') setDetalhes(linha.record); if (event.key === ' ') { event.preventDefault(); setDetalhes(linha.record); } }} className={`${linha.zebra ? 'bg-slate-50/70 dark:bg-slate-800/30' : ''} cursor-pointer hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-teal-500 dark:hover:bg-slate-800/50`}>
-              <td className="px-2 py-2 text-center"><RowActionMenu ariaLabel={`Ações para ${linha.record.descricao}`} items={[{ label: 'Editar', icon: <Edit2 className="h-4 w-4" aria-hidden="true"/>, onClick: () => openForm(linha.record) }, { label: 'Excluir', icon: <Trash2 className="h-4 w-4" aria-hidden="true"/>, tone: 'danger', onClick: () => { setErrorMessage(''); setDeleting(linha.record); } }]}/></td>
-              <td className="px-3 py-2">{formatarData(linha.record.data_efetivacao)}</td><td className="px-3 py-2 font-sans font-semibold text-slate-800 dark:text-slate-200"><TruncatedInfoTooltip text={linha.record.descricao} title="Descrição" icon={Receipt}/>{linha.record.numero_documento && <TruncatedInfoTooltip text={`Nº ${linha.record.numero_documento}`} title="Número do documento" icon={FileText} className="text-[10px] font-normal text-gray-500"/>}{linha.record.transferencia_id && <span className="flex items-center gap-1 text-[10px] font-normal text-gray-500"><ArrowLeftRight className="h-3 w-3" aria-hidden="true"/>Transferência</span>}</td><td className="px-3 py-2 font-sans"><TruncatedInfoTooltip text={linha.record.categoria?.nome ?? '—'} title="Categoria" icon={Landmark}/></td><td className="px-3 py-2 font-sans"><TruncatedInfoTooltip text={linha.record.banco?.nome ?? '—'} title="Conta" icon={Landmark}/></td><td className="px-3 py-2 font-sans"><TruncatedInfoTooltip text={linha.record.participante_nome ?? '—'} title="Participante" icon={User}/>{linha.record.participante_documento && <TruncatedInfoTooltip text={linha.record.participante_documento} title="Documento do participante" icon={FileText} className="text-[10px] text-gray-500"/>}</td><td className="px-3 py-2 font-sans"><TruncatedInfoTooltip text={labelForma(linha.record.forma_pagamento)} title="Forma de pagamento" icon={CreditCard}/>{linha.record.venda?.cartao_ultimos_digitos && <span className="block text-[10px] text-gray-500">•••• {linha.record.venda.cartao_ultimos_digitos}</span>}</td><td className="px-3 py-2"><span className={`rounded-full px-2 py-1 font-sans text-[10px] font-bold ${linha.record.tipo === 'ENTRADA' ? 'bg-teal-50 text-teal-700 dark:bg-teal-950/40 dark:text-teal-300' : 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300'}`}>{linha.record.tipo === 'ENTRADA' ? 'Entrada' : 'Saída'}</span></td><td className={`px-3 py-2 text-right font-bold ${linha.record.tipo === 'ENTRADA' ? 'text-teal-600' : 'text-rose-600'}`}>{linha.record.tipo === 'ENTRADA' ? '+' : '−'}{money.format(linha.record.valor)}</td><td className="px-3 py-2 font-sans"><TruncatedInfoTooltip text={linha.record.observacoes || '—'} title="Observações" icon={AlignLeft}/></td>
+              <td className="px-2 py-2 text-center"><RowActionMenu ariaLabel={`Ações para ${linha.record.descricao}`} items={[
+                ...(linha.record.estornado === false && linha.record.estorno_de === null ? [{ label: 'Editar', icon: <Edit2 className="h-4 w-4" aria-hidden="true"/>, onClick: () => openForm(linha.record) }] : []),
+                ...(linha.record.status === 'EFETIVADO' && linha.record.estornado === false && linha.record.estorno_de === null && !linha.record.transferencia_id ? [{ label: 'Estornar', icon: <Undo2 className="h-4 w-4" aria-hidden="true"/>, onClick: () => setEstornando(linha.record) }] : []),
+                ...(linha.record.estornado === false && linha.record.estorno_de === null ? [{ label: 'Excluir', icon: <Trash2 className="h-4 w-4" aria-hidden="true"/>, tone: 'danger' as const, onClick: () => { setErrorMessage(''); setDeleting(linha.record); } }] : []),
+                ...(linha.record.estornado || linha.record.estorno_de !== null ? [{ label: 'Ver detalhes', icon: <Eye className="h-4 w-4" aria-hidden="true"/>, onClick: () => setDetalhes(linha.record) }] : []),
+              ]}/></td>
+              <td className="px-3 py-2">{formatarData(linha.record.data_efetivacao)}</td><td className="px-3 py-2 font-sans font-semibold text-slate-800 dark:text-slate-200"><TruncatedInfoTooltip text={linha.record.descricao} title="Descrição" icon={Receipt}/>{linha.record.estornado && <span data-testid="lancamento-estornado-tag" className="ml-1 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-bold text-amber-800 dark:bg-amber-950/50 dark:text-amber-300">Estornado</span>}{linha.record.estorno_de && <span className="ml-1 inline-flex rounded-full bg-orange-100 px-2 py-0.5 text-[9px] font-bold text-orange-800 dark:bg-orange-950/50 dark:text-orange-300">Estorno</span>}{linha.record.numero_documento && <TruncatedInfoTooltip text={`Nº ${linha.record.numero_documento}`} title="Número do documento" icon={FileText} className="text-[10px] font-normal text-gray-500"/>}{linha.record.transferencia_id && <span className="flex items-center gap-1 text-[10px] font-normal text-gray-500"><ArrowLeftRight className="h-3 w-3" aria-hidden="true"/>Transferência</span>}</td><td className="px-3 py-2 font-sans"><TruncatedInfoTooltip text={linha.record.categoria?.nome ?? '—'} title="Categoria" icon={Landmark}/></td><td className="px-3 py-2 font-sans"><TruncatedInfoTooltip text={linha.record.banco?.nome ?? '—'} title="Conta" icon={Landmark}/></td><td className="px-3 py-2 font-sans"><TruncatedInfoTooltip text={linha.record.participante_nome ?? '—'} title="Participante" icon={User}/>{linha.record.participante_documento && <TruncatedInfoTooltip text={linha.record.participante_documento} title="Documento do participante" icon={FileText} className="text-[10px] text-gray-500"/>}</td><td className="px-3 py-2 font-sans"><TruncatedInfoTooltip text={labelForma(linha.record.forma_pagamento)} title="Forma de pagamento" icon={CreditCard}/>{linha.record.venda?.cartao_ultimos_digitos && <span className="block text-[10px] text-gray-500">•••• {linha.record.venda.cartao_ultimos_digitos}</span>}</td><td className="px-3 py-2"><span className={`rounded-full px-2 py-1 font-sans text-[10px] font-bold ${linha.record.tipo === 'ENTRADA' ? 'bg-teal-50 text-teal-700 dark:bg-teal-950/40 dark:text-teal-300' : 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300'}`}>{linha.record.tipo === 'ENTRADA' ? 'Entrada' : 'Saída'}</span></td><td className={`px-3 py-2 text-right font-bold ${linha.record.tipo === 'ENTRADA' ? 'text-teal-600' : 'text-rose-600'}`}>{linha.record.tipo === 'ENTRADA' ? '+' : '−'}{money.format(linha.record.valor)}</td><td className="px-3 py-2 font-sans"><TruncatedInfoTooltip text={linha.record.observacoes || '—'} title="Observações" icon={AlignLeft}/></td>
             </tr>)}
           </tbody></table></div>
       </div>
@@ -294,7 +308,9 @@ export default function FinanceiroLancamentos() {
           { rotulo: 'Data de competência', valor: formatarData(detalhes.data_competencia) },
           { rotulo: 'Data de efetivação', valor: formatarData(detalhes.data_efetivacao) },
           { rotulo: 'Tipo', valor: detalhes.tipo === 'ENTRADA' ? 'Entrada' : 'Saída' },
-          { rotulo: 'Situação', valor: detalhes.status === 'EFETIVADO' ? 'Efetivado' : 'Previsto' },
+          { rotulo: 'Situação', valor: detalhes.status === 'EFETIVADO' ? 'Efetivado' : detalhes.status === 'CANCELADO' ? 'Cancelado' : 'Previsto' },
+          ...(detalhes.estornado ? [{ rotulo: 'Estornado', valor: `Sim — ${detalhes.estorno_motivo ?? 'Motivo não informado'}` }] : []),
+          ...(detalhes.estorno_de ? [{ rotulo: 'Estorno de', valor: lancamentos.find((item) => item.id === detalhes.estorno_de)?.descricao ?? 'Lançamento original' }] : []),
           { rotulo: 'Valor', valor: `${detalhes.tipo === 'ENTRADA' ? '+' : '−'}${money.format(detalhes.valor)}` },
           { rotulo: 'Categoria', valor: detalhes.categoria?.nome ?? '—' },
           { rotulo: 'Conta', valor: detalhes.banco?.nome ?? '—' },
@@ -336,6 +352,7 @@ export default function FinanceiroLancamentos() {
           {errorMessage && <p role="alert" className="text-sm text-rose-600 dark:text-rose-400">{errorMessage}</p>}</div>
           <div className="sticky bottom-0 flex shrink-0 justify-end gap-3 border-t border-gray-200 bg-white px-6 py-4 shadow-md dark:border-slate-800 dark:bg-slate-900"><Button variant="secondary" type="button" onClick={closeForm} disabled={saving} className={focusClass}>Cancelar</Button><Button type="submit" disabled={saving} className={focusClass}>{saving ? 'Salvando...' : editing ? 'Atualizar' : 'Salvar'}</Button></div>
         </form></div></Modal>
+      <EstornarLancamentoModal isOpen={estornando !== null} onClose={() => setEstornando(null)} onConfirm={confirmEstorno} isPending={isEstornando} lancamento={estornando}/>
       <ConfirmDeleteModal isOpen={deleting !== null} onClose={() => !isDeleting && setDeleting(null)} onConfirm={confirmDelete} itemName={deleting?.descricao} isPending={isDeleting}/>
     </div>
   );

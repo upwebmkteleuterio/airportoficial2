@@ -115,8 +115,14 @@ export async function signInAs(page: Page, user: TestUser): Promise<void> {
   await expect(page).not.toHaveURL(/\/login/, { timeout: 15000 });
 }
 
-/** Cria uma conta descartável. O trigger de `bancos` já cria a linha de saldo. */
-export async function createDisposableConta(marker: string): Promise<{ id: string; nome: string }> {
+/**
+ * Cria uma conta descartável. O trigger de `bancos` já cria a linha de saldo.
+ *
+ * `saldoInicial` é configuração da conta (o mesmo campo que a tela de Bancos
+ * permite ajustar) e serve para dar caixa a fluxos que só podem gastar o que
+ * já existe, como o aporte em investimento.
+ */
+export async function createDisposableConta(marker: string, saldoInicial = 0): Promise<{ id: string; nome: string }> {
   const client = admin();
   const id = `banco-${marker}`;
   const nome = `Conta ${marker}`;
@@ -125,7 +131,7 @@ export async function createDisposableConta(marker: string): Promise<{ id: strin
 
   const { error: saldoError } = await client
     .from('saldos_contas')
-    .update({ saldo_inicial: 0, data_saldo_inicial: dataLocalHoje() })
+    .update({ saldo_inicial: saldoInicial, data_saldo_inicial: dataLocalHoje() })
     .eq('banco_id', id);
   if (saldoError) throw new Error(`Não foi possível inicializar o saldo da conta de teste: ${saldoError.message}`);
 
@@ -220,10 +226,16 @@ export async function removeDisposableFinanceiro(marker: string): Promise<void> 
   const client = admin();
   const alvos: { tabela: string; coluna: string }[] = [
     { tabela: 'document_templates', coluna: 'nome' },
-    { tabela: 'vendas', coluna: 'participante_nome' },
-    { tabela: 'programacoes_saidas', coluna: 'descricao' },
+    // Os lançamentos saem antes das vendas: as parcelas de uma venda também são
+    // lançamentos e o banco recusa excluir uma venda que ainda tenha parcela
+    // efetivada. Removendo as parcelas primeiro, a venda pode ser excluída.
     { tabela: 'lancamentos_financeiros', coluna: 'descricao' },
     { tabela: 'lancamentos_financeiros', coluna: 'participante_nome' },
+    { tabela: 'vendas', coluna: 'participante_nome' },
+    { tabela: 'programacoes_saidas', coluna: 'descricao' },
+    // As aplicações vêm antes das contas: a chave estrangeira é RESTRICT, então
+    // a conta não pode sair enquanto houver aplicação apontando para ela.
+    { tabela: 'aplicacoes', coluna: 'nome' },
     { tabela: 'bancos', coluna: 'nome' },
     { tabela: 'categorias_financeiras', coluna: 'nome' },
     { tabela: 'fornecedores', coluna: 'nome' },

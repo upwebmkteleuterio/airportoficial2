@@ -20,7 +20,23 @@ export interface LancamentoFiltros {
   search?: string;
 }
 
-type LancamentoInput = Omit<LancamentoFinanceiro, 'id' | 'created_at' | 'updated_at'>;
+// Os campos de estorno, cancelamento e renegociação são controlados pelo banco
+// de dados e não fazem parte do cadastro manual do lançamento.
+type LancamentoInput = Omit<
+  LancamentoFinanceiro,
+  | 'id'
+  | 'created_at'
+  | 'updated_at'
+  | 'estornado'
+  | 'estorno_de'
+  | 'estorno_motivo'
+  | 'cancelado_motivo'
+  | 'renegociada'
+  | 'nova_parcela'
+  | 'valor_original'
+  | 'data_original'
+  | 'parcela_original'
+>;
 
 function toLancamento(row: LancamentoFinanceiro): LancamentoFinanceiro {
   return { ...row, valor: Number(row.valor) };
@@ -127,6 +143,25 @@ export const lancamentoService = {
   delete: async (id: string): Promise<void> => {
     const { error } = await supabase.from('lancamentos_financeiros').delete().eq('id', id);
     if (error) throw serviceError('Não foi possível excluir o lançamento financeiro', error);
+  },
+
+  estornar: async ({ id, valor, data, motivo }: { id: string; valor: number; data: string; motivo: string }): Promise<string> => {
+    const { data: estornoId, error } = await supabase.rpc('fn_estornar_lancamento', {
+      p_lancamento_id: id,
+      p_valor: valor,
+      p_data: data,
+      p_motivo: motivo,
+    });
+    if (error) throw serviceError('Não foi possível estornar o lançamento financeiro', error);
+    return String(estornoId);
+  },
+
+  cancelarParcela: async ({ id, motivo }: { id: string; motivo: string }): Promise<void> => {
+    const { error } = await supabase.rpc('fn_cancelar_parcela', {
+      p_lancamento_id: id,
+      p_motivo: motivo,
+    });
+    if (error) throw serviceError('Não foi possível cancelar a parcela', error);
   },
 
   getTransferenciaLegs: async (transferenciaId: string): Promise<{ id: string; tipo: TipoLancamento; banco: { id: string; nome: string } | null }[]> => {

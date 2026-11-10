@@ -1,0 +1,1 @@
+CREATE POLICY "aplicacao_movimentos_gestor_policy" ON public.aplicacao_movimentos AS PERMISSIVE FOR ALL TO "authenticated" USING (can_manage_financeiro()) WITH CHECK (can_manage_financeiro())

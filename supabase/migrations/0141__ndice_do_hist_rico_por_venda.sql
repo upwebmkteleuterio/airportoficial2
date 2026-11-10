@@ -1,0 +1,1 @@
+CREATE INDEX IF NOT EXISTS venda_renegociacoes_venda_idx ON public.venda_renegociacoes (venda_id, created_at DESC)

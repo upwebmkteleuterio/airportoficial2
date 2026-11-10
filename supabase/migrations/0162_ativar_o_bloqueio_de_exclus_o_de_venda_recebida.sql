@@ -1,0 +1,1 @@
+CREATE TRIGGER vendas_bloqueia_exclusao BEFORE DELETE ON public.vendas FOR EACH ROW EXECUTE FUNCTION public.fn_bloquear_exclusao_venda_com_recebimento()

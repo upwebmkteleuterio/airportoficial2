@@ -1,0 +1,1 @@
+ALTER TABLE public.aplicacoes ENABLE ROW LEVEL SECURITY

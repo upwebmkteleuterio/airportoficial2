@@ -1,0 +1,1 @@
+DROP TRIGGER IF EXISTS vendas_bloqueia_exclusao ON public.vendas

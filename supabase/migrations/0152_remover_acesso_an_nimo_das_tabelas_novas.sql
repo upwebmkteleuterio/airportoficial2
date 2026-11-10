@@ -1,0 +1,1 @@
+REVOKE ALL ON TABLE public.aplicacoes, public.aplicacao_movimentos, public.venda_renegociacoes FROM anon

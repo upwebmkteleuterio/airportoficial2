@@ -1,0 +1,1 @@
+ALTER TABLE public.aplicacao_movimentos ENABLE ROW LEVEL SECURITY
