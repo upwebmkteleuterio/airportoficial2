@@ -215,11 +215,14 @@ test('estorno de venda à vista de aluno cancela só a parcela e mantém a venda
   await page.goto('/financeiro/recebimentos', { timeout: T });
   await expect(page.getByRole('row').filter({ hasText: aluno.nome })).toHaveCount(0, { timeout: T });
 
-  // A venda continua ativa, com a parcela cancelada e o motivo registrado.
+  // A venda continua ativa e mantém a parcela no contrato: ela só saiu dos
+  // recebimentos e aparece com os dois status (estornada e cancelada).
   const { linha, detalhes } = await abrirDetalhesDaVenda(page, aluno.nome);
   await expect(linha.getByTestId('venda-cancelada-tag')).toHaveCount(0);
-  await expect(detalhes.getByTestId('parcela-tag-cancelada')).toHaveCount(1, { timeout: T });
-  await expect(detalhes.getByTestId('parcela-tag-estornada')).toHaveCount(1, { timeout: T });
+  await expect(linha).toContainText('0/1', { timeout: T });
+  await expect(linha).toContainText(/R\$\s*600,00/, { timeout: T });
+  await expect(detalhes.getByTestId('parcela-tag-estornada')).toHaveText('Estornado / Cancelado', { timeout: T });
+  await expect(detalhes.getByTestId('parcela-tag-cancelada')).toHaveCount(0);
   await expect(detalhes).toContainText(`Cancelada — ${motivo}`, { timeout: T });
 });
 
@@ -246,13 +249,13 @@ test('estorno de uma parcela da venda parcelada mantém as outras em aberto', as
   // Só a parcela recebida foi estornada: R$ 400,00 voltaram para a empresa.
   await conferirContrapartida(page, { valor: /R\$\s*400,00/, motivo, participante: empresa.nome });
 
-  // As outras duas parcelas continuam em aberto e o total cai para R$ 800,00.
+  // As outras duas parcelas continuam em aberto e a venda mantém o valor cheio.
   const { linha, detalhes } = await abrirDetalhesDaVenda(page, empresa.nome);
   await expect(linha.getByTestId('venda-cancelada-tag')).toHaveCount(0);
-  await expect(linha).toContainText('0/2', { timeout: T });
-  await expect(linha).toContainText(/R\$\s*800,00/, { timeout: T });
-  await expect(detalhes.getByTestId('parcela-tag-cancelada')).toHaveCount(1, { timeout: T });
-  await expect(detalhes.getByTestId('parcela-tag-estornada')).toHaveCount(1, { timeout: T });
+  await expect(linha).toContainText('0/3', { timeout: T });
+  await expect(linha).toContainText(/R\$\s*1\.200,00/, { timeout: T });
+  await expect(detalhes.getByTestId('parcela-tag-estornada')).toHaveText('Estornado / Cancelado', { timeout: T });
+  await expect(detalhes.getByTestId('parcela-tag-cancelada')).toHaveCount(0);
 
   // A parcela estornada não volta para os recebimentos.
   await page.goto('/financeiro/recebimentos', { timeout: T });
@@ -292,10 +295,12 @@ test('estorno da parcela maior devolve exatamente o valor recebido', async ({ pa
   // O estorno devolve o valor real da parcela recebida (R$ 900,00), não a média.
   await conferirContrapartida(page, { valor: /R\$\s*900,00/, motivo, participante: empresa.nome });
 
-  // Resta apenas a parcela menor em aberto.
+  // A venda segue com as duas parcelas: a recebida ficou estornada e cancelada,
+  // a menor continua em aberto.
   const { linha, detalhes } = await abrirDetalhesDaVenda(page, empresa.nome);
-  await expect(linha).toContainText('0/1', { timeout: T });
-  await expect(linha).toContainText(/R\$\s*300,00/, { timeout: T });
-  await expect(detalhes.getByTestId('parcela-tag-cancelada')).toHaveCount(1, { timeout: T });
+  await expect(linha).toContainText('0/2', { timeout: T });
+  await expect(linha).toContainText(/R\$\s*1\.200,00/, { timeout: T });
+  await expect(detalhes.getByTestId('parcela-tag-estornada')).toHaveText('Estornado / Cancelado', { timeout: T });
+  await expect(detalhes.getByTestId('parcela-tag-cancelada')).toHaveCount(0);
   await expect(detalhes).toContainText(`Cancelada — ${motivo}`, { timeout: T });
 });

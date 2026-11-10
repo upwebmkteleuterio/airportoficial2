@@ -39,8 +39,9 @@ export function RenegociarVendaModal({ isOpen, onClose, onConfirm, isPending, ve
     }
   }, [isOpen, venda?.id]);
 
-  const totalAntes = useMemo(() => (venda?.parcelas ?? []).reduce((sum, p) => sum + (p.status === 'CANCELADO' ? 0 : Number(p.valor)), 0), [venda]);
-  const totalDepois = useMemo(() => parcelas.reduce((sum, p) => sum + (p.original?.status === 'CANCELADO' ? 0 : Number(p.valor || 0)), 0), [parcelas]);
+  // O total acompanha a venda: uma parcela cancelada continua no contrato.
+  const totalAntes = useMemo(() => (venda?.parcelas ?? []).reduce((sum, p) => sum + Number(p.valor), 0), [venda]);
+  const totalDepois = useMemo(() => parcelas.reduce((sum, p) => sum + Number(p.valor || 0), 0), [parcelas]);
   const update = (index: number, changes: Partial<FormParcela>) => setParcelas((current) => current.map((p, i) => i === index ? { ...p, ...changes } : p));
   const append = () => setParcelas((current) => {
     const last = [...current].sort((a, b) => a.data_competencia.localeCompare(b.data_competencia)).at(-1);
@@ -87,7 +88,7 @@ export function RenegociarVendaModal({ isOpen, onClose, onConfirm, isPending, ve
           })}
           <Button type="button" variant="secondary" onClick={append}>Adicionar parcela</Button>
           <p className="text-right text-sm font-bold">Total: {money.format(totalAntes)} → {money.format(totalDepois)}</p>
-          <div><label htmlFor="renegociar-motivo" className="mb-1 block text-xs font-bold uppercase text-gray-700 dark:text-slate-300">Motivo da renegociação *</label><textarea id="renegociar-motivo" data-testid="renegociar-motivo" required rows={3} className={inputClass} value={motivo} onChange={(event) => setMotivo(event.target.value)}/></div>
+          <div><label htmlFor="renegociar-motivo" className="mb-1 block text-xs font-bold uppercase text-gray-700 dark:text-slate-300">Motivo da renegociação *</label><textarea id="renegociar-motivo" data-testid="renegociar-motivo" aria-invalid={Boolean(error)} rows={3} className={inputClass} value={motivo} onChange={(event) => setMotivo(event.target.value)}/></div>
           {error && <p role="alert" className="text-sm text-rose-600">{error}</p>}
         </div>
         <footer className="sticky bottom-0 flex shrink-0 justify-end gap-3 border-t border-gray-200 bg-white px-5 py-4 dark:border-slate-800 dark:bg-slate-900"><Button type="button" variant="secondary" onClick={onClose} disabled={isPending}>Cancelar</Button><Button type="submit" disabled={isPending} data-testid="confirmar-renegociacao-button">{isPending ? 'Salvando...' : 'Confirmar renegociação'}</Button></footer>

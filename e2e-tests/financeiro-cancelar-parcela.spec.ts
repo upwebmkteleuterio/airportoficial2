@@ -74,12 +74,13 @@ test('gestor cancela uma parcela em aberto e ela sai dos recebimentos', async ({
   // A parcela cancelada deixa de ser cobrada.
   await expect(linhaParcela).toHaveCount(0, { timeout: T });
 
-  // E na venda ela fica marcada como cancelada, fora do total de parcelas ativas.
+  // E na venda ela continua no contrato, marcada como cancelada (só saiu dos
+  // recebimentos): o contador segue com as duas parcelas e nenhuma recebida.
   await page.goto('/financeiro/vendas', { timeout: T });
   const linhaVenda = page.getByRole('row').filter({ hasText: empresa.nome });
-  await expect(linhaVenda).toContainText('0/1', { timeout: T });
+  await expect(linhaVenda).toContainText('0/2', { timeout: T });
   await linhaVenda.click({ timeout: T });
   const detalhes = page.getByRole('dialog');
-  await expect(detalhes.getByTestId('parcela-tag-cancelada').first()).toBeVisible({ timeout: T });
+  await expect(detalhes.getByTestId('parcela-tag-cancelada').first()).toHaveText('Cancelada', { timeout: T });
   await expect(detalhes).toContainText(motivo, { timeout: T });
 });

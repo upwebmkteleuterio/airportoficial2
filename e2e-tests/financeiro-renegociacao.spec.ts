@@ -242,12 +242,9 @@ test('renegociação com menos parcelas reduz o total e atualiza os recebimentos
   await page.getByRole('menuitem', { name: 'Renegociar' }).click({ timeout: T });
 
   const dialog = page.getByRole('dialog');
-  // O motivo é obrigatório: sem ele o navegador bloqueia o envio e nada muda.
+  // O motivo é obrigatório: sem ele o app avisa e nada é salvo.
   await dialog.getByTestId('confirmar-renegociacao-button').click({ timeout: T });
-  const motivoBloqueado = await dialog
-    .getByTestId('renegociar-motivo')
-    .evaluate((campo) => !(campo as HTMLTextAreaElement).checkValidity());
-  expect(motivoBloqueado).toBe(true);
+  await expect(dialog.getByRole('alert')).toContainText('Informe o motivo da renegociação.', { timeout: T });
   await expect(dialog.getByTestId('renegociar-motivo')).toBeVisible({ timeout: T });
 
   // Remove a última parcela e aumenta a primeira: 500 + 300 = 800.
