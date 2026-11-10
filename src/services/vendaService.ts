@@ -98,10 +98,7 @@ export const vendaService = {
   },
 
   getRenegociacoes: async (vendaId: string): Promise<VendaRenegociacao[]> => {
-    const { data, error } = await supabase.from('venda_renegociacoes')
-      .select('id,venda_id,observacao,created_by,created_at')
-      .eq('venda_id', vendaId)
-      .order('created_at', { ascending: false });
+    const { data, error } = await supabase.rpc('fn_listar_renegociacoes', { p_venda_id: vendaId });
     if (error) throw serviceError('Não foi possível carregar o histórico de renegociações', error);
     return (data ?? []) as VendaRenegociacao[];
   },

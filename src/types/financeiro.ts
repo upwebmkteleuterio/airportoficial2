@@ -183,8 +183,8 @@ export interface VendaRenegociacao {
   id: string;
   venda_id: string;
   observacao: string;
-  created_by: string | null;
   created_at: string;
+  usuario_nome: string;
 }
 
 export interface VendaComRelacoes extends Venda {

@@ -1,0 +1,1 @@
+REVOKE ALL ON FUNCTION public.fn_listar_renegociacoes(text) FROM PUBLIC

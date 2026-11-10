@@ -132,3 +132,43 @@ test('gestor edita as parcelas sem recriar as que já existem', async ({ page })
   const [ano, mes, dia] = vencimentoSegunda.split('-');
   await expect(detalhes).toContainText(`${dia}/${mes}/${ano}`, { timeout: T });
 });
+
+test('gestor escolhe renegociar ao salvar uma edição que mudou o vencimento', async ({ page }) => {
+  test.setTimeout(150000);
+  const T = 20000;
+  const conta = await createDisposableConta(user.marker);
+  const categoria = await createDisposableCategoria(user.marker, 'ENTRADA');
+  const empresa = await createDisposableEmpresa(user.marker);
+  const motivo = `Cliente pediu novo vencimento ${user.marker}`;
+
+  await signInAs(page, user);
+  await criarVendaParcelada(page, conta, categoria, empresa, '2');
+
+  const linha = page.getByRole('row').filter({ hasText: empresa.nome });
+  await linha.getByRole('button', { name: `Ações para ${empresa.nome}` }).click({ timeout: T });
+  await page.getByRole('menuitem', { name: 'Editar' }).click({ timeout: T });
+
+  const formulario = page.getByRole('dialog');
+  const novaData = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  await formulario.getByTestId('venda-parcela-vencimento-0').fill(novaData, { timeout: T });
+  await formulario.getByRole('button', { name: 'Atualizar' }).click({ timeout: T });
+
+  // Mudar o vencimento pela edição pergunta se foi correção ou renegociação.
+  const confirmacao = page.getByRole('dialog', { name: 'Correção ou renegociação?' });
+  await expect(confirmacao).toBeVisible({ timeout: T });
+  const botaoRenegociar = confirmacao.getByTestId('salvar-como-renegociacao-button');
+  await expect(botaoRenegociar).toBeDisabled();
+  await confirmacao.getByTestId('motivo-renegociacao-edicao').fill(motivo, { timeout: T });
+  await expect(botaoRenegociar).toBeEnabled();
+  await botaoRenegociar.click({ timeout: T });
+
+  // A venda fica marcada como renegociada e o histórico guarda motivo e autor.
+  await expect(page.getByRole('status').filter({ hasText: 'Renegociação registrada.' })).toBeVisible({ timeout: T });
+  await expect(linha.getByTestId('venda-renegociada-tag')).toBeVisible({ timeout: T });
+
+  await linha.click({ timeout: T });
+  const detalhes = page.getByRole('dialog');
+  await expect(detalhes.getByTestId('parcela-tag-data-alterada').first()).toBeVisible({ timeout: T });
+  await expect(detalhes).toContainText(motivo, { timeout: T });
+  await expect(detalhes).toContainText(/\d{2}\/\d{2}\/\d{4} · [A-Za-zÀ-ÿ]/, { timeout: T });
+});

@@ -17,6 +17,7 @@ import { DocumentGeneratorModal } from '../components/documents/DocumentGenerato
 import { FinanceiroOptionsLimitWarning } from '../components/financeiro/FinanceiroOptionsLimitWarning';
 import { CancelarVendaModal } from '../components/financeiro/CancelarVendaModal';
 import { RenegociarVendaModal } from '../components/financeiro/RenegociarVendaModal';
+import { ConfirmarRenegociacaoModal } from '../components/financeiro/ConfirmarRenegociacaoModal';
 import { VendaDetalhesModal } from '../components/financeiro/VendaDetalhesModal';
 import { useDocumentTemplates } from '../hooks/useDocumentTemplates';
 import { useBancos } from '../hooks/useBancos';
@@ -74,6 +75,7 @@ export default function FinanceiroVendas() {
   const [editing, setEditing] = useState<VendaComRelacoes | null>(null); const [deleting, setDeleting] = useState<VendaComRelacoes | null>(null);
   const [canceling, setCanceling] = useState<VendaComRelacoes | null>(null); const [renegotiating, setRenegotiating] = useState<VendaComRelacoes | null>(null); const [details, setDetails] = useState<VendaComRelacoes | null>(null);
   const [form, setForm] = useState<VendaForm>(novoFormulario); const [parcelas, setParcelas] = useState<ParcelaForm[]>([]);
+  const [saveConfirmation, setSaveConfirmation] = useState<{ venda: Record<string, unknown>; parcelas: ParcelaInput[] } | null>(null);
   const [cpfSearch, setCpfSearch] = useState(''); const [modalOpen, setModalOpen] = useState(false); const [helpOpen, setHelpOpen] = useState(false);
   const [receiptOpen, setReceiptOpen] = useState(false); const [receiptVendaId, setReceiptVendaId] = useState('');
   const [notaFiscal, setNotaFiscal] = useState<VendaComRelacoes | null>(null); const [errorMessage, setErrorMessage] = useState(''); const [statusMessage, setStatusMessage] = useState('');
@@ -84,7 +86,7 @@ export default function FinanceiroVendas() {
   const isRetrying = useIsFetching({ queryKey: ['vendas'] }) > 0;
   const categoriesEntrada = categorias.filter((categoria) => categoria.tipo === 'ENTRADA');
   const selectedEmpresa = empresas.find((empresa) => empresa.id === form.empresaId);
-  const saving = isSaving;
+  const saving = isSaving || isRenegotiating;
   useEffect(() => setPage(1), [search]);
   useEffect(() => { if (!isLoading && page > 1 && vendas.length === 0) setPage((current) => current - 1); }, [page, isLoading, vendas.length]);
   useEffect(() => { if (parcelas.length > 0) { const totalParcelas = somaParcelas(parcelas); if (Number(form.valor) !== totalParcelas) setForm((current) => ({ ...current, valor: totalParcelas.toFixed(2) })); } }, [parcelas]);
@@ -99,6 +101,7 @@ export default function FinanceiroVendas() {
     setCpfSearch('');
   };
   const openForm = (record?: VendaComRelacoes) => {
+    setSaveConfirmation(null);
     setEditing(record ?? null);
     const participant = record ? { tipo: record.participante_tipo, id: record.pessoa_id ?? record.empresa_id ?? '', nome: record.participante_nome, documento: record.participante_documento } as ParticipanteOpcao : null;
     const initialForm: VendaForm = record ? {
@@ -139,8 +142,24 @@ export default function FinanceiroVendas() {
     if (!parcelas.length || parcelas.some((p) => !(Number(p.valor) > 0) || !p.data_competencia)) { setErrorMessage('Informe valores maiores que zero e o vencimento de cada parcela.'); return; }
     const payload: ParcelaInput[] = parcelas.map((p) => ({ id: p.id, valor: Number(p.valor), data_competencia: p.data_competencia }));
     const venda = { participante_tipo: form.participanteTipo, pessoa_id: form.participanteTipo === 'ALUNO' ? participant.id : null, empresa_id: form.participanteTipo === 'EMPRESA' ? participant.id : null, participante_nome: participant.nome, participante_documento: participant.documento, curso_id: form.cursoId || null, turma_id: form.turmaId || null, condicao: parcelas.length === 1 ? 'A_VISTA' : 'PARCELADO', parcelas_quantidade: payload.length, categoria_id: form.categoriaId, banco_id: form.bancoId, forma_pagamento: form.formaPagamento || null, referencia_transacao: form.referencia.trim() || null, cartao_ultimos_digitos: form.digitos || null, observacoes: form.observacoes };
+    const mudouVencimento = Boolean(editing && payload.some((parcela) => parcela.id && editing.parcelas.some((original) => original.id === parcela.id && original.data_competencia.slice(0, 10) !== parcela.data_competencia.slice(0, 10))));
+    if (editing && mudouVencimento) { setSaveConfirmation({ venda, parcelas: payload }); return; }
     try { await saveVenda({ id: editing?.id ?? null, venda, parcelas: payload }); setModalOpen(false); }
     catch (error) { setErrorMessage(error instanceof Error ? error.message : 'Não foi possível salvar a venda.'); }
+  };
+  const confirmarEdicao = async (tipo: 'correcao' | 'renegociacao', motivo: string) => {
+    if (!editing || !saveConfirmation) return;
+    setErrorMessage('');
+    try {
+      if (tipo === 'renegociacao') await renegociarVenda({ id: editing.id, parcelas: saveConfirmation.parcelas, observacao: motivo.trim() });
+      await saveVenda({ id: editing.id, venda: saveConfirmation.venda, parcelas: saveConfirmation.parcelas });
+      if (tipo === 'renegociacao') setStatusMessage('Renegociação registrada.');
+      setSaveConfirmation(null);
+      setModalOpen(false);
+    } catch (error) {
+      setSaveConfirmation(null);
+      setErrorMessage(error instanceof Error ? error.message : 'Não foi possível salvar a venda.');
+    }
   };
   const confirmDelete = async () => { if (!deleting) return; try { await deleteVenda(deleting.id); setDeleting(null); } catch (error) { setDeleting(null); setErrorMessage(error instanceof Error ? error.message : 'Não foi possível excluir a venda.'); } };
   const openReceipt = (id: string) => { setReceiptVendaId(id); setReceiptOpen(true); };
@@ -190,8 +209,8 @@ export default function FinanceiroVendas() {
         ];
         return <tr key={record.id} tabIndex={0} onClick={() => setDetails(record)} onKeyDown={(event) => rowKeyDown(event, record)} className={`cursor-pointer hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-teal-500 dark:hover:bg-slate-800/50`}>
           <td className="px-2 py-2 text-center"><RowActionMenu ariaLabel={`Ações para ${record.participante_nome}`} items={items}/></td>
-          <td className="px-3 py-2 font-sans"><TruncatedInfoTooltip text={record.participante_nome} title="Participante" icon={User} className="font-semibold"/><TruncatedInfoTooltip text={record.participante_documento ?? '—'} title="Documento" icon={FileText} className="text-[10px] text-gray-500"/><div className="mt-1 flex flex-wrap gap-1">{record.cancelada && <span data-testid="venda-cancelada-tag" className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">Cancelada</span>}{record.renegociada && <span data-testid="venda-renegociada-tag" className="rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-semibold text-teal-800 dark:bg-teal-950/40 dark:text-teal-300">Renegociada</span>}</div></td>
-          <td className="px-3 py-2 font-sans"><TruncatedInfoTooltip text={record.curso?.nome_curso ?? '—'} title="Curso" icon={GraduationCap}/></td><td className="px-3 py-2">{record.turma?.id_interno_escola ?? '—'}</td><td className="px-3 py-2 font-sans">{record.condicao === 'A_VISTA' ? 'À vista' : 'Parcelado'}</td><td className="px-3 py-2">{settled}/{activeInstallments.length}</td><td className="px-3 py-2 text-right font-bold">{money.format(totalVenda)}</td><td className="px-3 py-2 font-sans"><TruncatedInfoTooltip text={record.referencia_transacao ?? '—'} title="Referência" icon={Hash}/>{record.cartao_ultimos_digitos && <span className="block text-[10px] text-gray-500">•••• {record.cartao_ultimos_digitos}</span>}</td><td className="px-3 py-2 font-sans"><TruncatedInfoTooltip text={record.conta?.nome ?? '—'} title="Conta" icon={Landmark}/></td>
+          <td className="px-3 py-2 font-sans"><TruncatedInfoTooltip text={record.participante_nome} title="Participante" icon={User} className="font-semibold"/><TruncatedInfoTooltip text={record.participante_documento ?? '—'} title="Documento" icon={FileText} className="text-[10px] text-gray-500"/></td>
+          <td className="px-3 py-2 font-sans"><TruncatedInfoTooltip text={record.curso?.nome_curso ?? '—'} title="Curso" icon={GraduationCap}/></td><td className="px-3 py-2">{record.turma?.id_interno_escola ?? '—'}</td><td className="px-3 py-2 font-sans">{record.condicao === 'A_VISTA' ? 'À vista' : 'Parcelado'}</td><td className="px-3 py-2"><span>{settled}/{activeInstallments.length}</span><div className="mt-1 flex flex-wrap gap-1">{record.cancelada && <span data-testid="venda-cancelada-tag" title={record.cancelada_motivo ?? undefined} className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">Cancelada</span>}{record.renegociada && <span data-testid="venda-renegociada-tag" className="rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-semibold text-teal-800 dark:bg-teal-950/40 dark:text-teal-300">Renegociada</span>}</div></td><td className="px-3 py-2 text-right font-bold">{money.format(totalVenda)}</td><td className="px-3 py-2 font-sans"><TruncatedInfoTooltip text={record.referencia_transacao ?? '—'} title="Referência" icon={Hash}/>{record.cartao_ultimos_digitos && <span className="block text-[10px] text-gray-500">•••• {record.cartao_ultimos_digitos}</span>}</td><td className="px-3 py-2 font-sans"><TruncatedInfoTooltip text={record.conta?.nome ?? '—'} title="Conta" icon={Landmark}/></td>
         </tr>;
       })}</tbody></table></div>{isFetching && !isLoading && <p role="status" className="px-4 py-2 text-xs text-gray-500">Atualizando...</p>}</div>
     <PaginationFooter page={page} pageSize={pageSize} total={total} onPageChange={setPage} itemLabel="vendas"/>
@@ -214,6 +233,7 @@ export default function FinanceiroVendas() {
         <div><label htmlFor="venda-turma" className={labelClass}>Turma (opcional)</label><select id="venda-turma" className={inputClass} value={form.turmaId} onChange={(event) => setForm((current) => ({ ...current, turmaId: event.target.value }))}><option value="">Sem turma</option>{classes.map((turma) => <option key={turma.id} value={turma.id}>{turma.id_interno_escola}</option>)}</select></div>
         <div><label htmlFor="venda-observacoes" className={labelClass}>Observações</label><textarea id="venda-observacoes" className={inputClass} rows={3} value={form.observacoes} onChange={(event) => setForm((current) => ({ ...current, observacoes: event.target.value }))}/></div>
         {errorMessage && <p role="alert" className="text-sm text-rose-600 dark:text-rose-400">{errorMessage}</p>}</div><div className="sticky bottom-0 flex shrink-0 justify-end gap-3 border-t border-gray-200 bg-white px-6 py-4 shadow-md dark:border-slate-800 dark:bg-slate-900"><Button variant="secondary" type="button" onClick={closeForm} disabled={saving}>Cancelar</Button><Button type="submit" disabled={saving}>{saving ? 'Salvando...' : editing ? 'Atualizar' : 'Salvar'}</Button></div></form></div></Modal>
+    <ConfirmarRenegociacaoModal isOpen={saveConfirmation !== null} onClose={() => setSaveConfirmation(null)} onConfirm={confirmarEdicao} isPending={isSaving || isRenegotiating}/>
     <ConfirmDeleteModal isOpen={deleting !== null} onClose={() => !isDeleting && setDeleting(null)} onConfirm={confirmDelete} itemName={deleting?.participante_nome} isPending={isDeleting}/>
     <CancelarVendaModal isOpen={canceling !== null} onClose={() => !isCanceling && setCanceling(null)} onConfirm={onCancel} isPending={isCanceling} venda={canceling}/>
     <RenegociarVendaModal isOpen={renegotiating !== null} onClose={() => !isRenegotiating && setRenegotiating(null)} onConfirm={onRenegotiate} isPending={isRenegotiating} venda={renegotiating}/>

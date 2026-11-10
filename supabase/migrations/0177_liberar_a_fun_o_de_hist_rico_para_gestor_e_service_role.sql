@@ -1,0 +1,1 @@
+GRANT EXECUTE ON FUNCTION public.fn_listar_renegociacoes(text) TO authenticated, service_role

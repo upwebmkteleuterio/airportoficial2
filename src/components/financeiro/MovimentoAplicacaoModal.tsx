@@ -7,6 +7,7 @@ import { MoneyInput } from '../ui/MoneyInput';
 import { SlidePanel } from '../ui/SlidePanel';
 
 const inputClass = 'w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white';
+const percentage = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const labelClass = 'block text-xs font-bold uppercase tracking-wide text-gray-700 dark:text-slate-300';
 function hojeLocal() { const date = new Date(); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`; }
 
@@ -38,6 +39,7 @@ export function MovimentoAplicacaoModal({ isOpen, onClose, aplicacao, tipo, cont
 
   if (!tipo) return null;
   const baseRendimento = aplicacao ? aplicacao.aportes + aplicacao.rendimentos - aplicacao.resgates : 0;
+  const rentabilidadeAcumulada = aplicacao && aplicacao.aportes > 0 ? (aplicacao.rendimentos / aplicacao.aportes) * 100 : 0;
   const saldoConta = conta?.saldo_atual;
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -71,7 +73,7 @@ export function MovimentoAplicacaoModal({ isOpen, onClose, aplicacao, tipo, cont
           <p className="rounded-lg bg-teal-50 p-3 text-sm text-teal-900 dark:bg-teal-950/30 dark:text-teal-200">{apoio}</p>
           {tipo === 'APORTE' && <p className="text-xs text-slate-600 dark:text-slate-400">{saldoConta === undefined ? 'O valor não pode passar do saldo atual da conta.' : `Saldo atual da conta: ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(saldoConta)}. O aporte não pode passar desse saldo.`}</p>}
           {tipo === 'RESGATE' && <p className="text-xs text-slate-600 dark:text-slate-400">Disponível atual: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(aplicacao?.disponivel ?? 0)}. O resgate não pode passar desse valor.</p>}
-          {tipo === 'RENDIMENTO' && <div className="space-y-1.5"><label htmlFor="movimento-percentual" className={labelClass}>Percentual (%)</label><input id="movimento-percentual" data-testid="movimento-percentual" type="text" inputMode="decimal" value={percentual} onChange={(event) => { const entered = event.target.value; setPercentual(entered); const parsed = Number(entered.trim().replace(',', '.')); if (entered.trim() && Number.isFinite(parsed)) setValor(((baseRendimento * parsed) / 100).toFixed(2)); }} className={inputClass} placeholder="Opcional, ex.: 1,25" /></div>}
+          {tipo === 'RENDIMENTO' && <div className="space-y-1.5"><label htmlFor="movimento-percentual" className={labelClass}>Percentual (%)</label><p className="text-xs text-gray-500 dark:text-slate-400">Rentabilidade acumulada hoje: {percentage.format(rentabilidadeAcumulada)}%</p><input id="movimento-percentual" data-testid="movimento-percentual" type="text" inputMode="decimal" value={percentual} onChange={(event) => { const entered = event.target.value; setPercentual(entered); const parsed = Number(entered.trim().replace(',', '.')); if (entered.trim() && Number.isFinite(parsed)) setValor(((baseRendimento * parsed) / 100).toFixed(2)); }} className={inputClass} placeholder="Opcional, ex.: 1,25" /></div>}
           <div className="space-y-1.5"><label htmlFor="movimento-valor" className={labelClass}>Valor *</label><MoneyInput id="movimento-valor" dataTestId="movimento-valor" required value={valor} onChange={setValor} className={inputClass} /></div>
           <div className="space-y-1.5"><label htmlFor="movimento-data" className={labelClass}>Data *</label><input id="movimento-data" data-testid="movimento-data" type="date" required value={data} onChange={(event) => setData(event.target.value)} className={inputClass} /></div>
           <div className="space-y-1.5"><label htmlFor="movimento-observacoes" className={labelClass}>Observações</label><textarea id="movimento-observacoes" data-testid="movimento-observacoes" value={observacoes} onChange={(event) => setObservacoes(event.target.value)} rows={3} className={inputClass} /></div>

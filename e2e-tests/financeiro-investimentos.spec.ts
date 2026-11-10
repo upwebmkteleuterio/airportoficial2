@@ -57,6 +57,7 @@ test('gestor cadastra uma aplicação, aplica, recebe rendimento, resgata e edit
   const T = 20000;
   // A conta nasce com caixa: o aporte só pode usar o que já existe na conta.
   const conta = await createDisposableConta(user.marker, 5000);
+  const contaVazia = await createDisposableConta(`vazia-${user.marker}`);
   const nome = `Aplicação ${user.marker}`;
   const nomeEditado = `Aplicação editada ${user.marker}`;
 
@@ -73,6 +74,8 @@ test('gestor cadastra uma aplicação, aplica, recebe rendimento, resgata e edit
   await registrarMovimento(page, nome, 'Aplicar', '2000');
   await expect(linha).toContainText(/R\$\s*2\.000,00/, { timeout: T });
   await expect(page.getByTestId('investimentos-total-geral')).toContainText(/R\$\s*2\.000,00/, { timeout: T });
+  // A visão bancária mostra um chip por conta, com o total aplicado naquela conta.
+  await expect(page.getByTestId('investimentos-visao-bancaria').getByRole('button').filter({ hasText: conta.nome })).toContainText(/R\$\s*2\.000,00/, { timeout: T });
 
   // Rendimento de R$ 150,00 (não mexe no caixa)
   await registrarMovimento(page, nome, 'Registrar rendimento', '150');
@@ -98,6 +101,14 @@ test('gestor cadastra uma aplicação, aplica, recebe rendimento, resgata e edit
   const dialogEdicao = page.getByRole('dialog');
   await dialogEdicao.getByTestId('aplicacao-nome').fill(nomeEditado, { timeout: T });
   await dialogEdicao.getByTestId('salvar-aplicacao-button').click({ timeout: T });
+  await expect(page.getByRole('row').filter({ hasText: nomeEditado })).toBeVisible({ timeout: T });
+
+  // A conta sem aplicação aparece zerada na visão bancária e o chip filtra a lista.
+  const chipVazio = page.getByTestId('investimentos-visao-bancaria').getByRole('button').filter({ hasText: contaVazia.nome });
+  await expect(chipVazio).toContainText(/R\$\s*0,00/, { timeout: T });
+  await chipVazio.click({ timeout: T });
+  await expect(page.getByText('Nenhuma aplicação cadastrada')).toBeVisible({ timeout: T });
+  await page.getByTestId('investimentos-total-geral').click({ timeout: T });
   await expect(page.getByRole('row').filter({ hasText: nomeEditado })).toBeVisible({ timeout: T });
 
   // O caixa da conta acompanha: 5.000 − 2.000 + 1.000 = 4.000.
