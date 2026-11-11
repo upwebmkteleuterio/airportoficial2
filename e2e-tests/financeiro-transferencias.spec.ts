@@ -25,7 +25,7 @@ test.afterEach(async () => {
 test('gestor cria, edita e exclui uma transferência entre contas', async ({ page }) => {
   test.setTimeout(90000);
   const T = 20000;
-  const origem = await createDisposableConta(`${user.marker}-origem`);
+  const origem = await createDisposableConta(`${user.marker}-origem`, 500);
   const destino = await createDisposableConta(`${user.marker}-destino`);
   const observacoes = `Transferência ${user.marker}`;
   const observacoesEditadas = `Transferência editada ${user.marker}`;
@@ -76,6 +76,7 @@ test('gestor cria, edita e exclui uma transferência entre contas', async ({ pag
     // ainda tenta remover a transferência que possa ter sido gravada.
     transferenciaCriada = true;
     await dialog.getByRole('button', { name: 'Transferir', exact: true }).click({ timeout: T });
+    await page.getByTestId('confirmar-transferencia-button').click({ timeout: T });
 
     await expect(linha).toContainText(/R\$\s*125,50/, { timeout: T });
     await expect(linha).toContainText(observacoes, { timeout: T });
@@ -87,6 +88,7 @@ test('gestor cria, edita e exclui uma transferência entre contas', async ({ pag
     await fillMoneyInput(dialogEdicao.getByTestId('transfer-valor'), '175,75');
     await dialogEdicao.getByTestId('transfer-observacoes').fill(observacoesEditadas, { timeout: T });
     await dialogEdicao.getByRole('button', { name: 'Atualizar', exact: true }).click({ timeout: T });
+    await page.getByTestId('confirmar-transferencia-button').click({ timeout: T });
 
     await expect(linha).toContainText(/R\$\s*175,75/, { timeout: T });
     await expect(linha).toContainText(observacoesEditadas, { timeout: T });
@@ -104,4 +106,26 @@ test('gestor cria, edita e exclui uma transferência entre contas', async ({ pag
       await page.getByRole('button', { name: 'Confirmar exclusão' }).click({ timeout: T });
     }
   }
+});
+
+test('gestor recebe erro do banco ao tentar transferir sem saldo', async ({ page }) => {
+  test.setTimeout(90000);
+  const origem = await createDisposableConta(`${user.marker}-origem-sem-saldo`);
+  const destino = await createDisposableConta(`${user.marker}-destino-sem-saldo`);
+
+  await signInAs(page, user);
+  await page.goto('/financeiro/transferencias');
+  await page.getByTestId('nova-transferencia-button').click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByTestId('transfer-origem').selectOption(origem.id);
+  await dialog.getByTestId('transfer-destino').selectOption(destino.id);
+  await fillMoneyInput(dialog.getByTestId('transfer-valor'), '25');
+  await expect(dialog.getByRole('alert')).toContainText('O valor excede o saldo disponível');
+  await dialog.getByRole('button', { name: 'Transferir', exact: true }).click();
+  await page.getByTestId('confirmar-transferencia-button').click();
+
+  await expect(page.getByRole('alert').filter({ hasText: /Saldo insuficiente na conta de origem/ })).toContainText(/Saldo insuficiente na conta de origem/);
+  await expect(dialog.getByTestId('transfer-valor')).toHaveValue(/25,00/);
+  const linhasTransferencia = page.getByTestId('transferencias-table').getByRole('row').filter({ hasText: origem.nome }).filter({ hasText: destino.nome });
+  await expect(linhasTransferencia).toHaveCount(0);
 });

@@ -59,7 +59,7 @@ export default function FinanceiroRelatorios() {
       const [dre, fluxo, projecao, lancamentos] = await Promise.all([
         relatorioService.getTodasAsLinhasDre(filtros),
         relatorioService.getFluxoCaixa(filtros),
-        relatorioService.getProjecao({ meses: filtros.mesesProjecao, bancoId: filtros.bancoId }),
+        relatorioService.getProjecao({ inicio: filtros.dateFrom, meses: filtros.mesesProjecao, bancoId: filtros.bancoId }),
         relatorioService.getLancamentosDoPeriodo(filtros),
       ]);
       const dados: DadosRelatorioExportacao = {

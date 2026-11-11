@@ -92,6 +92,15 @@ test('gestor registra uma venda, efetiva o recebimento e o saldo acompanha', asy
   await expect(linhaVenda).toBeVisible({ timeout: T });
   await expect(linhaVenda).toContainText(/R\$\s*1\.000,00/, { timeout: T });
   await expect(linhaVenda).toContainText(referencia, { timeout: T });
+  const totalVenda = (await linhaVenda.locator('td').nth(6).innerText()).trim();
+  await expect(linhaVenda.getByTestId('venda-em-aberto')).toHaveText(totalVenda, { timeout: T });
+  await linhaVenda.click({ timeout: T });
+  const detalhesVenda = page.getByRole('dialog', { name: 'Detalhes da venda' });
+  await expect(detalhesVenda.getByTestId('venda-detalhes-em-aberto')).toHaveText(totalVenda, { timeout: T });
+  await expect(detalhesVenda.getByText('Total da venda', { exact: true })).toBeVisible({ timeout: T });
+  await expect(detalhesVenda.getByText('Recebido', { exact: true })).toBeVisible({ timeout: T });
+  await expect(detalhesVenda.getByText('Em atraso', { exact: true })).toBeVisible({ timeout: T });
+  await detalhesVenda.getByRole('button', { name: 'Fechar' }).last().click({ timeout: T });
 
   // O recebimento previsto é gerado automaticamente pela venda.
   await page.goto('/financeiro/recebimentos', { timeout: T });

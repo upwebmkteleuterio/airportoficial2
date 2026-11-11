@@ -30,8 +30,8 @@ export function useRelatorioFluxoCaixa(filtros: RelatorioFiltros) {
 
 export function useRelatorioProjecao(filtros: RelatorioFiltros) {
   const query = useQuery({
-    queryKey: [CHAVE, 'projecao', filtros.mesesProjecao, filtros.bancoId],
-    queryFn: () => relatorioService.getProjecao({ meses: filtros.mesesProjecao, bancoId: filtros.bancoId }),
+    queryKey: [CHAVE, 'projecao', filtros.dateFrom, filtros.mesesProjecao, filtros.bancoId],
+    queryFn: () => relatorioService.getProjecao({ inicio: filtros.dateFrom, meses: filtros.mesesProjecao, bancoId: filtros.bancoId }),
   });
   return { projecao: query.data ?? [], ...query };
 }

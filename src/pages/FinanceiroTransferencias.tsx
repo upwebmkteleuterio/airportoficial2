@@ -11,6 +11,7 @@ import { PaginationFooter } from '../components/ui/PaginationFooter';
 import { RowActionMenu } from '../components/ui/RowActionMenu';
 import { MoneyInput } from '../components/ui/MoneyInput';
 import { FinanceiroOptionsLimitWarning } from '../components/financeiro/FinanceiroOptionsLimitWarning';
+import { ConfirmarTransferenciaModal } from '../components/financeiro/ConfirmarTransferenciaModal';
 import { useBancos } from '../hooks/useBancos';
 import { useTransferencias } from '../hooks/useTransferencias';
 import type { TransferenciaEntreContas } from '../types/financeiro';
@@ -59,6 +60,7 @@ export default function FinanceiroTransferencias() {
   const [dateFrom, setDateFrom] = useState(primeiroDiaDoMes);
   const [dateTo, setDateTo] = useState(ultimoDiaDoMes);
   const [modalOpen, setModalOpen] = useState(false);
+  const [confirmacaoOpen, setConfirmacaoOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [form, setForm] = useState<TransferenciaForm>(novaTransferenciaForm);
   const [editing, setEditing] = useState<TransferenciaEntreContas | null>(null);
@@ -84,6 +86,9 @@ export default function FinanceiroTransferencias() {
   const queryClient = useQueryClient();
   const saving = isCreating || isUpdating;
   const contasAtivas = contas.filter((conta) => conta.ativo);
+  const contaOrigem = contas.find((conta) => conta.id === form.origem_id) ?? (editing ? contas.find((conta) => conta.id === editing.conta_origem_id) : undefined);
+  const saldoOrigem = contaOrigem?.saldo_atual;
+  const valorExcedeSaldo = saldoOrigem !== undefined && Number(form.valor) > saldoOrigem;
 
   useEffect(() => setPage(1), [periodo.inicio, periodo.fim]);
   useEffect(() => {
@@ -134,17 +139,32 @@ export default function FinanceiroTransferencias() {
       setErrorMessage('Informe a data da transferência.');
       return;
     }
+    setModalOpen(false);
+    setConfirmacaoOpen(true);
+  };
+
+  const confirmarTransferencia = async () => {
+    setErrorMessage('');
     try {
       if (editing) {
-        await atualizarTransferencia({ id: editing.id, valor, data: form.data, observacoes: form.observacoes.trim() });
+        await atualizarTransferencia({ id: editing.id, valor: Number(form.valor), data: form.data, observacoes: form.observacoes.trim() });
       } else {
-        await criarTransferencia({ origem_id: form.origem_id, destino_id: form.destino_id, valor, data: form.data, observacoes: form.observacoes.trim() });
+        await criarTransferencia({ origem_id: form.origem_id, destino_id: form.destino_id, valor: Number(form.valor), data: form.data, observacoes: form.observacoes.trim() });
       }
+      setConfirmacaoOpen(false);
       setModalOpen(false);
       setEditing(null);
     } catch (error) {
+      setConfirmacaoOpen(false);
+      setModalOpen(true);
       setErrorMessage(error instanceof Error ? error.message : 'Não foi possível salvar a transferência.');
     }
+  };
+
+  const cancelarConfirmacao = () => {
+    if (saving) return;
+    setConfirmacaoOpen(false);
+    setModalOpen(true);
   };
 
   const confirmDelete = async () => {
@@ -200,12 +220,13 @@ export default function FinanceiroTransferencias() {
         <form onSubmit={(event) => void save(event)} className="flex min-h-0 flex-1 flex-col overflow-y-auto custom-scrollbar">
           <div className="flex-1 space-y-4 p-6">
             {editing ? <div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><div><span className={labelClass}>Conta de origem</span><p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{editing.conta_origem_nome}</p></div><div><span className={labelClass}>Conta de destino</span><p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{editing.conta_destino_nome}</p></div></div> : <div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><div><label htmlFor="transfer-origem" className={labelClass}>Conta de origem</label><select id="transfer-origem" data-testid="transfer-origem" required className={inputClass} value={form.origem_id} onChange={(event) => setForm((current) => ({ ...current, origem_id: event.target.value }))}><option value="">Selecione uma conta</option>{contasAtivas.map((conta) => <option key={conta.id} value={conta.id}>{conta.nome}</option>)}</select></div><div><label htmlFor="transfer-destino" className={labelClass}>Conta de destino</label><select id="transfer-destino" data-testid="transfer-destino" required className={inputClass} value={form.destino_id} onChange={(event) => setForm((current) => ({ ...current, destino_id: event.target.value }))}><option value="">Selecione uma conta</option>{contasAtivas.map((conta) => <option key={conta.id} value={conta.id}>{conta.nome}</option>)}</select></div></div>}
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><div><label htmlFor="transfer-valor" className={labelClass}>Valor</label><MoneyInput id="transfer-valor" dataTestId="transfer-valor" className={inputClass} required value={form.valor} onChange={(valor) => setForm((current) => ({ ...current, valor }))}/></div><div><label htmlFor="transfer-data" className={labelClass}>Data</label><input id="transfer-data" data-testid="transfer-data" className={inputClass} type="date" required value={form.data} onChange={(event) => setForm((current) => ({ ...current, data: event.target.value }))}/></div></div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><div><label htmlFor="transfer-valor" className={labelClass}>Valor</label><MoneyInput id="transfer-valor" dataTestId="transfer-valor" className={inputClass} required value={form.valor} onChange={(valor) => setForm((current) => ({ ...current, valor }))}/>{contaOrigem && saldoOrigem !== undefined && <p role={valorExcedeSaldo ? 'alert' : 'status'} className={`mt-1 text-xs ${valorExcedeSaldo ? 'text-amber-700 dark:text-amber-300' : 'text-teal-700 dark:text-teal-300'}`}>{valorExcedeSaldo ? `O valor excede o saldo disponível de ${money.format(saldoOrigem)}.` : `Saldo disponível: ${money.format(saldoOrigem)}`}</p>}</div><div><label htmlFor="transfer-data" className={labelClass}>Data</label><input id="transfer-data" data-testid="transfer-data" className={inputClass} type="date" required value={form.data} onChange={(event) => setForm((current) => ({ ...current, data: event.target.value }))}/></div></div>
             <div><label htmlFor="transfer-observacoes" className={labelClass}>Observações</label><textarea id="transfer-observacoes" data-testid="transfer-observacoes" className={inputClass} rows={3} value={form.observacoes} onChange={(event) => setForm((current) => ({ ...current, observacoes: event.target.value }))}/></div>
             {errorMessage && <p role="alert" className="text-sm text-rose-600 dark:text-rose-400">{errorMessage}</p>}
           </div>
           <div className="sticky bottom-0 flex shrink-0 justify-end gap-3 border-t border-gray-200 bg-white px-6 py-4 shadow-md dark:border-slate-800 dark:bg-slate-900"><Button variant="secondary" type="button" onClick={closeForm} disabled={saving} className={focusClass}>Cancelar</Button><Button type="submit" disabled={saving} className={focusClass}>{saving ? 'Salvando...' : editing ? 'Atualizar' : 'Transferir'}</Button></div>
         </form></div></Modal>
+      <ConfirmarTransferenciaModal isOpen={confirmacaoOpen} onClose={cancelarConfirmacao} onConfirm={() => void confirmarTransferencia()} origem={editing?.conta_origem_nome ?? contas.find((conta) => conta.id === form.origem_id)?.nome ?? ''} destino={editing?.conta_destino_nome ?? contas.find((conta) => conta.id === form.destino_id)?.nome ?? ''} valor={Number(form.valor)} data={form.data} observacoes={form.observacoes.trim()} isPending={saving}/>
       <ConfirmDeleteModal isOpen={deleting !== null} onClose={() => !isDeleting && setDeleting(null)} onConfirm={confirmDelete} itemName={deleting ? `${deleting.conta_origem_nome} para ${deleting.conta_destino_nome}` : undefined} descriptionOverride={deleting ? `A transferência de ${money.format(deleting.valor)} entre “${deleting.conta_origem_nome}” e “${deleting.conta_destino_nome}” será removida das duas contas.` : undefined} isPending={isDeleting}/>
     </div>
   );

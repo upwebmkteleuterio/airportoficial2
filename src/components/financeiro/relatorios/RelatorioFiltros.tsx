@@ -48,8 +48,8 @@ export function RelatorioFiltros({ filtros, onChange, onExportar, exportando, ag
         </div>
       </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        <DateField id="relatorio-data-de" label="De" value={filtros.dateFrom} onChange={(dateFrom) => onChange({ dateFrom })} disabled={exportando} dataTestId="relatorio-data-de" />
-        <DateField id="relatorio-data-ate" label="Até" value={filtros.dateTo} onChange={(dateTo) => onChange({ dateTo })} disabled={exportando} dataTestId="relatorio-data-ate" />
+        <DateField id="relatorio-data-de" label={horizonteVisivel ? 'Início da projeção' : 'De'} value={filtros.dateFrom} onChange={(dateFrom) => onChange({ dateFrom })} disabled={exportando} dataTestId="relatorio-data-de" />
+        {!horizonteVisivel && <DateField id="relatorio-data-ate" label="Até" value={filtros.dateTo} onChange={(dateTo) => onChange({ dateTo })} disabled={exportando} dataTestId="relatorio-data-ate" />}
         <SelectField
           id="relatorio-regime"
           label="Regime"

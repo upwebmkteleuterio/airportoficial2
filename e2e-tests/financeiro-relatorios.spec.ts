@@ -67,7 +67,15 @@ test('gestor consulta os relatórios gerenciais e ajusta o agrupamento', async (
   await expect(fluxo).toContainText(mesAtual, { timeout: T });
 
   await page.getByRole('tab', { name: 'Projeção' }).click({ timeout: T });
-  await expect(page.getByTestId('projecao-tabela')).toBeVisible({ timeout: T });
+  const projecao = page.getByTestId('projecao-tabela');
+  await expect(projecao).toBeVisible({ timeout: T });
+  await expect(page.locator('#relatorio-data-ate')).toHaveCount(0);
+  const primeiroDiaProximoMes = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1);
+  const inicioProjecao = `${primeiroDiaProximoMes.getFullYear()}-${String(primeiroDiaProximoMes.getMonth() + 1).padStart(2, '0')}-01`;
+  const rotuloPrimeiroMes = `${String(primeiroDiaProximoMes.getMonth() + 1).padStart(2, '0')}/${primeiroDiaProximoMes.getFullYear()}`;
+  await page.getByLabel('Início da projeção').fill(inicioProjecao, { timeout: T });
+  await expect(projecao.locator('tbody tr').first()).toContainText(rotuloPrimeiroMes, { timeout: T });
+  await page.getByRole('button', { name: 'Mês atual' }).click({ timeout: T });
 
   await page.getByRole('button', { name: 'Exportar' }).click({ timeout: T });
   await expect(page.getByRole('menuitem', { name: 'Excel (.xlsx)' })).toBeVisible({ timeout: T });
