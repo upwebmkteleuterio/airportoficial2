@@ -24,6 +24,9 @@ test.afterEach(async () => {
 });
 
 test('gestor cria, edita e exclui um lançamento e o saldo da conta acompanha', async ({ page }) => {
+  // O fluxo é longo (login, criar, editar e excluir) e o limite padrão de 30s
+  // não é suficiente quando a execução está mais lenta.
+  test.setTimeout(120000);
   // Conta e categoria descartáveis: o lançamento nunca toca o saldo de uma conta real.
   const conta = await createDisposableConta(user.marker);
   const categoria = await createDisposableCategoria(user.marker, 'ENTRADA');

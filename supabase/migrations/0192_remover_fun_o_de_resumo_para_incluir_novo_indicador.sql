@@ -1,0 +1,1 @@
+DROP FUNCTION public.fn_relatorio_resumo(date, date, text, text)

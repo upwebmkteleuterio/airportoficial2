@@ -20,7 +20,7 @@ function Card({ titulo, valor, detalhe, testId, destaque = false }: { titulo: st
 
 export function RelatorioResumoCards({ resumo, isLoading }: RelatorioResumoCardsProps) {
   if (isLoading || !resumo) {
-    return <div data-testid="relatorio-resumo" className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">{Array.from({ length: 7 }, (_, index) => <article key={index} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900"><p className="text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-slate-400">Carregando indicador</p><SummaryCardSkeleton /></article>)}</div>;
+    return <div data-testid="relatorio-resumo" className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">{Array.from({ length: 8 }, (_, index) => <article key={index} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900"><p className="text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-slate-400">Carregando indicador</p><SummaryCardSkeleton /></article>)}</div>;
   }
 
   const variacao = variacaoPercentual(resumo.resultado, resumo.resultadoAnterior);
@@ -43,6 +43,7 @@ export function RelatorioResumoCards({ resumo, isLoading }: RelatorioResumoCards
       <Card titulo="A receber" valor={money.format(resumo.aReceber)} detalhe={`Em atraso: ${money.format(resumo.aReceberAtrasado)}`} />
       <Card titulo="A pagar" valor={money.format(resumo.aPagar)} detalhe={`Em atraso: ${money.format(resumo.aPagarAtrasado)}`} />
       <Card titulo="Investimentos" valor={money.format(resumo.investimentos)} />
+      <Card titulo="Lucro distribuído" valor={money.format(resumo.lucroDistribuido)} testId="relatorio-kpi-lucro-distribuido" detalhe="Fora do resultado — não é despesa" />
     </div>
   );
 }

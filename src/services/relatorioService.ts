@@ -55,6 +55,7 @@ function toResumo(row: Record<string, unknown>): RelatorioResumo {
     aReceberAtrasado: num(row.a_receber_atrasado),
     aPagarAtrasado: num(row.a_pagar_atrasado),
     investimentos: num(row.investimentos),
+    lucroDistribuido: num(row.lucro_distribuido),
     movimentos: num(row.movimentos),
   };
 }

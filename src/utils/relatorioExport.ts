@@ -61,6 +61,7 @@ function linhasResumo(dados: DadosRelatorioExportacao): LinhaPlanilha[] {
     ['A pagar (em aberto)', resumo.aPagar],
     ['A pagar em atraso', resumo.aPagarAtrasado],
     ['Investimentos disponíveis', resumo.investimentos],
+    ['Lucro distribuído no período (fora do resultado)', resumo.lucroDistribuido],
   ];
 }
 
@@ -377,6 +378,7 @@ export function exportarRelatorioPdf(dados: DadosRelatorioExportacao, aba: AbaRe
     ['A pagar (em aberto)', money.format(resumo.aPagar)],
     ['A pagar em atraso', money.format(resumo.aPagarAtrasado)],
     ['Investimentos disponíveis', money.format(resumo.investimentos)],
+    ['Lucro distribuído no período', money.format(resumo.lucroDistribuido)],
     ['Movimentos considerados', String(resumo.movimentos)],
   ];
 

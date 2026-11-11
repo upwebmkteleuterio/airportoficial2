@@ -35,6 +35,7 @@ export interface RelatorioResumo {
   aReceberAtrasado: number;
   aPagarAtrasado: number;
   investimentos: number;
+  lucroDistribuido: number;
   movimentos: number;
 }
 

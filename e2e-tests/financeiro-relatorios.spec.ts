@@ -91,8 +91,10 @@ test('saque de lucro movimenta o caixa sem alterar o DRE', async ({ page }) => {
   await expect(dre).toBeVisible({ timeout: T });
   const despesasCard = page.getByTestId('relatorio-kpi-despesas');
   const resultadoCard = page.getByTestId('relatorio-kpi-resultado');
+  const lucroDistribuidoCard = page.getByTestId('relatorio-kpi-lucro-distribuido');
   const despesasBaseline = valorEmReais(await despesasCard.locator('p').nth(1).innerText());
   const resultadoBaseline = valorEmReais(await resultadoCard.locator('p').nth(1).innerText());
+  const lucroDistribuidoBaseline = valorEmReais(await lucroDistribuidoCard.locator('p').nth(1).innerText());
 
   await page.getByRole('tab', { name: 'Fluxo de caixa' }).click({ timeout: T });
   const fluxo = page.getByTestId('fluxo-tabela');
@@ -118,6 +120,7 @@ test('saque de lucro movimenta o caixa sem alterar o DRE', async ({ page }) => {
   await expect(dreAtualizado.getByText('Saque de lucro', { exact: true })).toHaveCount(0, { timeout: T });
   await expect.poll(async () => valorEmReais(await despesasCard.locator('p').nth(1).innerText()), { timeout: T }).toBe(despesasBaseline);
   await expect.poll(async () => valorEmReais(await resultadoCard.locator('p').nth(1).innerText()), { timeout: T }).toBe(resultadoBaseline);
+  await expect.poll(async () => valorEmReais(await lucroDistribuidoCard.locator('p').nth(1).innerText()), { timeout: T }).toBe(lucroDistribuidoBaseline + 500);
 
   await page.getByRole('tab', { name: 'Fluxo de caixa' }).click({ timeout: T });
   const fluxoAtualizado = page.getByTestId('fluxo-tabela');
