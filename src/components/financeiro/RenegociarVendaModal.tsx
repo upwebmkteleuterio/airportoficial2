@@ -106,48 +106,49 @@ export function RenegociarVendaModal({ isOpen, onClose, onConfirm, isPending, ve
             const changedValue = Boolean(parcela.original) && Number(parcela.valor) !== Number(parcela.original?.valor);
             const changedDate = Boolean(parcela.original) && parcela.data_competencia !== parcela.original?.data_competencia;
             const alterada = changedValue || changedDate;
+            const badgeClass = 'rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800 dark:bg-amber-950/40 dark:text-amber-300';
             return <section key={parcela.uid} className="rounded-lg border border-gray-200 p-3 dark:border-slate-700">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="min-w-0">
-                  <p className="text-sm font-bold text-slate-800 dark:text-slate-200">{parcela.original ? `Parcela ${index + 1}` : 'Nova parcela'}</p>
-                  {parcela.original
-                    ? <><p className={`mt-1 ${valorClass}`}>{money.format(Number(parcela.original.valor))}</p><p className="text-xs text-gray-500 dark:text-slate-400">Vence em {formatDate(parcela.original.data_competencia)}</p></>
-                    : <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">Ainda não existia na venda.</p>}
-                </div>
-                <div className="min-w-0">
-                  {locked ? <div className="flex items-start gap-2 rounded border border-amber-200 bg-amber-50 p-2 dark:border-amber-900/40 dark:bg-amber-950/30">
-                    <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-700 dark:text-amber-300" aria-hidden="true"/>
-                    <p className="text-xs font-semibold text-amber-800 dark:text-amber-200">Já recebida — não pode ser alterada na renegociação.</p>
-                  </div> : canceled ? <p className="rounded border border-gray-200 bg-gray-50 p-2 text-xs text-gray-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">Cancelada — segue sem valor a receber.</p> : editando ? <div className="space-y-2">
-                    <div className="flex items-end gap-2">
-                      <div className="min-w-0 flex-1"><p className={rotuloClass}>Valor anterior</p><p className={valorClass}>{money.format(Number(parcela.original?.valor ?? 0))}</p></div>
-                      <ArrowRight className="mb-2 h-4 w-4 shrink-0 text-gray-400" aria-hidden="true"/>
-                      <div className="min-w-0 flex-1"><label htmlFor={`renegociar-valor-${index}`} className={rotuloClass}>Novo valor</label><MoneyInput id={`renegociar-valor-${index}`} dataTestId={`renegociar-valor-${index}`} ariaLabel={`Novo valor da parcela ${index + 1}`} className={inputClass} value={parcela.valor} onChange={(valor) => update(index, { valor })}/></div>
-                    </div>
-                    <div className="flex items-end gap-2">
-                      <div className="min-w-0 flex-1"><p className={rotuloClass}>Vencimento anterior</p><p className={valorClass}>{parcela.original ? formatDate(parcela.original.data_competencia) : '—'}</p></div>
-                      <ArrowRight className="mb-2 h-4 w-4 shrink-0 text-gray-400" aria-hidden="true"/>
-                      <div className="min-w-0 flex-1"><label htmlFor={`renegociar-vencimento-${index}`} className={rotuloClass}>Novo vencimento</label><input id={`renegociar-vencimento-${index}`} data-testid={`renegociar-vencimento-${index}`} aria-label={`Novo vencimento da parcela ${index + 1}`} className={inputClass} type="date" value={parcela.data_competencia} onChange={(event) => update(index, { data_competencia: event.target.value })}/></div>
-                    </div>
-                  </div> : <div>
-                    <p className="text-sm font-bold text-slate-800 dark:text-slate-200">{money.format(Number(parcela.valor || 0))}</p>
-                    <p className="text-xs text-gray-500 dark:text-slate-400">Vence em {formatDate(parcela.data_competencia)}</p>
-                    {!alterada && <p className="mt-1 text-xs text-gray-400 dark:text-slate-500">Sem alteração</p>}
-                  </div>}
-                </div>
-              </div>
-              {!locked && !canceled && <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 pt-2 dark:border-slate-800">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-bold text-slate-800 dark:text-slate-200">{parcela.original ? `Parcela ${index + 1}` : 'Nova parcela'}</p>
                 <span className="flex flex-wrap items-center gap-1">
                   {parcela.id === null && <span className="rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-semibold text-teal-800 dark:bg-teal-950/40 dark:text-teal-300">Nova parcela</span>}
-                  {changedValue && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">Valor alterado</span>}
-                  {changedDate && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">Data alterada — original {parcela.original ? formatDate(parcela.original.data_competencia) : ''}</span>}
+                  {changedValue && <span className={badgeClass}>Valor alterado</span>}
+                  {changedDate && <span className={badgeClass}>Data alterada — original {parcela.original ? formatDate(parcela.original.data_competencia) : ''}</span>}
                 </span>
-                <span className="flex items-center gap-3">
-                  {parcela.id !== null && (editando
-                    ? <button type="button" data-testid={`renegociar-desfazer-${index}`} className={`${acaoClass} text-gray-600 dark:text-slate-300`} onClick={() => desfazer(index, parcela)}>Desfazer alteração</button>
-                    : <button type="button" data-testid={`renegociar-alterar-${index}`} className={`${acaoClass} text-teal-700 dark:text-teal-300`} onClick={() => setAlterando(parcela.uid)}>Alterar</button>)}
-                  <button type="button" data-testid={`renegociar-remover-${index}`} className={`${acaoClass} inline-flex items-center gap-1 text-rose-600 dark:text-rose-400`} onClick={() => remover(index)}><Trash2 className="h-3.5 w-3.5" aria-hidden="true"/>Remover</button>
-                </span>
+              </div>
+              {locked || canceled
+                ? <div className="mt-2 grid grid-cols-2 gap-3">
+                    <div className="min-w-0"><p className={valorClass}>{parcela.original ? money.format(Number(parcela.original.valor)) : '—'}</p>{parcela.original && <p className="text-xs text-gray-500 dark:text-slate-400">Vence em {formatDate(parcela.original.data_competencia)}</p>}</div>
+                    <div className="min-w-0">{locked
+                      ? <div className="flex items-start gap-2 rounded border border-amber-200 bg-amber-50 p-2 dark:border-amber-900/40 dark:bg-amber-950/30"><Lock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-700 dark:text-amber-300" aria-hidden="true"/><p className="text-xs font-semibold text-amber-800 dark:text-amber-200">Já recebida — não pode ser alterada na renegociação.</p></div>
+                      : <p className="rounded border border-gray-200 bg-gray-50 p-2 text-xs text-gray-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">Cancelada — segue sem valor a receber.</p>}</div>
+                  </div>
+                : editando
+                ? <div className="mt-2 grid grid-cols-2 items-end gap-x-3 gap-y-3">
+                    <div className="flex min-w-0 items-center justify-between gap-2">
+                      <div className="min-w-0"><p className={rotuloClass}>Valor anterior</p><p className={valorClass}>{parcela.original ? money.format(Number(parcela.original.valor)) : '—'}</p></div>
+                      <ArrowRight className="h-4 w-4 shrink-0 text-gray-400" aria-hidden="true"/>
+                    </div>
+                    <div className="min-w-0"><label htmlFor={`renegociar-valor-${index}`} className={rotuloClass}>Novo valor</label><MoneyInput id={`renegociar-valor-${index}`} dataTestId={`renegociar-valor-${index}`} ariaLabel={`Novo valor da parcela ${index + 1}`} className={inputClass} value={parcela.valor} onChange={(valor) => update(index, { valor })}/></div>
+                    <div className="flex min-w-0 items-center justify-between gap-2">
+                      <div className="min-w-0"><p className={rotuloClass}>Vencimento anterior</p><p className={valorClass}>{parcela.original ? formatDate(parcela.original.data_competencia) : '—'}</p></div>
+                      <ArrowRight className="h-4 w-4 shrink-0 text-gray-400" aria-hidden="true"/>
+                    </div>
+                    <div className="min-w-0"><label htmlFor={`renegociar-vencimento-${index}`} className={rotuloClass}>Novo vencimento</label><input id={`renegociar-vencimento-${index}`} data-testid={`renegociar-vencimento-${index}`} aria-label={`Novo vencimento da parcela ${index + 1}`} className={inputClass} type="date" value={parcela.data_competencia} onChange={(event) => update(index, { data_competencia: event.target.value })}/></div>
+                  </div>
+                : <div className="mt-2 grid grid-cols-2 gap-3">
+                    <div className="min-w-0"><p className={valorClass}>{parcela.original ? money.format(Number(parcela.original.valor)) : '—'}</p>{parcela.original && <p className="text-xs text-gray-500 dark:text-slate-400">Vence em {formatDate(parcela.original.data_competencia)}</p>}</div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{money.format(Number(parcela.valor || 0))}</p>
+                      <p className="text-xs text-gray-500 dark:text-slate-400">Vence em {formatDate(parcela.data_competencia)}</p>
+                      {!alterada && <p className="mt-1 text-xs text-gray-400 dark:text-slate-500">Sem alteração</p>}
+                    </div>
+                  </div>}
+              {!locked && !canceled && <div className="mt-3 flex flex-wrap items-center justify-end gap-3 border-t border-gray-100 pt-2 dark:border-slate-800">
+                {parcela.id !== null && (editando
+                  ? <button type="button" data-testid={`renegociar-desfazer-${index}`} className={`${acaoClass} text-gray-600 dark:text-slate-300`} onClick={() => desfazer(index, parcela)}>Desfazer alteração</button>
+                  : <button type="button" data-testid={`renegociar-alterar-${index}`} className={`${acaoClass} text-teal-700 dark:text-teal-300`} onClick={() => setAlterando(parcela.uid)}>Alterar</button>)}
+                <button type="button" data-testid={`renegociar-remover-${index}`} className={`${acaoClass} inline-flex items-center gap-1 text-rose-600 dark:text-rose-400`} onClick={() => remover(index)}><Trash2 className="h-3.5 w-3.5" aria-hidden="true"/>Remover</button>
               </div>}
             </section>;
           })}

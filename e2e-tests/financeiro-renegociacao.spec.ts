@@ -90,10 +90,12 @@ test('gestor renegocia um título, divide a parcela e o histórico fica registra
   await expect(linha.getByTestId('venda-renegociada-tag')).toBeVisible({ timeout: T });
   await expect(linha).toContainText(/R\$\s*1\.200,00/, { timeout: T });
 
-  // O painel de detalhes mostra as etiquetas das parcelas e o histórico.
+  // O painel de detalhes mostra a comparação da parcela alterada, a nova parcela e o histórico.
   await linha.click({ timeout: T });
   const detalhes = page.getByRole('dialog');
-  await expect(detalhes.getByTestId('parcela-tag-valor-alterado').first()).toBeVisible({ timeout: T });
+  const alteracoes = detalhes.getByTestId('parcela-alteracoes').first();
+  await expect(alteracoes).toContainText('Alterado na renegociação', { timeout: T });
+  await expect(alteracoes).toContainText(/R\$\s*300,00[\s\S]*R\$\s*400,00/, { timeout: T });
   await expect(detalhes.getByTestId('parcela-tag-nova').first()).toBeVisible({ timeout: T });
   await expect(detalhes).toContainText(motivo, { timeout: T });
 });
@@ -174,7 +176,10 @@ test('gestor escolhe renegociar ao salvar uma edição que mudou o vencimento', 
 
   await linha.click({ timeout: T });
   const detalhes = page.getByRole('dialog');
-  await expect(detalhes.getByTestId('parcela-tag-data-alterada').first()).toBeVisible({ timeout: T });
+  // A comparação mostra o vencimento anterior e o novo lado a lado.
+  const alteracoes = detalhes.getByTestId('parcela-alteracoes').first();
+  await expect(alteracoes).toContainText('Alterado na renegociação', { timeout: T });
+  await expect(alteracoes).toContainText(/\d{2}\/\d{2}\/\d{4}[\s\S]*\d{2}\/\d{2}\/\d{4}/, { timeout: T });
   await expect(detalhes).toContainText(motivo, { timeout: T });
   await expect(detalhes).toContainText(/\d{2}\/\d{2}\/\d{4} · [A-Za-zÀ-ÿ]/, { timeout: T });
 });

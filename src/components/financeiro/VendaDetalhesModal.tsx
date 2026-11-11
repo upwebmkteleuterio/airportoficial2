@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Eye, X } from 'lucide-react';
+import { ArrowRight, Eye, Repeat2, X } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { SlidePanel } from '../ui/SlidePanel';
 import { useVendaRenegociacoes } from '../../hooks/useVendas';
@@ -8,6 +8,22 @@ import { ParcelaTags } from './ParcelaTags';
 
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const date = (value: string) => { const [year, month, day] = value.slice(0, 10).split('-'); return `${day}/${month}/${year}`; };
+
+/** Mostra o que a renegociação mudou nesta parcela: valor e vencimento anteriores → atuais. */
+function AlteracoesParcela({ parcela }: { parcela: ParcelaVenda }) {
+  const valorAntes = parcela.valor_original;
+  const dataAntes = parcela.data_original;
+  const valorAlterado = valorAntes !== null && valorAntes !== Number(parcela.valor);
+  const dataAlterada = dataAntes !== null && dataAntes !== parcela.data_competencia;
+  if (!valorAlterado && !dataAlterada) return null;
+  const anterior = 'text-gray-500 line-through dark:text-slate-400';
+  const atual = 'font-bold text-slate-800 dark:text-slate-200';
+  return <div data-testid="parcela-alteracoes" className="mt-2 space-y-1 rounded-md border border-amber-200 bg-amber-50/70 px-3 py-2 dark:border-amber-900/40 dark:bg-amber-950/20">
+    <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-amber-700 dark:text-amber-300"><Repeat2 className="h-3 w-3" aria-hidden="true"/>Alterado na renegociação</p>
+    {valorAlterado && valorAntes !== null && <p className="flex flex-wrap items-baseline gap-1.5 text-xs"><span className="w-20 shrink-0 font-semibold text-gray-500 dark:text-slate-400">Valor</span><span className={anterior}>{money.format(valorAntes)}</span><ArrowRight className="h-3 w-3 text-amber-600 dark:text-amber-300" aria-hidden="true"/><span className={atual}>{money.format(Number(parcela.valor))}</span></p>}
+    {dataAlterada && dataAntes !== null && <p className="flex flex-wrap items-baseline gap-1.5 text-xs"><span className="w-20 shrink-0 font-semibold text-gray-500 dark:text-slate-400">Vencimento</span><span className={anterior}>{date(dataAntes)}</span><ArrowRight className="h-3 w-3 text-amber-600 dark:text-amber-300" aria-hidden="true"/><span className={atual}>{date(parcela.data_competencia)}</span></p>}
+  </div>;
+}
 
 export function VendaDetalhesModal({ isOpen, onClose, venda }: { isOpen: boolean; onClose: () => void; venda: VendaComRelacoes | null }) {
   const { renegociacoes, isLoading, isError } = useVendaRenegociacoes(venda?.id ?? null);
@@ -21,7 +37,7 @@ export function VendaDetalhesModal({ isOpen, onClose, venda }: { isOpen: boolean
             ['Participante', `${venda.participante_nome} — ${venda.participante_documento ?? '—'}`], ['Curso', venda.curso?.nome_curso ?? '—'], ['Turma', String(venda.turma?.id_interno_escola ?? '—')], ['Condição', venda.condicao === 'A_VISTA' ? 'À vista' : 'Parcelado'], ['Categoria', venda.categoria?.nome ?? '—'], ['Conta', venda.conta?.nome ?? '—'], ['Forma de pagamento', venda.forma_pagamento ?? '—'], ['Referência', venda.referencia_transacao ?? '—'], ...(venda.cartao_ultimos_digitos ? [['Últimos dígitos do cartão', `•••• ${venda.cartao_ultimos_digitos}`]] : []), ['Observações', venda.observacoes || '—'],
           ].map(([label, value]) => <div key={label}><dt className="text-[10px] font-bold uppercase text-gray-500">{label}</dt><dd className="break-words text-sm font-semibold text-slate-800 dark:text-slate-200">{value}</dd></div>)}</dl></section>
           {(venda.cancelada || venda.renegociada) && <section className="space-y-2"><h3 className="text-xs font-bold uppercase text-gray-700 dark:text-slate-300">Situação da venda</h3>{venda.cancelada && <p className="text-sm text-rose-700 dark:text-rose-300">Cancelada — {venda.cancelada_motivo || 'Motivo não informado'}</p>}{venda.renegociada && <p className="text-sm text-teal-700 dark:text-teal-300">Renegociada</p>}</section>}
-          <section><h3 className="mb-3 text-xs font-bold uppercase text-gray-700 dark:text-slate-300">Parcelas</h3><div className="space-y-2">{parcelas.map((parcela: ParcelaVenda, index) => <div key={parcela.id} className="rounded-lg border border-gray-200 p-3 dark:border-slate-700"><div className="flex flex-wrap items-center justify-between gap-2"><span className="text-sm font-semibold">Parcela {index + 1}/{parcelas.length}</span><span className="text-sm font-bold">{money.format(Number(parcela.valor))}</span></div><p className="mt-1 text-xs text-gray-500">Vencimento: {date(parcela.data_competencia)}</p>{parcela.status === 'CANCELADO' && parcela.cancelado_motivo && <p className="mt-1 text-xs text-rose-700">Cancelada — {parcela.cancelado_motivo}</p>}<div className="mt-2"><ParcelaTags parcela={parcela} numero={index + 1}/></div></div>)}</div></section>
+          <section><h3 className="mb-3 text-xs font-bold uppercase text-gray-700 dark:text-slate-300">Parcelas</h3><div className="space-y-2">{parcelas.map((parcela: ParcelaVenda, index) => <div key={parcela.id} className="rounded-lg border border-gray-200 p-3 dark:border-slate-700"><div className="flex flex-wrap items-center justify-between gap-2"><span className="text-sm font-semibold">Parcela {index + 1}/{parcelas.length}</span><span className="text-sm font-bold">{money.format(Number(parcela.valor))}</span></div><p className="mt-1 text-xs text-gray-500">Vencimento: {date(parcela.data_competencia)}</p>{parcela.status === 'CANCELADO' && parcela.cancelado_motivo && <p className="mt-1 text-xs text-rose-700">Cancelada — {parcela.cancelado_motivo}</p>}<AlteracoesParcela parcela={parcela}/><div className="mt-2"><ParcelaTags parcela={parcela} numero={index + 1}/></div></div>)}</div></section>
           <section><h3 className="mb-3 text-xs font-bold uppercase text-gray-700 dark:text-slate-300">Renegociações</h3>{isLoading ? <p className="text-sm text-gray-500">Carregando histórico...</p> : isError ? <p role="alert" className="text-sm text-rose-600">Não foi possível carregar o histórico de renegociações.</p> : renegociacoes.length === 0 ? <p className="text-sm text-gray-500">Nenhuma renegociação registrada.</p> : <ul className="space-y-2">{[...renegociacoes].sort((a, b) => b.created_at.localeCompare(a.created_at)).map((item) => <li key={item.id} className="rounded-lg bg-slate-50 p-3 dark:bg-slate-800"><time className="text-xs font-semibold text-gray-500">{date(item.created_at)} · {item.usuario_nome}</time><p className="mt-1 text-sm">{item.observacao}</p></li>)}</ul>}</section>
         </>}
       </div><footer className="flex justify-end border-t border-gray-200 px-6 py-4 dark:border-slate-800"><Button type="button" variant="secondary" onClick={onClose}>Fechar</Button></footer></div>
