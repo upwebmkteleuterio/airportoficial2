@@ -1,6 +1,6 @@
 import { supabase } from '../integrations/supabase/client';
 import type { CategoriaFinanceira, TipoLancamento } from '../types/financeiro';
-import { FINANCEIRO_OPTIONS_LIMIT, type FinanceiroOptionsResult } from './financeiroOptions';
+import { CATEGORIA_SAQUE_LUCRO_ID, FINANCEIRO_OPTIONS_LIMIT, type FinanceiroOptionsResult } from './financeiroOptions';
 import { newServiceId, serviceError } from './supabaseErrors';
 
 function erroExclusao(error: unknown): never {
@@ -16,8 +16,12 @@ function erroExclusao(error: unknown): never {
 }
 
 export const categoriaFinanceiraService = {
-  getOptions: async (): Promise<FinanceiroOptionsResult<CategoriaFinanceira>> => {
-    const { data, count, error } = await supabase.from('categorias_financeiras').select('*', { count: 'exact' }).eq('sistema', false)
+  getOptions: async (incluirCategoriasSistema = false): Promise<FinanceiroOptionsResult<CategoriaFinanceira>> => {
+    let query = supabase.from('categorias_financeiras').select('*', { count: 'exact' });
+    query = incluirCategoriasSistema
+      ? query.or(`sistema.eq.false,id.eq.${CATEGORIA_SAQUE_LUCRO_ID}`)
+      : query.eq('sistema', false);
+    const { data, count, error } = await query
       .order('tipo', { ascending: true }).order('nome', { ascending: true }).range(0, FINANCEIRO_OPTIONS_LIMIT - 1);
     if (error) throw serviceError('Não foi possível carregar as categorias financeiras', error);
     return { data: (data ?? []) as CategoriaFinanceira[], total: count ?? 0 };

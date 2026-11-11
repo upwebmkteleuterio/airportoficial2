@@ -1,0 +1,1 @@
+REVOKE ALL ON FUNCTION public.fn_relatorio_base_dre(date, date, text, text) FROM PUBLIC, anon, authenticated

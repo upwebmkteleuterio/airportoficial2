@@ -5,11 +5,15 @@ import type { CategoriaFinanceira, TipoLancamento } from '../types/financeiro';
 
 type CategoriaPageFilters = { page: number; pageSize: number; tipo?: TipoLancamento };
 
-export function useCategoriasFinanceiras(pageFilters?: CategoriaPageFilters) {
+export function useCategoriasFinanceiras(
+  pageFilters?: CategoriaPageFilters,
+  options: { incluirCategoriasSistema?: boolean } = {},
+) {
   const queryClient = useQueryClient();
+  const incluirCategoriasSistema = options.incluirCategoriasSistema ?? false;
   const categoriasQuery = useQuery({
-    queryKey: ['categorias-financeiras'],
-    queryFn: categoriaFinanceiraService.getOptions,
+    queryKey: ['categorias-financeiras', incluirCategoriasSistema],
+    queryFn: () => categoriaFinanceiraService.getOptions(incluirCategoriasSistema),
   });
   const pageQuery = useQuery({
     queryKey: ['categorias-financeiras-page', pageFilters],

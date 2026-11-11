@@ -21,6 +21,7 @@ import { primeiroDiaDoMes, ultimoDiaDoMes } from '../utils/dateRange';
 import { useAlunosPorCpf, useParticipantesFinanceiros } from '../hooks/useParticipantesFinanceiros';
 import { useUIStore } from '../store/uiStore';
 import { FinanceiroOptionsLimitWarning } from '../components/financeiro/FinanceiroOptionsLimitWarning';
+import { CATEGORIA_SAQUE_LUCRO_ID } from '../services/financeiroOptions';
 import type { FormaPagamento, LancamentoComRelacoes, ParticipanteOpcao, TipoLancamento, TipoParticipante, TipoSituacaoLancamento } from '../types/financeiro';
 import type { LancamentoInput } from '../services/lancamentoService';
 
@@ -96,7 +97,7 @@ function labelParticipante(option: ParticipanteOpcao): string {
 export default function FinanceiroLancamentos() {
   const userLogged = useUIStore((state) => state.userLogged);
   const { contas, optionsTruncated: contasOptionsTruncated } = useBancos();
-  const { categorias, optionsTruncated: categoriasOptionsTruncated } = useCategoriasFinanceiras();
+  const { categorias, optionsTruncated: categoriasOptionsTruncated } = useCategoriasFinanceiras(undefined, { incluirCategoriasSistema: true });
   const { fornecedores, instrutores, empresas, optionsTruncated: participantesOptionsTruncated } = useParticipantesFinanceiros();
   const [page, setPage] = useState(1);
   const [tipoFiltro, setTipoFiltro] = useState<TipoLancamento | ''>('');
@@ -343,6 +344,7 @@ export default function FinanceiroLancamentos() {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><div><label htmlFor="form-competencia" className={labelClass}>Data de competência</label><input id="form-competencia" className={inputClass} type="date" required value={form.data_competencia} onChange={(event) => setForm((current) => ({ ...current, data_competencia: event.target.value }))}/></div><div><label htmlFor="form-efetivacao" className={labelClass}>Data de efetivação</label><input id="form-efetivacao" className={inputClass} type="date" required value={form.data_efetivacao} onChange={(event) => setForm((current) => ({ ...current, data_efetivacao: event.target.value }))}/></div></div>
           <div><label htmlFor="form-conta" className={labelClass}>Conta</label><select id="form-conta" required className={inputClass} value={form.banco_id} onChange={(event) => setForm((current) => ({ ...current, banco_id: event.target.value }))}><option value="">Selecione uma conta</option>{contas.map((conta) => <option key={conta.id} value={conta.id}>{conta.nome}{conta.ativo ? '' : ' (inativa)'}</option>)}</select></div>
           <div><label htmlFor="form-categoria" className={labelClass}>Categoria</label><select id="form-categoria" required className={inputClass} value={form.categoria_id} onChange={(event) => setForm((current) => ({ ...current, categoria_id: event.target.value }))}><option value="">Selecione uma categoria</option>{categoriasForm.map((categoria) => <option key={categoria.id} value={categoria.id}>{categoria.nome}{categoria.ativo ? '' : ' (inativa)'}</option>)}</select></div>
+          {form.categoria_id === CATEGORIA_SAQUE_LUCRO_ID && <p className="rounded-lg border border-teal-200 bg-teal-50 p-3 text-xs text-teal-800 dark:border-teal-900 dark:bg-teal-950/30 dark:text-teal-200">Saque de lucro sai do saldo da conta e aparece no fluxo de caixa, mas não entra no resultado (DRE) — não é despesa.</p>}
           <div><label htmlFor="form-descricao" className={labelClass}>Descrição</label><input id="form-descricao" className={inputClass} required value={form.descricao} onChange={(event) => setForm((current) => ({ ...current, descricao: event.target.value }))}/></div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><div><label htmlFor="form-pagamento" className={labelClass}>Forma de pagamento</label><select id="form-pagamento" className={inputClass} value={form.forma_pagamento} onChange={(event) => setForm((current) => ({ ...current, forma_pagamento: event.target.value as FormaPagamento | '' }))}><option value="">Não informado</option>{formasPagamento.map((forma) => <option key={forma.value} value={forma.value}>{forma.label}</option>)}</select></div><div><label htmlFor="form-documento" className={labelClass}>Número do documento</label><input id="form-documento" className={inputClass} value={form.numero_documento} onChange={(event) => setForm((current) => ({ ...current, numero_documento: event.target.value }))}/></div></div>
           <div><label htmlFor="form-observacoes" className={labelClass}>Observações</label><textarea id="form-observacoes" className={inputClass} rows={3} value={form.observacoes} onChange={(event) => setForm((current) => ({ ...current, observacoes: event.target.value }))}/></div>

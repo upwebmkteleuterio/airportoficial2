@@ -17,6 +17,7 @@ interface DreTabelaProps {
 export function DreTabela({ linhas, resumo, page, total, onPageChange, isLoading, isError = false }: DreTabelaProps) {
   return (
     <section data-testid="dre-tabela" aria-label="DRE" className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <p className="px-4 pt-4 text-xs text-gray-500 dark:text-slate-400">Não entram no resultado transferências entre contas, aplicações, estornos e saques de lucro.</p>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[900px] border-collapse text-left text-sm">
           <thead className="border-b border-gray-200 bg-slate-50 text-xs font-bold uppercase tracking-wide text-gray-500 dark:border-slate-800 dark:bg-slate-850 dark:text-slate-400"><tr><th className="px-4 py-3">Grupo</th><th className="px-4 py-3 text-right">Receitas</th><th className="px-4 py-3 text-right">Despesas</th><th className="px-4 py-3 text-right">Resultado</th><th className="px-4 py-3 text-right">Margem %</th><th className="px-4 py-3 text-right">Movimentos</th></tr></thead>

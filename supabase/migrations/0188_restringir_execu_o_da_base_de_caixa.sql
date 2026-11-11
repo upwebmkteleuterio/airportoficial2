@@ -1,0 +1,1 @@
+REVOKE ALL ON FUNCTION public.fn_relatorio_movimentos_caixa(date, date, text) FROM PUBLIC, anon, authenticated

@@ -62,7 +62,7 @@ export function variacaoPercentual(atual: number, anterior: number): number | nu
 
 /** Participação do resultado no total de receitas do período. */
 export function margemPercentual(resultado: number, receitas: number): number | null {
-  if (!receitas) return null;
+  if (receitas <= 0) return null;
   return (resultado / receitas) * 100;
 }
 

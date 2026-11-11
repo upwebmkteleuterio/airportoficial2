@@ -24,6 +24,10 @@ test.afterEach(async () => {
   }
 });
 
+function valorEmReais(texto: string): number {
+  return Number(texto.replace(/[^\d,.-]/g, '').replace(/\./g, '').replace(',', '.'));
+}
+
 test('gestor consulta os relatórios gerenciais e ajusta o agrupamento', async ({ page }) => {
   test.setTimeout(120000);
   const T = 20000;
@@ -72,4 +76,52 @@ test('gestor consulta os relatórios gerenciais e ajusta o agrupamento', async (
   await page.getByRole('tab', { name: 'DRE' }).click({ timeout: T });
   await page.getByLabel('Agrupar por').selectOption('TURMA', { timeout: T });
   await expect(page.getByTestId('dre-tabela')).toBeVisible({ timeout: T });
+});
+
+test('saque de lucro movimenta o caixa sem alterar o DRE', async ({ page }) => {
+  test.setTimeout(120000);
+  const T = 20000;
+  const conta = await createDisposableConta(user.marker);
+  const descricao = `Saque de lucro ${user.marker}`;
+  const mesAtual = `${String(new Date().getMonth() + 1).padStart(2, '0')}/${new Date().getFullYear()}`;
+
+  await signInAs(page, user);
+  await page.goto('/financeiro/relatorios', { timeout: T });
+  const dre = page.getByTestId('dre-tabela');
+  await expect(dre).toBeVisible({ timeout: T });
+  const despesasCard = page.getByTestId('relatorio-kpi-despesas');
+  const resultadoCard = page.getByTestId('relatorio-kpi-resultado');
+  const despesasBaseline = valorEmReais(await despesasCard.locator('p').nth(1).innerText());
+  const resultadoBaseline = valorEmReais(await resultadoCard.locator('p').nth(1).innerText());
+
+  await page.getByRole('tab', { name: 'Fluxo de caixa' }).click({ timeout: T });
+  const fluxo = page.getByTestId('fluxo-tabela');
+  const linhaMesAtual = fluxo.locator('tbody tr').filter({ hasText: mesAtual });
+  await expect(linhaMesAtual).toBeVisible({ timeout: T });
+  const saidasBaseline = valorEmReais(await linhaMesAtual.locator('td').nth(3).innerText());
+
+  await page.goto('/financeiro/lancamentos', { timeout: T });
+  await page.getByTestId('novo-lancamento-button').click({ timeout: T });
+  const formulario = page.getByRole('dialog');
+  await formulario.locator('#form-tipo').selectOption('SAIDA', { timeout: T });
+  await fillMoneyInput(formulario.locator('#form-valor'), '500');
+  await formulario.locator('#form-conta').selectOption(conta.id, { timeout: T });
+  await formulario.locator('#form-categoria').selectOption({ label: 'Saque de lucro' }, { timeout: T });
+  await expect(formulario.getByText('Saque de lucro sai do saldo da conta e aparece no fluxo de caixa, mas não entra no resultado (DRE) — não é despesa.', { exact: true })).toBeVisible({ timeout: T });
+  await formulario.locator('#form-descricao').fill(descricao, { timeout: T });
+  await formulario.getByRole('button', { name: 'Salvar' }).click({ timeout: T });
+  await expect(formulario).toBeHidden({ timeout: T });
+
+  await page.goto('/financeiro/relatorios', { timeout: T });
+  const dreAtualizado = page.getByTestId('dre-tabela');
+  await expect(dreAtualizado).toBeVisible({ timeout: T });
+  await expect(dreAtualizado.getByText('Saque de lucro', { exact: true })).toHaveCount(0, { timeout: T });
+  await expect.poll(async () => valorEmReais(await despesasCard.locator('p').nth(1).innerText()), { timeout: T }).toBe(despesasBaseline);
+  await expect.poll(async () => valorEmReais(await resultadoCard.locator('p').nth(1).innerText()), { timeout: T }).toBe(resultadoBaseline);
+
+  await page.getByRole('tab', { name: 'Fluxo de caixa' }).click({ timeout: T });
+  const fluxoAtualizado = page.getByTestId('fluxo-tabela');
+  const linhaMesAtualizada = fluxoAtualizado.locator('tbody tr').filter({ hasText: mesAtual });
+  await expect(linhaMesAtualizada).toBeVisible({ timeout: T });
+  await expect.poll(async () => valorEmReais(await linhaMesAtualizada.locator('td').nth(3).innerText()), { timeout: T }).toBe(saidasBaseline + 500);
 });
