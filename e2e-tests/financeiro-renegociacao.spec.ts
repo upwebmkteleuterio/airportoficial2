@@ -64,19 +64,25 @@ test('gestor renegocia um título, divide a parcela e o histórico fica registra
   await page.getByRole('menuitem', { name: 'Renegociar' }).click({ timeout: T });
 
   const dialog = page.getByRole('dialog');
-  // A coluna da esquerda mostra o valor original de cada parcela.
-  await expect(dialog.getByTestId('renegociar-valor-0')).toHaveValue(/300,00/, { timeout: T });
+  // A leitura mostra o valor original sem campos abertos.
   await expect(dialog.getByText('Parcela original').first()).toBeVisible({ timeout: T });
+  await expect(dialog.getByTestId('renegociar-valor-0')).toHaveCount(0);
+  await expect(dialog.getByTestId('renegociar-total')).toContainText(/R\$\s*900,00/, { timeout: T });
 
-  // Altera o valor da primeira parcela e divide a última em duas.
+  // O "Alterar" abre a comparação entre o valor anterior e o novo valor.
+  await dialog.getByTestId('renegociar-alterar-0').click({ timeout: T });
+  await expect(dialog.getByText('Valor anterior').first()).toBeVisible({ timeout: T });
+  await expect(dialog.getByTestId('renegociar-valor-0')).toHaveValue(/300,00/, { timeout: T });
   await fillMoneyInput(dialog.getByTestId('renegociar-valor-0'), '400');
   await expect(dialog.getByText('Valor alterado').first()).toBeVisible({ timeout: T });
+
+  // Divide a última parcela em duas: a nova parcela já nasce com os campos abertos.
   await dialog.getByRole('button', { name: 'Adicionar parcela' }).click({ timeout: T });
-  await expect(dialog.getByText('Nova parcela').first()).toBeVisible({ timeout: T });
+  await expect(dialog.getByTestId('renegociar-valor-3')).toBeVisible({ timeout: T });
   await fillMoneyInput(dialog.getByTestId('renegociar-valor-3'), '200');
 
   // 400 + 300 + 300 + 200 = 1200
-  await expect(dialog).toContainText(/R\$\s*900,00\s*→\s*R\$\s*1\.200,00/, { timeout: T });
+  await expect(dialog.getByTestId('renegociar-total')).toContainText(/R\$\s*900,00[\s\S]*R\$\s*1\.200,00/, { timeout: T });
   await dialog.getByTestId('renegociar-motivo').fill(motivo, { timeout: T });
   await dialog.getByTestId('confirmar-renegociacao-button').click({ timeout: T });
 
@@ -198,16 +204,19 @@ test('renegociação preserva a parcela já recebida e redistribui as demais', a
   await page.getByRole('menuitem', { name: 'Renegociar' }).click({ timeout: T });
 
   const dialog = page.getByRole('dialog');
-  // A parcela recebida fica bloqueada, com aviso.
-  await expect(dialog.getByTestId('renegociar-valor-0')).toBeDisabled({ timeout: T });
-  await expect(dialog.getByText('Parcela já recebida — não pode ser alterada na renegociação.')).toBeVisible({ timeout: T });
+  // A parcela recebida não tem campo de edição e explica o motivo.
+  await expect(dialog.getByText('Já recebida — não pode ser alterada na renegociação.')).toBeVisible({ timeout: T });
+  await expect(dialog.getByTestId('renegociar-valor-0')).toHaveCount(0);
+  await expect(dialog.getByTestId('renegociar-alterar-0')).toHaveCount(0);
 
   // As demais são redistribuídas: 300 (recebida) + 500 + 500 + 200 = 1.500.
+  await dialog.getByTestId('renegociar-alterar-1').click({ timeout: T });
   await fillMoneyInput(dialog.getByTestId('renegociar-valor-1'), '500');
+  await dialog.getByTestId('renegociar-alterar-2').click({ timeout: T });
   await fillMoneyInput(dialog.getByTestId('renegociar-valor-2'), '500');
   await dialog.getByRole('button', { name: 'Adicionar parcela' }).click({ timeout: T });
   await fillMoneyInput(dialog.getByTestId('renegociar-valor-3'), '200');
-  await expect(dialog).toContainText(/R\$\s*900,00\s*→\s*R\$\s*1\.500,00/, { timeout: T });
+  await expect(dialog.getByTestId('renegociar-total')).toContainText(/R\$\s*900,00[\s\S]*R\$\s*1\.500,00/, { timeout: T });
 
   await dialog.getByTestId('renegociar-motivo').fill(motivo, { timeout: T });
   await dialog.getByTestId('confirmar-renegociacao-button').click({ timeout: T });
@@ -249,8 +258,9 @@ test('renegociação com menos parcelas reduz o total e atualiza os recebimentos
 
   // Remove a última parcela e aumenta a primeira: 500 + 300 = 800.
   await dialog.getByRole('button', { name: 'Remover' }).last().click({ timeout: T });
+  await dialog.getByTestId('renegociar-alterar-0').click({ timeout: T });
   await fillMoneyInput(dialog.getByTestId('renegociar-valor-0'), '500');
-  await expect(dialog).toContainText(/R\$\s*900,00\s*→\s*R\$\s*800,00/, { timeout: T });
+  await expect(dialog.getByTestId('renegociar-total')).toContainText(/R\$\s*900,00[\s\S]*R\$\s*800,00/, { timeout: T });
 
   await dialog.getByTestId('renegociar-motivo').fill(motivo, { timeout: T });
   await dialog.getByTestId('confirmar-renegociacao-button').click({ timeout: T });

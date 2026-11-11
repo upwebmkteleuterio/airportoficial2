@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Edit2, FileText, GraduationCap, Hash, HelpCircle, Landmark, Plus, Search, ShoppingCart, Trash2, User, X } from 'lucide-react';
+import { Edit2, FileText, GraduationCap, Hash, HelpCircle, Landmark, Plus, Repeat2, Search, ShoppingCart, Trash2, User, X } from 'lucide-react';
 import { useIsFetching, useQueryClient } from '@tanstack/react-query';
 import { Button } from '../components/ui/Button';
 import { ConfirmDeleteModal } from '../components/ui/ConfirmDeleteModal';
@@ -204,7 +204,7 @@ export default function FinanceiroVendas() {
           { label: 'Editar', icon: <Edit2 className="h-4 w-4" aria-hidden="true"/>, onClick: () => openForm(record) },
           { label: 'Recibo', icon: <FileText className="h-4 w-4" aria-hidden="true"/>, onClick: () => openReceipt(record.id) },
           { label: 'Emitir nota fiscal', icon: <FileText className="h-4 w-4" aria-hidden="true"/>, onClick: () => setNotaFiscal(record) },
-          ...(!record.cancelada ? [{ label: 'Renegociar', icon: <Edit2 className="h-4 w-4" aria-hidden="true"/>, onClick: () => setRenegotiating(record) }] : []),
+          ...(!record.cancelada ? [{ label: 'Renegociar', icon: <Repeat2 className="h-4 w-4" aria-hidden="true"/>, onClick: () => setRenegotiating(record) }] : []),
           ...(!record.cancelada ? [{ label: 'Cancelar venda', icon: <X className="h-4 w-4" aria-hidden="true"/>, tone: 'danger' as const, onClick: () => { setErrorMessage(''); setCanceling(record); } }] : []),
           ...(!hasSettled ? [{ label: 'Excluir', icon: <Trash2 className="h-4 w-4" aria-hidden="true"/>, tone: 'danger' as const, onClick: () => { setErrorMessage(''); setDeleting(record); } }] : []),
         ];
