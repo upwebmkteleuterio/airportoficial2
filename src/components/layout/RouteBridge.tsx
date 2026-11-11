@@ -29,6 +29,7 @@ const routePaths: Record<string, string> = {
   'financeiro-recebimentos': '/financeiro/recebimentos',
   'financeiro-despesas': '/financeiro/despesas',
   'financeiro-contas-a-pagar': '/financeiro/contas-a-pagar',
+  'financeiro-relatorios': '/financeiro/relatorios',
   'financeiro-categorias': '/financeiro/categorias',
   'financeiro-fornecedores': '/financeiro/fornecedores',
   'meu-cadastro': '/meu-cadastro',

@@ -6,7 +6,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { LayoutDashboard, FileArchive, FileText, Building2, ShieldAlert, LogOut, LoaderCircle, Users, PanelLeftClose, PanelLeftOpen, User, BookOpen, GraduationCap, UserCog, MapPin, Clock, ArrowLeftRight, ArrowRightLeft, Landmark, Tags, Truck, Receipt, ShoppingCart, HandCoins, CalendarClock, ReceiptText, ClipboardCheck, LineChart, type LucideIcon } from 'lucide-react';
+import { LayoutDashboard, FileArchive, FileText, Building2, ShieldAlert, LogOut, LoaderCircle, Users, PanelLeftClose, PanelLeftOpen, User, BookOpen, GraduationCap, UserCog, MapPin, Clock, ArrowLeftRight, ArrowRightLeft, Landmark, Tags, Truck, Receipt, ShoppingCart, HandCoins, CalendarClock, ReceiptText, ClipboardCheck, LineChart, BarChart3, type LucideIcon } from 'lucide-react';
 import { supabase } from '../integrations/supabase/client';
 import { useSessionContext } from '../contexts/SessionContext';
 import { Tooltip } from './ui/Tooltip';
@@ -111,6 +111,7 @@ export function Sidebar() {
         { id: 'financeiro-investimentos', icon: LineChart, label: 'Investimentos' },
         { id: 'financeiro-categorias', icon: Tags, label: 'Categorias' },
         { id: 'financeiro-fornecedores', icon: Truck, label: 'Fornecedores' },
+        { id: 'financeiro-relatorios', icon: BarChart3, label: 'Relatórios gerenciais' },
       ],
     }] : []),
     {
