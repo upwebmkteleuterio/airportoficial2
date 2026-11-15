@@ -7,7 +7,6 @@ import {
   createDisposableCurso,
   createDisposableEmpresa,
   createTestUser,
-  createVendaDocumentTemplate,
   deleteTestUser,
   removeDisposableFinanceiro,
   signInAs,
@@ -167,7 +166,7 @@ test('gestor exclui uma venda após confirmar a exclusão', async ({ page }) => 
   await expect(linha).toHaveCount(0);
 });
 
-test('gestor abre o recibo com a venda já selecionada', async ({ page }) => {
+test('gestor abre o comprovante com a venda já selecionada', async ({ page }) => {
   test.setTimeout(90000);
   const conta = await createDisposableConta(user.marker);
   const categoria = await createDisposableCategoria(user.marker, 'ENTRADA');
@@ -175,17 +174,18 @@ test('gestor abre o recibo com a venda já selecionada', async ({ page }) => {
   const referencia = `REF-${user.marker}`;
 
   await signInAs(page, user);
-  await createVendaDocumentTemplate(page, user.marker);
   await criarVenda(page, conta, categoria, empresa, referencia);
 
   const linha = page.getByRole('row').filter({ hasText: empresa.nome });
   await linha.getByRole('button', { name: `Ações para ${empresa.nome}` }).click();
-  await page.getByRole('menuitem', { name: 'Recibo' }).click();
+  await page.getByRole('menuitem', { name: 'Emitir comprovante' }).click();
 
-  const dialog = page.getByRole('dialog', { name: 'Gerar documento em PDF' });
-  await expect(dialog.getByLabel('Selecione o modelo de documento')).toHaveValue(/.+/);
-  await expect(dialog.getByText(empresa.nome, { exact: false })).toBeVisible();
-  await expect(dialog.getByText(referencia, { exact: false })).toBeVisible();
+  const comprovante = page.getByTestId('comprovante-modal');
+  await expect(comprovante).toBeVisible();
+  const previa = page.getByTestId('comprovante-preview');
+  await expect(previa).toContainText(empresa.nome);
+  await expect(previa).toContainText(referencia);
+  await expect(previa).toContainText(/R\$\s*1\.000,00/);
 });
 
 test('gestor registra uma venda para aluno com o valor de pessoa física do curso', async ({ page }) => {

@@ -210,9 +210,9 @@ export function Sidebar() {
               className="w-9 h-9 object-contain dark:brightness-0 dark:invert opacity-90"
             />
           ) : (
-            <img 
-              src="https://i.postimg.cc/9MrTVGJ3/logo-airpot.png" 
-              alt="Airport Logo" 
+            <img
+              src="/assets/logo-airport.png"
+              alt="Airport Logo"
               className="h-10 w-auto object-contain dark:brightness-0 dark:invert opacity-90 pr-4"
             />
           )}

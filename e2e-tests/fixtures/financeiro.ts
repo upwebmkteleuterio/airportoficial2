@@ -231,6 +231,9 @@ export async function removeDisposableFinanceiro(marker: string): Promise<void> 
     // efetivada. Removendo as parcelas primeiro, a venda pode ser excluída.
     { tabela: 'lancamentos_financeiros', coluna: 'descricao' },
     { tabela: 'lancamentos_financeiros', coluna: 'participante_nome' },
+    // As transferências gravam o marcador nas observações (a descrição é fixa),
+    // e a conta de origem não pode sair enquanto os lançamentos existirem.
+    { tabela: 'lancamentos_financeiros', coluna: 'observacoes' },
     { tabela: 'vendas', coluna: 'participante_nome' },
     { tabela: 'programacoes_saidas', coluna: 'descricao' },
     // As aplicações vêm antes das contas: a chave estrangeira é RESTRICT, então

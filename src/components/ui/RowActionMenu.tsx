@@ -7,6 +7,7 @@ export interface RowActionItem {
   icon: ReactNode;
   onClick: () => void;
   tone?: 'default' | 'danger';
+  group?: string;
 }
 
 export interface RowActionMenuProps {
@@ -24,6 +25,16 @@ export function RowActionMenu({
   const [position, setPosition] = useState({ top: 0, left: 0 });
   const menuRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const groupedItems = items.reduce<{ label: string; items: RowActionItem[] }[]>((groups, item) => {
+    if (!item.group) {
+      groups.push({ label: '', items: [item] });
+      return groups;
+    }
+    const existing = groups.find((group) => group.label === item.group);
+    if (existing) existing.items.push(item);
+    else groups.push({ label: item.group, items: [item] });
+    return groups;
+  }, []);
 
   useLayoutEffect(() => {
     if (!isOpen) return;
@@ -107,27 +118,32 @@ export function RowActionMenu({
           style={{ position: 'fixed', top: position.top, left: position.left }}
           className="z-[100] w-48 rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-850"
         >
-          {items.map((item) => (
-            <button
-              key={item.label}
-              type="button"
-              role="menuitem"
-              aria-label={item.label}
-              title={item.label}
-              onClick={(event) => {
-                event.stopPropagation();
-                setIsOpen(false);
-                item.onClick();
-              }}
-              className={`flex w-full cursor-pointer items-center gap-2 px-4 py-2 text-left text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-teal-500 ${
-                item.tone === 'danger'
-                  ? 'text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30'
-                  : 'text-gray-700 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-700'
-              }`}
-            >
-              {item.icon}
-              {item.label}
-            </button>
+          {groupedItems.map((group, groupIndex) => (
+            <div key={group.label || `ungrouped-${groupIndex}`}>
+              {group.label && <div role="presentation" className="mt-1 border-t border-gray-200 px-4 pt-2 text-[10px] font-bold uppercase tracking-wide text-gray-400 first:mt-0 dark:border-slate-700 dark:text-slate-500">{group.label}</div>}
+              {group.items.map((item) => (
+                <button
+                  key={item.label}
+                  type="button"
+                  role="menuitem"
+                  aria-label={item.label}
+                  title={item.label}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setIsOpen(false);
+                    item.onClick();
+                  }}
+                  className={`flex w-full cursor-pointer items-center gap-2 px-4 py-2 text-left text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-teal-500 ${
+                    item.tone === 'danger'
+                      ? 'text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30'
+                      : 'text-gray-700 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  {item.icon}
+                  {item.label}
+                </button>
+              ))}
+            </div>
           ))}
         </div>,
         document.body,

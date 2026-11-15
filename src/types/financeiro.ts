@@ -114,7 +114,7 @@ export interface LancamentoFinanceiro {
 }
 
 export interface LancamentoComRelacoes extends LancamentoFinanceiro {
-  categoria: Pick<CategoriaFinanceira, 'id' | 'nome' | 'tipo'> | null;
+  categoria: Pick<CategoriaFinanceira, 'id' | 'nome' | 'tipo' | 'sistema'> | null;
   banco: Pick<Banco, 'id' | 'nome' | 'tipo'> | null;
   venda?: Pick<Venda, 'id' | 'condicao' | 'forma_pagamento' | 'referencia_transacao' | 'cartao_ultimos_digitos' | 'observacoes'> | null;
 }

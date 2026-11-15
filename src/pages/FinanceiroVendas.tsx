@@ -6,6 +6,8 @@ import { ConfirmDeleteModal } from '../components/ui/ConfirmDeleteModal';
 import { HelpModal } from '../components/ui/HelpModal';
 import { WideSlidePanel as Modal } from '../components/ui/SlidePanel';
 import { NotaFiscalModal } from '../components/financeiro/NotaFiscalModal';
+import { ComprovanteModal } from '../components/financeiro/ComprovanteModal';
+import { comprovanteDeVenda } from '../utils/comprovanteDados';
 import { QueryErrorState } from '../components/ui/QueryErrorState';
 import { TableSkeleton } from '../components/ui/FinanceiroSkeleton';
 import { TruncatedInfoTooltip } from '../components/ui/TruncatedInfoTooltip';
@@ -13,13 +15,11 @@ import { PaginationFooter } from '../components/ui/PaginationFooter';
 import { RowActionMenu } from '../components/ui/RowActionMenu';
 import { MoneyInput } from '../components/ui/MoneyInput';
 import { NumberStepper } from '../components/ui/NumberStepper';
-import { DocumentGeneratorModal } from '../components/documents/DocumentGeneratorModal';
 import { FinanceiroOptionsLimitWarning } from '../components/financeiro/FinanceiroOptionsLimitWarning';
 import { CancelarVendaModal } from '../components/financeiro/CancelarVendaModal';
 import { RenegociarVendaModal } from '../components/financeiro/RenegociarVendaModal';
 import { ConfirmarRenegociacaoModal } from '../components/financeiro/ConfirmarRenegociacaoModal';
 import { VendaDetalhesModal } from '../components/financeiro/VendaDetalhesModal';
-import { useDocumentTemplates } from '../hooks/useDocumentTemplates';
 import { useBancos } from '../hooks/useBancos';
 import { useCategoriasFinanceiras } from '../hooks/useCategoriasFinanceiras';
 import { useClasses } from '../hooks/useClasses';
@@ -77,9 +77,8 @@ export default function FinanceiroVendas() {
   const [form, setForm] = useState<VendaForm>(novoFormulario); const [parcelas, setParcelas] = useState<ParcelaForm[]>([]);
   const [saveConfirmation, setSaveConfirmation] = useState<{ venda: Record<string, unknown>; parcelas: ParcelaInput[] } | null>(null);
   const [cpfSearch, setCpfSearch] = useState(''); const [modalOpen, setModalOpen] = useState(false); const [helpOpen, setHelpOpen] = useState(false);
-  const [receiptOpen, setReceiptOpen] = useState(false); const [receiptVendaId, setReceiptVendaId] = useState('');
+  const [comprovante, setComprovante] = useState<VendaComRelacoes | null>(null);
   const [notaFiscal, setNotaFiscal] = useState<VendaComRelacoes | null>(null); const [errorMessage, setErrorMessage] = useState(''); const [statusMessage, setStatusMessage] = useState('');
-  const documentTemplates = useDocumentTemplates();
   const filtros = useMemo(() => ({ page, pageSize, search: search || undefined, participanteTipo: filtroParticipante, situacao, dateFrom, dateTo }), [page, search, filtroParticipante, situacao, dateFrom, dateTo]);
   const { vendas, total, isLoading, isFetching, isError, saveVenda, isSaving, deleteVenda, isDeleting, cancelarVenda, isCanceling, renegociarVenda, isRenegotiating } = useVendas(filtros);
   const { alunos, isLoading: alunosLoading } = useAlunosPorCpf(cpfSearch); const queryClient = useQueryClient();
@@ -162,7 +161,6 @@ export default function FinanceiroVendas() {
     }
   };
   const confirmDelete = async () => { if (!deleting) return; try { await deleteVenda(deleting.id); setDeleting(null); } catch (error) { setDeleting(null); setErrorMessage(error instanceof Error ? error.message : 'Não foi possível excluir a venda.'); } };
-  const openReceipt = (id: string) => { setReceiptVendaId(id); setReceiptOpen(true); };
   const clearFilters = () => { setSearchInput(''); setFiltroParticipante(undefined); setSituacao('ATIVAS'); setDateFrom(primeiroDiaDoMes()); setDateTo(ultimoDiaDoMes()); setPage(1); };
   const onCancel = async (motivo: string) => {
     if (!canceling) return;
@@ -205,8 +203,8 @@ export default function FinanceiroVendas() {
         const hasSettled = record.parcelas.some((p) => p.status === 'EFETIVADO');
         const items = [
           { label: 'Editar', icon: <Edit2 className="h-4 w-4" aria-hidden="true"/>, onClick: () => openForm(record) },
-          { label: 'Recibo', icon: <FileText className="h-4 w-4" aria-hidden="true"/>, onClick: () => openReceipt(record.id) },
-          { label: 'Emitir nota fiscal', icon: <FileText className="h-4 w-4" aria-hidden="true"/>, onClick: () => setNotaFiscal(record) },
+          { label: 'Emitir comprovante', icon: <FileText className="h-4 w-4" aria-hidden="true"/>, group: 'Documentos', onClick: () => setComprovante(record) },
+          { label: 'Emitir nota fiscal', icon: <FileText className="h-4 w-4" aria-hidden="true"/>, group: 'Documentos', onClick: () => setNotaFiscal(record) },
           ...(!record.cancelada ? [{ label: 'Renegociar', icon: <Repeat2 className="h-4 w-4" aria-hidden="true"/>, onClick: () => setRenegotiating(record) }] : []),
           ...(!record.cancelada ? [{ label: 'Cancelar venda', icon: <X className="h-4 w-4" aria-hidden="true"/>, tone: 'danger' as const, onClick: () => { setErrorMessage(''); setCanceling(record); } }] : []),
           ...(!hasSettled ? [{ label: 'Excluir', icon: <Trash2 className="h-4 w-4" aria-hidden="true"/>, tone: 'danger' as const, onClick: () => { setErrorMessage(''); setDeleting(record); } }] : []),
@@ -242,7 +240,7 @@ export default function FinanceiroVendas() {
     <CancelarVendaModal isOpen={canceling !== null} onClose={() => !isCanceling && setCanceling(null)} onConfirm={onCancel} isPending={isCanceling} venda={canceling}/>
     <RenegociarVendaModal isOpen={renegotiating !== null} onClose={() => !isRenegotiating && setRenegotiating(null)} onConfirm={onRenegotiate} isPending={isRenegotiating} venda={renegotiating}/>
     <VendaDetalhesModal isOpen={details !== null} onClose={() => setDetails(null)} venda={details}/>
-    <DocumentGeneratorModal isOpen={receiptOpen} onClose={() => { setReceiptOpen(false); setReceiptVendaId(''); }} templates={documentTemplates.templates} isLoadingTemplates={documentTemplates.isLoading} isErrorTemplates={documentTemplates.isError} onRetryTemplates={() => void documentTemplates.refetch()} initialEntity="VENDA" initialSubjectId={receiptVendaId}/>
+    <ComprovanteModal isOpen={comprovante !== null} onClose={() => setComprovante(null)} dados={comprovante ? comprovanteDeVenda(comprovante) : null}/>
     <NotaFiscalModal isOpen={notaFiscal !== null} onClose={() => setNotaFiscal(null)} subtitulo={`Nota fiscal da venda de ${notaFiscal?.participante_nome ?? ''}`} linhas={notaFiscal ? [
       { rotulo: 'Participante', valor: `${notaFiscal.participante_nome} — ${notaFiscal.participante_documento ?? '—'}` }, { rotulo: 'Curso', valor: notaFiscal.curso?.nome_curso ?? '—' }, { rotulo: 'Turma', valor: notaFiscal.turma ? String(notaFiscal.turma.id_interno_escola) : '—' }, { rotulo: 'Condição', valor: notaFiscal.condicao === 'A_VISTA' ? 'À vista' : 'Parcelado' }, { rotulo: 'Valor total da venda', valor: money.format(notaFiscal.parcelas.reduce((sum, p) => sum + Number(p.valor), 0)) }, { rotulo: 'Referência da transação', valor: notaFiscal.referencia_transacao ?? '—' }, ...(notaFiscal.cartao_ultimos_digitos ? [{ rotulo: 'Últimos quatro dígitos do cartão', valor: notaFiscal.cartao_ultimos_digitos }] : []),
     ] : []}/>

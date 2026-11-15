@@ -12,6 +12,8 @@ import { RowActionMenu } from '../components/ui/RowActionMenu';
 import { TruncatedInfoTooltip } from '../components/ui/TruncatedInfoTooltip';
 import { DetalhesRegistroModal } from '../components/financeiro/DetalhesRegistroModal';
 import { EstornarLancamentoModal } from '../components/financeiro/EstornarLancamentoModal';
+import { ComprovanteModal } from '../components/financeiro/ComprovanteModal';
+import { NotaFiscalModal } from '../components/financeiro/NotaFiscalModal';
 import { MoneyInput } from '../components/ui/MoneyInput';
 import { useBancos } from '../hooks/useBancos';
 import { useCategoriasFinanceiras } from '../hooks/useCategoriasFinanceiras';
@@ -23,6 +25,8 @@ import { useUIStore } from '../store/uiStore';
 import { FinanceiroOptionsLimitWarning } from '../components/financeiro/FinanceiroOptionsLimitWarning';
 import { CATEGORIA_SAQUE_LUCRO_ID } from '../services/financeiroOptions';
 import type { FormaPagamento, LancamentoComRelacoes, ParticipanteOpcao, TipoLancamento, TipoParticipante, TipoSituacaoLancamento } from '../types/financeiro';
+import type { ComprovanteDados } from '../utils/comprovanteDados';
+import { comprovanteDeLancamento, podeEmitirComprovanteLancamento, podeEmitirNotaFiscalLancamento } from '../utils/comprovanteDados';
 import type { LancamentoInput } from '../services/lancamentoService';
 
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -109,6 +113,8 @@ export default function FinanceiroLancamentos() {
   const search = useDebouncedValue(searchInput).trim();
   const [editing, setEditing] = useState<LancamentoComRelacoes | null>(null);
   const [detalhes, setDetalhes] = useState<LancamentoComRelacoes | null>(null);
+  const [comprovante, setComprovante] = useState<ComprovanteDados | null>(null);
+  const [notaFiscal, setNotaFiscal] = useState<LancamentoComRelacoes | null>(null);
   const [deleting, setDeleting] = useState<LancamentoComRelacoes | null>(null);
   const [estornando, setEstornando] = useState<LancamentoComRelacoes | null>(null);
   const [form, setForm] = useState<LancamentoForm>(novoFormulario);
@@ -298,12 +304,23 @@ export default function FinanceiroLancamentos() {
                 ...(linha.record.status === 'EFETIVADO' && linha.record.estornado === false && linha.record.estorno_de === null && !linha.record.transferencia_id ? [{ label: 'Estornar', icon: <Undo2 className="h-4 w-4" aria-hidden="true"/>, onClick: () => setEstornando(linha.record) }] : []),
                 ...(linha.record.estornado === false && linha.record.estorno_de === null ? [{ label: 'Excluir', icon: <Trash2 className="h-4 w-4" aria-hidden="true"/>, tone: 'danger' as const, onClick: () => { setErrorMessage(''); setDeleting(linha.record); } }] : []),
                 ...(linha.record.estornado || linha.record.estorno_de !== null ? [{ label: 'Ver detalhes', icon: <Eye className="h-4 w-4" aria-hidden="true"/>, onClick: () => setDetalhes(linha.record) }] : []),
+                ...(podeEmitirComprovanteLancamento(linha.record) ? [{ label: 'Emitir comprovante', icon: <FileText className="h-4 w-4" aria-hidden="true"/>, group: 'Documentos', onClick: () => setComprovante(comprovanteDeLancamento(linha.record, linha.record.banco?.nome ?? '')) }] : []),
+                ...(podeEmitirNotaFiscalLancamento(linha.record) ? [{ label: 'Emitir nota fiscal', icon: <FileText className="h-4 w-4" aria-hidden="true"/>, group: 'Documentos', onClick: () => setNotaFiscal(linha.record) }] : []),
               ]}/></td>
               <td className="px-3 py-2">{formatarData(linha.record.data_efetivacao)}</td><td className="px-3 py-2 font-sans font-semibold text-slate-800 dark:text-slate-200"><TruncatedInfoTooltip text={linha.record.descricao} title="Descrição" icon={Receipt}/>{linha.record.estornado && <span data-testid="lancamento-estornado-tag" title={linha.record.estorno_motivo ?? undefined} className="ml-1 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-bold text-amber-800 dark:bg-amber-950/50 dark:text-amber-300">Estornado</span>}{linha.record.estorno_de && <span className="ml-1 inline-flex rounded-full bg-orange-100 px-2 py-0.5 text-[9px] font-bold text-orange-800 dark:bg-orange-950/50 dark:text-orange-300">Estorno</span>}{linha.record.numero_documento && <TruncatedInfoTooltip text={`Nº ${linha.record.numero_documento}`} title="Número do documento" icon={FileText} className="text-[10px] font-normal text-gray-500"/>}{linha.record.transferencia_id && <span className="flex items-center gap-1 text-[10px] font-normal text-gray-500"><ArrowLeftRight className="h-3 w-3" aria-hidden="true"/>Transferência</span>}</td><td className="px-3 py-2 font-sans"><TruncatedInfoTooltip text={linha.record.categoria?.nome ?? '—'} title="Categoria" icon={Landmark}/></td><td className="px-3 py-2 font-sans"><TruncatedInfoTooltip text={linha.record.banco?.nome ?? '—'} title="Conta" icon={Landmark}/></td><td className="px-3 py-2 font-sans"><TruncatedInfoTooltip text={linha.record.participante_nome ?? '—'} title="Participante" icon={User}/>{linha.record.participante_documento && <TruncatedInfoTooltip text={linha.record.participante_documento} title="Documento do participante" icon={FileText} className="text-[10px] text-gray-500"/>}</td><td className="px-3 py-2 font-sans"><TruncatedInfoTooltip text={labelForma(linha.record.forma_pagamento)} title="Forma de pagamento" icon={CreditCard}/>{linha.record.venda?.cartao_ultimos_digitos && <span className="block text-[10px] text-gray-500">•••• {linha.record.venda.cartao_ultimos_digitos}</span>}</td><td className="px-3 py-2"><span className={`rounded-full px-2 py-1 font-sans text-[10px] font-bold ${linha.record.tipo === 'ENTRADA' ? 'bg-teal-50 text-teal-700 dark:bg-teal-950/40 dark:text-teal-300' : 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300'}`}>{linha.record.tipo === 'ENTRADA' ? 'Entrada' : 'Saída'}</span></td><td className={`px-3 py-2 text-right font-bold ${linha.record.tipo === 'ENTRADA' ? 'text-teal-600' : 'text-rose-600'}`}>{linha.record.tipo === 'ENTRADA' ? '+' : '−'}{money.format(linha.record.valor)}</td><td className="px-3 py-2 font-sans"><TruncatedInfoTooltip text={linha.record.observacoes || '—'} title="Observações" icon={AlignLeft}/></td>
             </tr>)}
           </tbody></table></div>
       </div>
       <PaginationFooter page={page} pageSize={pageSize} total={total} onPageChange={setPage} itemLabel="lançamentos"/>
+      <ComprovanteModal isOpen={comprovante !== null} onClose={() => setComprovante(null)} dados={comprovante}/>
+      <NotaFiscalModal isOpen={notaFiscal !== null} onClose={() => setNotaFiscal(null)} subtitulo={`Nota fiscal do lançamento de ${notaFiscal?.participante_nome ?? ''}`} linhas={notaFiscal ? [
+        { rotulo: 'Descrição', valor: notaFiscal.descricao },
+        { rotulo: 'Participante', valor: `${notaFiscal.participante_nome ?? '—'} — ${notaFiscal.participante_documento ?? '—'}` },
+        { rotulo: 'Data', valor: formatarData(notaFiscal.data_efetivacao) },
+        { rotulo: 'Valor', valor: money.format(notaFiscal.valor) },
+        { rotulo: 'Número / referência', valor: notaFiscal.numero_documento ?? notaFiscal.venda?.referencia_transacao ?? notaFiscal.id.slice(0, 8) },
+        { rotulo: 'Conta', valor: notaFiscal.banco?.nome ?? '—' },
+      ] : []}/>
       <DetalhesRegistroModal isOpen={detalhes !== null} onClose={() => setDetalhes(null)} titulo="Detalhes do lançamento" subtitulo={detalhes?.descricao ?? ''} grupos={detalhes ? [
         { titulo: 'Lançamento', linhas: [
           { rotulo: 'Data de competência', valor: formatarData(detalhes.data_competencia) },

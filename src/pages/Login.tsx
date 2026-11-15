@@ -45,7 +45,7 @@ export function Login() {
         <div className="mb-6 flex flex-col items-center">
           <div className="flex justify-center mb-6">
             <img
-              src="https://i.postimg.cc/9MrTVGJ3/logo-airpot.png"
+              src="/assets/logo-airport.png"
               alt="Airport Logo"
               className="h-16 w-auto object-contain dark:brightness-0 dark:invert"
             />

@@ -86,7 +86,7 @@ export const lancamentoService = {
     const pageSize = Math.max(1, Math.floor(filtros.pageSize));
     const inicio = (page - 1) * pageSize;
     let query = supabase.from('lancamentos_financeiros')
-      .select('*, categoria:categorias_financeiras(id,nome,tipo), banco:bancos(id,nome,tipo), venda:vendas(id,condicao,forma_pagamento,referencia_transacao,cartao_ultimos_digitos,observacoes)', { count: 'exact' });
+      .select('*, categoria:categorias_financeiras(id,nome,tipo,sistema), banco:bancos(id,nome,tipo), venda:vendas(id,condicao,forma_pagamento,referencia_transacao,cartao_ultimos_digitos,observacoes)', { count: 'exact' });
     query = filtros.status ? query.eq('status', filtros.status) : query.or('status.eq.EFETIVADO,estornado.eq.true');
     query = query
       .order('data_efetivacao', { ascending: false })

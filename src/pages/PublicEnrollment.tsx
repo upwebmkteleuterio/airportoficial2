@@ -258,9 +258,9 @@ export default function PublicEnrollment() {
     <div className="min-h-screen bg-slate-50 flex flex-col items-center py-10 px-4">
       {/* Header */}
       <div className="mb-8 flex flex-col items-center">
-        <img 
-          src="https://i.postimg.cc/9MrTVGJ3/logo-airpot.png" 
-          alt="Airport Logo" 
+        <img
+          src="/assets/logo-airport.png"
+          alt="Airport Logo"
           className="h-14 w-auto object-contain mb-4"
         />
         <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Portal de Matrícula</h1>
