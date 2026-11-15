@@ -8,7 +8,7 @@ interface RelatorioResumoCardsProps {
   isLoading: boolean;
 }
 
-function Card({ titulo, valor, detalhe, testId, destaque = false }: { titulo: string; valor: string; detalhe?: ReactNode; testId?: string; destaque?: boolean }) {
+export function Card({ titulo, valor, detalhe, testId, destaque = false }: { titulo: string; valor: string; detalhe?: ReactNode; testId?: string; destaque?: boolean }) {
   return (
     <article data-testid={testId} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <p className="text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-slate-400">{titulo}</p>

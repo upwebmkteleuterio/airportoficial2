@@ -70,6 +70,12 @@ test('gestor consulta os relatórios gerenciais e ajusta o agrupamento', async (
   const projecao = page.getByTestId('projecao-tabela');
   await expect(projecao).toBeVisible({ timeout: T });
   await expect(page.locator('#relatorio-data-ate')).toHaveCount(0);
+
+  // A aba Projeção troca o resumo do período pelos indicadores da projeção.
+  await expect(page.getByTestId('relatorio-projecao-resumo')).toBeVisible({ timeout: T });
+  await expect(page.getByTestId('relatorio-projecao-saldo-final')).toBeVisible({ timeout: T });
+  await expect(page.getByTestId('relatorio-projecao-menor-saldo')).toBeVisible({ timeout: T });
+  await expect(page.getByTestId('relatorio-kpi-receitas')).toHaveCount(0);
   const primeiroDiaProximoMes = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1);
   const inicioProjecao = `${primeiroDiaProximoMes.getFullYear()}-${String(primeiroDiaProximoMes.getMonth() + 1).padStart(2, '0')}-01`;
   const rotuloPrimeiroMes = `${String(primeiroDiaProximoMes.getMonth() + 1).padStart(2, '0')}/${primeiroDiaProximoMes.getFullYear()}`;
@@ -82,6 +88,8 @@ test('gestor consulta os relatórios gerenciais e ajusta o agrupamento', async (
   await expect(page.getByRole('menuitem', { name: 'PDF (.pdf)' })).toBeVisible({ timeout: T });
 
   await page.getByRole('tab', { name: 'DRE' }).click({ timeout: T });
+  // Voltando para a DRE, o resumo do período volta a aparecer.
+  await expect(page.getByTestId('relatorio-kpi-receitas')).toBeVisible({ timeout: T });
   await page.getByLabel('Agrupar por').selectOption('TURMA', { timeout: T });
   await expect(page.getByTestId('dre-tabela')).toBeVisible({ timeout: T });
 });

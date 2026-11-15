@@ -5,6 +5,7 @@ import { AnimatedTabs } from '../components/ui/AnimatedTabs';
 import { QueryErrorState } from '../components/ui/QueryErrorState';
 import { RelatorioFiltros } from '../components/financeiro/relatorios/RelatorioFiltros';
 import { RelatorioResumoCards } from '../components/financeiro/relatorios/RelatorioResumoCards';
+import { ProjecaoResumoCards } from '../components/financeiro/relatorios/ProjecaoResumoCards';
 import { DreTabela } from '../components/financeiro/relatorios/DreTabela';
 import { FluxoCaixaTabela } from '../components/financeiro/relatorios/FluxoCaixaTabela';
 import { ProjecaoTabela } from '../components/financeiro/relatorios/ProjecaoTabela';
@@ -115,7 +116,9 @@ export default function FinanceiroRelatorios() {
         message="Verifique sua conexão e tente novamente."
       />
 
-      <RelatorioResumoCards resumo={resumo} isLoading={isLoading} />
+      {abaAtiva === 'PROJECAO'
+        ? <ProjecaoResumoCards linhas={projecaoQuery.projecao} isLoading={projecaoQuery.isLoading} />
+        : <RelatorioResumoCards resumo={resumo} isLoading={isLoading} />}
 
       <div id={`financeiro-relatorios-${abaAtiva}-panel`} role="tabpanel" aria-label={abas.find((aba) => aba.id === abaAtiva)?.label as string} className="min-h-0">
         {abaAtiva === 'DRE' && <DreTabela linhas={dreQuery.dre} resumo={resumo} page={page} total={dreQuery.total} onPageChange={setPage} isLoading={tabelaCarregando} isError={tabelaComErro} />}
